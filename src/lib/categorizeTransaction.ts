@@ -29,6 +29,7 @@ const TRANSFER_KEYWORDS = [
 ];
 
 // Receitas — alta confiança
+const REVENUE_RULES: { keywords: string[]; category: string; label: string }[] = [
   { keywords: ["cheque compensado", "cheque credit"], category: "outros_receita", label: "Cheque Recebido" },
   { keywords: ["repasse aluguel", "repasse rwt", "repasse imovel", "repasse imóvel", "locacao", "locação"], category: "kitnets", label: "Kitnets" },
   { keywords: ["salario", "salário", "folha pgto", "folha pagamento", "vencimento clr", "vencimento clt"], category: "salario", label: "Salário" },
