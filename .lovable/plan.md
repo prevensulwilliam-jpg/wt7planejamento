@@ -1,81 +1,61 @@
 
 
-# Sprint 3 — Dashboard Real + Receitas + Despesas + Bancos + Usuários
+# Sprint 4 — All Remaining Modules
 
-## Resumo
-6 arquivos a criar/atualizar. 1 nova tabela `bank_accounts`. Seed de metas e receitas. Dashboard conectado a dados reais.
-
----
-
-## 1. Criar tabela `bank_accounts`
-Migration SQL:
-```sql
-CREATE TABLE bank_accounts (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  bank_name text NOT NULL,
-  account_type text,
-  balance numeric DEFAULT 0,
-  last_updated date,
-  notes text,
-  created_at timestamptz DEFAULT now()
-);
-ALTER TABLE bank_accounts ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Admin can manage bank_accounts" ON bank_accounts FOR ALL USING (has_role(auth.uid(), 'admin'::app_role));
-```
-
-## 2. Seed inicial
-Insert goals (4 records) and revenues de março/2026 (6 records) conforme especificado.
-
-## 3. `src/hooks/useFinances.ts` — Hook centralizado
-- `useRevenues(month?)`, `useCreateRevenue()`, `useDeleteRevenue()`
-- `useExpenses(month?)`, `useCreateExpense()`, `useDeleteExpense()`
-- `useDashboardKPIs(month)` — calcula totalRevenue, totalExpenses, netResult, revenueBySource, expenseByCategory
-- `useRevenueExpenseTrend()` — últimos 6 meses agregados
-- `useGoals()`, `useUpdateGoal()`
-- `useAssets()`
-
-## 4. `src/pages/DashboardPage.tsx` — Conectar dados reais
-- Substituir mock data por hooks reais: `useDashboardKPIs`, `useRevenueExpenseTrend`, `useGoals`, `useKitnets`
-- Seletor de mês funcional (ChevronLeft/Right incrementa/decrementa mês)
-- KPIs dinâmicos, gráficos com fallback para empty state
-- Meta R$100k com gap calculado dinamicamente
-- Manter Wisely card como mock
-- Skeleton loading nos KPIs
-
-## 5. `src/pages/RevenuesPage.tsx`
-2 abas (Lançamentos | Análise):
-- **Lançamentos**: 4 KPIs, modal "Nova Receita" (fonte, descrição, valor, tipo, data, mês), tabela com badges coloridos por fonte, delete com AlertDialog, total no rodapé
-- **Análise**: BarChart horizontal por fonte, PieChart composição, comparativo 3 meses, export CSV
-
-## 6. `src/pages/ExpensesPage.tsx`
-2 abas (Lançamentos | Análise):
-- **Lançamentos**: 4 KPIs, modal "Nova Despesa" (categoria com emoji, descrição, valor, tipo, data, mês), tabela com badges, delete com AlertDialog
-- **Análise**: PieChart por categoria, BarChart comparativo, card alertas (categorias +20%), export CSV
-
-## 7. `src/pages/BanksPage.tsx`
-- Hook `useBankAccounts` inline (query + mutations)
-- Card total consolidado no topo
-- Grid de cards por conta: banco, tipo (badge), saldo dourado, última atualização
-- Modal "Adicionar Conta" e editar saldo
-
-## 8. `src/pages/UsersPage.tsx`
-- Busca `user_roles` com join em `profiles` (não auth.users diretamente — usar profiles.id = user_roles.user_id)
-- Tabela: Nome, Email (do profile), Role (badge colorido), Data criação
-- Badges: admin=dourado, kitnet_manager=ciano, financial=verde, partner=roxo
-- Card informativo com URLs de acesso por perfil
-- Nota: criação de usuários via painel backend (exibir instrução)
-
-## 9. `src/App.tsx` — Atualizar rotas
-Importar e substituir PlaceholderPages para `/revenues`, `/expenses`, `/banks`, `/users`.
+## Summary
+Create 8 new page files + 1 new hook file. Update App.tsx routes. Seed 5 properties into `real_estate_properties`. No DB schema changes needed — all tables already exist.
 
 ---
 
-## Detalhes Técnicos
-- Todos os componentes reutilizam PremiumCard, KpiCard, GoldButton, WtBadge, Skeleton
-- shadcn: Dialog, AlertDialog, Tabs, Select, Input, Table, Popover
-- Recharts: AreaChart (dashboard), BarChart, PieChart, LineChart
-- `formatCurrency`, `formatMonth`, `getCurrentMonth` de `@/lib/formatters`
-- CSV export com BOM UTF-8, separador `;`
-- Loading skeletons + empty states em todas as views
-- Toast sucesso/erro em todas as mutations
+## Files to Create
+
+### 1. `src/hooks/useConstructions.ts`
+Hook with `useProperties()`, `useConstructionExpenses(propertyId?)`, `useCreateConstructionExpense()`, `useUpdateProperty()` — as specified.
+
+### 2. `src/pages/ConstructionsPage.tsx` — `/constructions`
+2 tabs: **Projetos** (property cards with status badges, progress bars, partner info, edit modal) | **Despesas** (property selector dropdown, KPIs, expense form with category/split logic, table with totals).
+
+### 3. `src/pages/PartnerProjectsPage.tsx` — `/partner/projects`
+Standalone page (no sidebar), purple accent (#8B5CF6). Role check via `has_role` for `partner`/`admin`. Filters `real_estate_properties` by `partner_name` matching logged-in user's profile name. Read-only project cards + expense table per project + projection card (ROI, payback). "Lançar Despesa" button limited to partner's projects.
+
+### 4. `src/pages/WeddingPage.tsx` — `/wedding`
+3 tabs: **Financeiro** (Villa Sonali contract summary, installment timeline from `wedding_installments`, KPIs, bar chart) | **Fornecedores** (local state checklist with status badges, totals) | **Cronograma** (visual timeline with milestones, dynamic countdown to 11/12/2027).
+
+### 5. `src/pages/GoalsPage.tsx` — `/goals`
+Goal cards from `useGoals()` with animated progress bars, inline value update. "Nova Meta" modal. Special R$100k card with revenue breakdown by source and gap analysis.
+
+### 6. `src/pages/AssetsPage.tsx` — `/assets`
+3 tabs: **Bens** (`assets` table, CRUD cards, total patrimônio) | **Investimentos** (`investments` table, yield calculation, CRUD) | **Consórcios** (`consortiums` table, progress bars, CRUD).
+
+### 7. `src/pages/ProjectionsPage.tsx` — `/projections`
+3 sections: **Simulador R$100k** (editable inputs, compound growth formula, LineChart with 3 scenarios + R$100k reference line) | **Projeção Kitnets** (timeline table of future rental income factoring partner splits) | **ROI por Projeto** (table with ROI % and payback months).
+
+### 8. `src/pages/KitnetsReportPage.tsx` — `/reports/kitnets`
+Month + complex selector (RWT02/RWT03/Todos). KPIs from `kitnet_entries`. Detailed table per unit. Horizontal BarChart of net revenue per unit. 3-month LineChart comparison. CSV export.
+
+### 9. `src/pages/TaxesPage.tsx` — `/taxes`
+2 tabs: **Impostos** (`taxes` table, color-coded status cards, alert banner for overdue, CRUD) | **Dívidas** (`debts` table, progress bars, payment tracking, CRUD).
+
+### 10. Update `src/App.tsx`
+- Import all 9 new pages
+- Replace all remaining `PlaceholderPage` routes with real components
+- Move `/partner/projects` from `AuthGuard` wrapper to standalone `<PartnerProjectsPage />`
+- Remove `/investments` and `/consortiums` routes (now tabs inside AssetsPage)
+
+### 11. Seed `real_estate_properties`
+Insert 5 records (RWT01, RWT04, RJW01, RJW02, RWW01) with the exact data provided.
+
+---
+
+## Technical Details
+
+- **Hooks**: `useConstructions.ts` is new; all other data comes from existing hooks in `useFinances.ts` and `useKitnets.ts`
+- **Components reused**: PremiumCard, KpiCard, GoldButton, WtBadge, Skeleton, WT7Logo
+- **Charts**: Recharts LineChart, BarChart, PieChart (already in project)
+- **UI**: shadcn Dialog, AlertDialog, Tabs, Select, Input, Table, Progress
+- **Partner page**: follows ManagerKitnetsPage pattern for standalone auth check
+- **Wedding suppliers**: local state array (not a separate DB table)
+- **Projections math**: `years = ln(target/current) / ln(1 + rate)`
+- **No DB schema changes**: all tables (`real_estate_properties`, `construction_expenses`, `wedding_installments`, `wedding_budget`, `goals`, `assets`, `investments`, `consortiums`, `taxes`, `debts`, `kitnet_entries`) already exist
+- **CSV export**: reuse pattern from Sprint 2/3 (BOM UTF-8, `;` separator)
 
