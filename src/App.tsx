@@ -82,7 +82,7 @@ const App = () => (
             <Route path="/taxes" element={<PlaceholderPage title="Impostos & Dívidas" />} />
             <Route path="/projections" element={<PlaceholderPage title="Projeções" />} />
             <Route path="/reports/kitnets" element={<PlaceholderPage title="Relatório Kitnets" />} />
-            <Route path="/reports/commissions" element={<PlaceholderPage title="Relatório Comissões" />} />
+            <Route path="/reports/commissions" element={<CommissionsPage />} />
             <Route path="/users" element={<PlaceholderPage title="Usuários & Acessos" />} />
           </Route>
 
