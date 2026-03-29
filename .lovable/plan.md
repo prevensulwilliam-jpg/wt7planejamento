@@ -1,66 +1,51 @@
 
 
-# Wisely IA — Módulo Completo
+# Sprint 6 — Conciliação Bancária (OFX/CSV + Pluggy Open Finance)
 
-## Resumo
-Criar 2 arquivos novos (hook + página), atualizar DashboardPage e App.tsx. Usar **Edge Function** para chamadas AI (não é possível chamar APIs externas diretamente do browser por CORS). Usar Lovable AI gateway (modelo suportado) em vez da Claude API direta.
-
----
-
-## Problema com a abordagem proposta
-A Claude API em `api.anthropic.com` **não aceita chamadas diretas do browser** (CORS bloqueado, e requer API key no header). A solução correta é uma **Edge Function** que faz a chamada server-side.
-
-Além disso, o projeto tem acesso ao **Lovable AI gateway** que suporta modelos como `openai/gpt-5` e `google/gemini-2.5-flash` sem precisar de API key — mais simples e sem custo extra.
+## Summary
+Create 2 new DB tables, 4 new source files (hook, 2 parsers, page), 1 edge function. Update App.tsx and AdminSidebar.tsx with new route.
 
 ---
 
-## Arquivos a Criar
+## 1. Database Migration
+Create `bank_transactions` and `pluggy_connections` tables with RLS policies scoped to admin role (not `USING (true)` — must use `has_role`).
 
-### 1. Edge Function `supabase/functions/wisely-ai/index.ts`
-- Recebe `{ prompt, systemPrompt }` via POST
-- Chama Lovable AI gateway (modelo `google/gemini-2.5-flash`) usando `LOVABLE_API_KEY`
-- Retorna `{ text }` com a resposta
-- CORS headers configurados
+Also add a **unique constraint** on `bank_transactions.external_id` (needed for upsert `onConflict`).
 
-### 2. `src/hooks/useWisely.ts`
-- `useWiselyContext()` — agrega dados de `useDashboardKPIs`, `useKitnets`, `useKitnetSummary`, `useGoals`, `usePrevensulBilling` para o mês atual
-- `useWiselyAnalysis()` — chama a edge function com contexto financeiro, retorna `{ analysis, loading, generate }`
-- `useWiselyChat()` — mantém array de mensagens, envia histórico completo a cada nova mensagem
+## 2. `src/lib/parseOFX.ts`
+OFX parser (SGML regex) + CSV parser (auto-detect BB/XP/generic format). Returns `ParsedTransaction[]` with `external_id`, `date`, `description`, `amount`, `type`, `source`.
 
-### 3. `src/pages/WiselyPage.tsx`
-**Seção 1 — Análise Mensal Automática:**
-- Card com borda ciano, título "Análise de [Mês]", botão "↻ Atualizar"
-- Auto-gera ao montar quando dados estão prontos
-- Resposta renderizada com markdown (react-markdown)
-- Skeleton animado durante loading
+## 3. `src/lib/categorizeTransaction.ts`
+Rule-based keyword categorizer — no API calls. Covers kitnets, salário, comissão, alimentação, assinaturas, veículo, obras, casamento, etc. Returns category string.
 
-**Seção 2 — Chat com Wisely:**
-- Input + botão enviar, histórico estilo chat
-- Mensagens do usuário à direita (fundo escuro), Wisely à esquerda (fundo ciano sutil)
-- Chips de sugestão clicáveis: "Quando vou atingir R$100k/mês?", etc.
-- Scroll automático para última mensagem
+## 4. `src/hooks/useBankReconciliation.ts`
+- `useBankTransactions(filters?)` — query with account/month/status filters
+- `useImportTransactions()` — upsert mutation
+- `useMatchTransaction()` — confirm category + link to revenue/expense
+- `useIgnoreTransaction()` — mark as ignored
+- `useReconciliationSummary(month)` — computed KPIs from transaction data
 
-**Seção 3 — Insights Rápidos (3 cards):**
-- 💰 Renda | 🏘️ Kitnets | 🎯 Metas
-- Gerados em paralelo via `Promise.all`
-- Botão "Detalhar" injeta pergunta no chat
+## 5. `src/pages/ReconciliationPage.tsx`
+3 tabs:
+- **Importar**: File upload (drag+drop for .ofx/.csv), account selector, preview table, auto-categorize on import, bank instructions accordion. Pluggy card with "Em breve" badge (shows config instruction if no secrets).
+- **Conciliar**: Month/status/account filters, KPIs (credits/debits/pending/matched), transaction list with confirm/edit/ignore actions, bulk confirm button.
+- **Histórico**: Full filtered table, BarChart (weekly in/out), PieChart (expense categories), CSV export.
 
-### 4. Atualizar `src/pages/DashboardPage.tsx`
-- Card Wisely existente (mock) → substituir por dados reais via `useWiselyAnalysis()`
-- Botão "↻ Atualizar" regenera
-- Botão "Wisely →" navega para `/wisely`
+## 6. Edge Function `supabase/functions/pluggy-sync/index.ts`
+Pluggy API integration: authenticate → fetch active connections → pull last 30 days transactions → upsert into `bank_transactions`. Graceful error if `PLUGGY_CLIENT_ID` not set.
 
-### 5. Atualizar `src/App.tsx`
-- Importar `WiselyPage`, substituir `PlaceholderPage` na rota `/wisely`
+## 7. Routing & Sidebar
+- `App.tsx`: Add `<Route path="/reconciliation" element={<ReconciliationPage />} />` inside admin routes
+- `AdminSidebar.tsx`: Add `{ label: "Conciliação", icon: ArrowLeftRight, href: "/reconciliation" }` to "RECEITAS & DESPESAS" group, import `ArrowLeftRight` from lucide-react
 
 ---
 
-## Detalhes Técnicos
-
-- **Modelo**: `google/gemini-2.5-flash` via Lovable AI gateway (suportado, sem API key do usuário)
-- **Edge Function**: usa `LOVABLE_API_KEY` (já disponível no ambiente)
-- **System prompt**: contexto completo do William (empresário, kitnets, Prevensul, meta R$100k)
-- **Markdown rendering**: `react-markdown` para formatação das respostas
-- **Persistência de chat**: estado local (não salva em `wisely_messages` por enquanto — pode ser adicionado depois)
-- **Tema**: ciano #2DD4BF para destaque, componentes PremiumCard/GoldButton existentes
+## Technical Details
+- RLS: `has_role(auth.uid(), 'admin'::app_role)` on both new tables (not open `true`)
+- Unique constraint on `external_id` for upsert dedup
+- Pluggy edge function uses `SUPABASE_SERVICE_ROLE_KEY` (already available) + `PLUGGY_CLIENT_ID`/`PLUGGY_CLIENT_SECRET` (user adds later)
+- Components: PremiumCard, KpiCard, GoldButton, WtBadge, Skeleton, shadcn Tabs/Dialog/Select/Table/AlertDialog
+- Recharts: BarChart, PieChart
+- File reading via `FileReader.readAsText()` for OFX/CSV
+- No changes to existing files beyond App.tsx and AdminSidebar.tsx
 
