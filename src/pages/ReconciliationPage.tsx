@@ -811,6 +811,8 @@ function DoubtCard({ tx, classifyAs, ignoreTransaction }: {
           <p className="text-xs mt-0.5" style={{ color: "#64748B" }}>
             🏦 {tx.bank_accounts?.bank_name ?? "Banco não identificado"}
           </p>
+        </div>
+        <span className="font-mono font-bold text-base ml-4 flex-shrink-0"
           style={{ color: tx.type === "credit" ? "#10B981" : "#F43F5E" }}>
           {tx.type === "credit" ? "+" : "-"}{formatCurrency(tx.amount)}
         </span>
