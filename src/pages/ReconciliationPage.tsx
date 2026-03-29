@@ -259,32 +259,48 @@ function ImportTab({ accounts }: { accounts: any[] }) {
     try {
       await importMutation.mutateAsync(rows);
 
-      // Auto-create revenues/expenses for confirmed rows
+      // Auto-create revenues/expenses for confirmed rows and link back
       const autoRows = rows.filter(r => r.status === "matched" && r.category_intent !== "transferencia");
       let revenues = 0;
       let expenses = 0;
 
+      // We need the inserted bank_transaction IDs — fetch by external_id
       for (const tx of autoRows) {
+        const { data: btRow } = await supabase
+          .from("bank_transactions" as any)
+          .select("id")
+          .eq("external_id", tx.external_id)
+          .single();
+        const btId = (btRow as any)?.id;
+
         if (tx.category_intent === "receita") {
-          await supabase.from("revenues").insert({
+          const { data, error } = await supabase.from("revenues").insert({
             source: tx.category_suggestion,
             description: tx.description,
             amount: tx.amount,
             type: "variable",
             reference_month: tx.date?.slice(0, 7),
             received_at: tx.date,
-          });
-          revenues++;
+          }).select("id").single();
+          if (!error && data && btId) {
+            await supabase.from("bank_transactions" as any)
+              .update({ matched_revenue_id: data.id }).eq("id", btId);
+            revenues++;
+          }
         } else if (tx.category_intent === "despesa") {
-          await supabase.from("expenses").insert({
+          const { data, error } = await supabase.from("expenses").insert({
             category: tx.category_suggestion,
             description: tx.description,
             amount: tx.amount,
             type: "variable",
             reference_month: tx.date?.slice(0, 7),
             paid_at: tx.date,
-          });
-          expenses++;
+          }).select("id").single();
+          if (!error && data && btId) {
+            await supabase.from("bank_transactions" as any)
+              .update({ matched_expense_id: data.id }).eq("id", btId);
+            expenses++;
+          }
         }
         await recordClassification(
           tx.description,
