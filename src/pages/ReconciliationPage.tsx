@@ -15,6 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useBankTransactions, useImportTransactions, useMatchTransaction, useIgnoreTransaction, useReconciliationSummary } from "@/hooks/useBankReconciliation";
 import { parseOFX, parseCSV, type ParsedTransaction } from "@/lib/parseOFX";
 import { categorizeTransaction, CATEGORY_LABELS, INTENT_CONFIG } from "@/lib/categorizeTransaction";
+import { getAllPatterns, normalizeDescription, recordClassification } from "@/lib/patternLearning";
 import { formatCurrency, formatDate, formatMonth, getCurrentMonth } from "@/lib/formatters";
 import { Upload, CheckCircle2, XCircle, ArrowLeftRight, FileText, Wifi, Download } from "lucide-react";
 import { toast } from "sonner";
@@ -154,10 +155,10 @@ function ImportTab({ accounts }: { accounts: any[] }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const importMutation = useImportTransactions();
 
-  const handleFile = useCallback((file: File) => {
+  const handleFile = useCallback(async (file: File) => {
     setFileName(file.name);
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       const text = e.target?.result as string;
       const ext = file.name.toLowerCase();
       let parsed: ParsedTransaction[] = [];
@@ -170,8 +171,34 @@ function ImportTab({ accounts }: { accounts: any[] }) {
         toast.error("Nenhuma transação encontrada no arquivo.");
         return;
       }
+
+      // Buscar padrões aprendidos
+      const learnedPatterns = await getAllPatterns();
       const accountNames = accounts.map((a: any) => a.bank_name).filter(Boolean);
+
       const categorized = parsed.map((tx, idx) => {
+        // 1. Tentar padrão aprendido primeiro
+        const normalized = normalizeDescription(tx.description);
+        const learned = learnedPatterns.find((p: any) => {
+          const pNorm = p.description_pattern as string;
+          return normalized.includes(pNorm) || pNorm.includes(normalized);
+        });
+
+        if (learned) {
+          return {
+            ...tx,
+            _previewId: `preview-${idx}`,
+            category_suggestion: learned.category,
+            category_intent: learned.intent,
+            category_confidence: "high",
+            category_label: learned.label,
+            status: learned.intent === "transferencia" ? "transferencia" : "auto_categorized",
+            _learned: true,
+            _learnedCount: learned.count,
+          };
+        }
+
+        // 2. Fallback para regras manuais
         const result = categorizeTransaction(tx.description, tx.type, tx.amount, accountNames);
         return {
           ...tx,
@@ -185,6 +212,7 @@ function ImportTab({ accounts }: { accounts: any[] }) {
             : result.intent === "transferencia"
             ? "transferencia"
             : "pending",
+          _learned: false,
         };
       });
       setPreview(categorized);
