@@ -348,7 +348,7 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
       if (!txs?.length) return { updated: 0 };
 
       let updated = 0;
-      for (const tx of txs) {
+      for (const tx of txs as any[]) {
         const result = categorizeTransaction(
           tx.description, tx.type, tx.amount, []
         );
