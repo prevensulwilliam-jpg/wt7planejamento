@@ -2,6 +2,8 @@ import { useState, useRef, useCallback } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
@@ -17,6 +19,59 @@ import { formatCurrency, formatDate, formatMonth, getCurrentMonth } from "@/lib/
 import { Upload, CheckCircle2, XCircle, ArrowLeftRight, FileText, Wifi, Download } from "lucide-react";
 import { toast } from "sonner";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+
+const DESPESA_OPTIONS = [
+  { value: "cartao_credito", label: "💳 Cartão de Crédito" },
+  { value: "energia_eletrica", label: "⚡ Energia Elétrica" },
+  { value: "internet", label: "🌐 Internet" },
+  { value: "telefonia", label: "📱 Telefonia" },
+  { value: "lazer", label: "🎉 Lazer" },
+  { value: "alimentacao", label: "🍽️ Alimentação" },
+  { value: "suplementos", label: "💊 Suplementação" },
+  { value: "saude", label: "🏥 Saúde" },
+  { value: "maconaria", label: "🔷 Maçonaria" },
+  { value: "guarani", label: "⚽ Guarani" },
+  { value: "consorcio", label: "🔄 Consórcio" },
+  { value: "terapia", label: "🧠 Terapia" },
+  { value: "obras", label: "🏗️ Obras" },
+  { value: "terrenos", label: "🌍 Terrenos" },
+  { value: "agua", label: "💧 Água/Saneamento" },
+  { value: "gasolina", label: "⛽ Gasolina" },
+  { value: "farmacia", label: "💊 Farmácia" },
+  { value: "academia", label: "🏋️ Academia" },
+  { value: "impostos", label: "🧾 Impostos/Taxas" },
+  { value: "casamento", label: "💍 Casamento" },
+  { value: "assinaturas", label: "📲 Assinaturas" },
+  { value: "veiculo", label: "🚗 Veículo" },
+  { value: "outros", label: "📦 Outros" },
+];
+
+const RECEITA_OPTIONS = [
+  { value: "kitnets", label: "🏘️ Aluguel/Kitnets" },
+  { value: "salario", label: "💼 Salário" },
+  { value: "comissao_prevensul", label: "📊 Comissão Prevensul" },
+  { value: "solar", label: "☀️ Energia Solar" },
+  { value: "laudos", label: "📋 Laudos Técnicos" },
+  { value: "t7", label: "🚀 T7 Sales" },
+  { value: "dividendos", label: "📈 Dividendos/Rendimentos" },
+  { value: "outros_receita", label: "💰 Outros (Receita)" },
+];
+
+const ALL_CATEGORY_LABELS: Record<string, string> = {
+  ...CATEGORY_LABELS,
+  cartao_credito: "Cartão de Crédito", energia_eletrica: "Energia Elétrica",
+  internet: "Internet", telefonia: "Telefonia", lazer: "Lazer",
+  alimentacao: "Alimentação", suplementos: "Suplementação", saude: "Saúde",
+  maconaria: "Maçonaria", guarani: "Guarani", consorcio: "Consórcio",
+  terapia: "Terapia", obras: "Obras", terrenos: "Terrenos",
+  agua: "Água/Saneamento", gasolina: "Gasolina", farmacia: "Farmácia",
+  academia: "Academia", impostos: "Impostos/Taxas", casamento: "Casamento",
+  assinaturas: "Assinaturas", veiculo: "Veículo", outros: "Outros",
+  kitnets: "Kitnets", salario: "Salário",
+  comissao_prevensul: "Comissão Prevensul", solar: "Energia Solar",
+  laudos: "Laudos", t7: "T7 Sales", dividendos: "Dividendos",
+  outros_receita: "Outros (Receita)", transferencia: "Transferência entre Contas",
+};
 
 const PIE_COLORS = ["#C9A84C", "#2DD4BF", "#8B5CF6", "#F43F5E", "#10B981", "#3B82F6", "#F59E0B", "#EC4899", "#6366F1", "#14B8A6"];
 
@@ -465,18 +520,34 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
     }
   };
 
+  const [newExpenseOpen, setNewExpenseOpen] = useState(false);
+  const [newRevenueOpen, setNewRevenueOpen] = useState(false);
+
   return (
     <div className="space-y-6">
-      {/* Recategorizar */}
-      <div className="flex justify-end">
+      {/* Action buttons */}
+      <div className="flex gap-2 justify-end">
+        <button onClick={() => setNewRevenueOpen(true)}
+          className="text-xs px-4 py-2 rounded-lg font-medium flex items-center gap-1.5"
+          style={{ background: "rgba(16,185,129,0.15)", color: "#10B981", border: "1px solid rgba(16,185,129,0.3)" }}>
+          + Nova Receita
+        </button>
+        <button onClick={() => setNewExpenseOpen(true)}
+          className="text-xs px-4 py-2 rounded-lg font-medium flex items-center gap-1.5"
+          style={{ background: "rgba(244,63,94,0.15)", color: "#F43F5E", border: "1px solid rgba(244,63,94,0.3)" }}>
+          + Nova Despesa
+        </button>
         <button
           onClick={() => recategorizeMutation.mutate()}
           disabled={recategorizeMutation.isPending}
-          className="text-xs px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-all"
+          className="text-xs px-4 py-2 rounded-lg font-medium flex items-center gap-1.5 transition-all"
           style={{ background: "rgba(201,168,76,0.15)", color: "#E8C97A", border: "1px solid rgba(201,168,76,0.3)" }}>
-          {recategorizeMutation.isPending ? "Recategorizando..." : "🔄 Recategorizar todas"}
+          {recategorizeMutation.isPending ? "..." : "🔄 Recategorizar"}
         </button>
       </div>
+
+      <NewExpenseModal open={newExpenseOpen} onClose={() => setNewExpenseOpen(false)} defaultMonth={month} />
+      <NewRevenueModal open={newRevenueOpen} onClose={() => setNewRevenueOpen(false)} defaultMonth={month} />
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -538,77 +609,12 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
               </div>
               <div className="space-y-3">
                 {doubts.map((tx: any) => (
-                  <div key={tx.id} className="rounded-xl p-4" style={{ background: "#0D1318", border: "1px solid rgba(245,158,11,0.3)" }}>
-                    <div className="flex items-start justify-between mb-3">
-                      <div>
-                        <p className="text-xs font-mono" style={{ color: "#94A3B8" }}>{formatDate(tx.date)}</p>
-                        <p className="text-sm font-medium mt-1" style={{ color: "#F0F4F8" }}>{tx.description}</p>
-                      </div>
-                      <span className="font-mono font-bold text-lg" style={{ color: tx.type === "credit" ? "#10B981" : "#F43F5E" }}>
-                        {tx.type === "credit" ? "+" : "-"}{formatCurrency(tx.amount)}
-                      </span>
-                    </div>
-                    <p className="text-xs mb-3" style={{ color: "#94A3B8" }}>Esta transação é:</p>
-                    <div className="flex flex-wrap gap-2">
-                      {tx.type === "credit" ? (
-                        <>
-                          <button onClick={() => classifyAs(tx.id, "receita", "kitnets")}
-                            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-90"
-                            style={{ background: "rgba(201,168,76,0.15)", color: "#E8C97A", border: "1px solid rgba(201,168,76,0.3)" }}>
-                            🏘️ Aluguel/Kitnets
-                          </button>
-                          <button onClick={() => classifyAs(tx.id, "receita", "comissao_prevensul")}
-                            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-90"
-                            style={{ background: "rgba(45,212,191,0.15)", color: "#2DD4BF", border: "1px solid rgba(45,212,191,0.3)" }}>
-                            💼 Comissão
-                          </button>
-                          <button onClick={() => classifyAs(tx.id, "receita", "solar")}
-                            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-90"
-                            style={{ background: "rgba(16,185,129,0.15)", color: "#10B981", border: "1px solid rgba(16,185,129,0.3)" }}>
-                            ☀️ Solar
-                          </button>
-                          <button onClick={() => classifyAs(tx.id, "receita", "outros_receita")}
-                            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-90"
-                            style={{ background: "rgba(16,185,129,0.15)", color: "#10B981", border: "1px solid rgba(16,185,129,0.3)" }}>
-                            💰 Outra Receita
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button onClick={() => classifyAs(tx.id, "despesa", "alimentacao")}
-                            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-90"
-                            style={{ background: "rgba(245,158,11,0.15)", color: "#F59E0B", border: "1px solid rgba(245,158,11,0.3)" }}>
-                            🍽️ Alimentação
-                          </button>
-                          <button onClick={() => classifyAs(tx.id, "despesa", "assinaturas")}
-                            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-90"
-                            style={{ background: "rgba(139,92,246,0.15)", color: "#8B5CF6", border: "1px solid rgba(139,92,246,0.3)" }}>
-                            📱 Assinaturas
-                          </button>
-                          <button onClick={() => classifyAs(tx.id, "despesa", "obras")}
-                            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-90"
-                            style={{ background: "rgba(244,63,94,0.15)", color: "#F43F5E", border: "1px solid rgba(244,63,94,0.3)" }}>
-                            🏗️ Obras
-                          </button>
-                          <button onClick={() => classifyAs(tx.id, "despesa", "outros")}
-                            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-90"
-                            style={{ background: "rgba(244,63,94,0.15)", color: "#F43F5E", border: "1px solid rgba(244,63,94,0.3)" }}>
-                            📦 Outra Despesa
-                          </button>
-                        </>
-                      )}
-                      <button onClick={() => classifyAs(tx.id, "transferencia", "transferencia")}
-                        className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-90"
-                        style={{ background: "rgba(148,163,184,0.15)", color: "#94A3B8", border: "1px solid rgba(148,163,184,0.3)" }}>
-                        🔄 Transferência
-                      </button>
-                      <button onClick={() => ignoreMutation.mutate(tx.id)}
-                        className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-90"
-                        style={{ background: "rgba(74,85,104,0.15)", color: "#4A5568", border: "1px solid rgba(74,85,104,0.3)" }}>
-                        Ignorar
-                      </button>
-                    </div>
-                  </div>
+                  <DoubtCard
+                    key={tx.id}
+                    tx={tx}
+                    classifyAs={classifyAs}
+                    ignoreTransaction={(id) => ignoreMutation.mutate(id)}
+                  />
                 ))}
               </div>
             </PremiumCard>
@@ -731,7 +737,320 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
   );
 }
 
-/* ============ HISTORY TAB ============ */
+/* ============ DOUBT CARD ============ */
+function DoubtCard({ tx, classifyAs, ignoreTransaction }: {
+  tx: any;
+  classifyAs: (id: string, intent: "receita" | "despesa" | "transferencia", category: string) => void;
+  ignoreTransaction: (id: string) => void;
+}) {
+  const [selectedCategory, setSelectedCategory] = useState("");
+  const [selectedIntent, setSelectedIntent] = useState<"receita" | "despesa" | "transferencia">(
+    tx.type === "credit" ? "receita" : "despesa"
+  );
+
+  const options = selectedIntent === "receita" ? RECEITA_OPTIONS : DESPESA_OPTIONS;
+
+  const handleConfirm = () => {
+    if (!selectedCategory) return;
+    classifyAs(tx.id, selectedIntent, selectedCategory);
+  };
+
+  return (
+    <div className="rounded-xl p-4" style={{ background: "#0D1318", border: "1px solid rgba(245,158,11,0.3)" }}>
+      <div className="flex items-start justify-between mb-3">
+        <div>
+          <p className="text-xs font-mono" style={{ color: "#94A3B8" }}>{formatDate(tx.date)}</p>
+          <p className="text-sm font-medium mt-0.5" style={{ color: "#F0F4F8" }}>{tx.description}</p>
+        </div>
+        <span className="font-mono font-bold text-base ml-4 flex-shrink-0"
+          style={{ color: tx.type === "credit" ? "#10B981" : "#F43F5E" }}>
+          {tx.type === "credit" ? "+" : "-"}{formatCurrency(tx.amount)}
+        </span>
+      </div>
+
+      <div className="flex gap-2 mb-3">
+        <p className="text-xs self-center" style={{ color: "#94A3B8" }}>Tipo:</p>
+        {(["receita", "despesa", "transferencia"] as const).map(intent => (
+          <button
+            key={intent}
+            onClick={() => { setSelectedIntent(intent); setSelectedCategory(""); }}
+            className="px-3 py-1 rounded-lg text-xs font-medium transition-all"
+            style={{
+              background: selectedIntent === intent
+                ? intent === "receita" ? "rgba(16,185,129,0.25)" : intent === "despesa" ? "rgba(244,63,94,0.25)" : "rgba(148,163,184,0.25)"
+                : "rgba(255,255,255,0.05)",
+              color: selectedIntent === intent
+                ? intent === "receita" ? "#10B981" : intent === "despesa" ? "#F43F5E" : "#94A3B8"
+                : "#64748B",
+              border: `1px solid ${selectedIntent === intent
+                ? intent === "receita" ? "rgba(16,185,129,0.4)" : intent === "despesa" ? "rgba(244,63,94,0.4)" : "rgba(148,163,184,0.4)"
+                : "transparent"}`,
+            }}>
+            {intent === "receita" ? "💰 Receita" : intent === "despesa" ? "💸 Despesa" : "🔄 Transferência"}
+          </button>
+        ))}
+      </div>
+
+      {selectedIntent !== "transferencia" && (
+        <div className="mb-3">
+          <p className="text-xs mb-2" style={{ color: "#94A3B8" }}>Categoria:</p>
+          <div className="flex flex-wrap gap-1.5">
+            {options.map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => setSelectedCategory(opt.value)}
+                className="px-2.5 py-1 rounded-lg text-xs font-medium transition-all"
+                style={{
+                  background: selectedCategory === opt.value ? "rgba(201,168,76,0.25)" : "rgba(255,255,255,0.05)",
+                  color: selectedCategory === opt.value ? "#E8C97A" : "#94A3B8",
+                  border: `1px solid ${selectedCategory === opt.value ? "rgba(201,168,76,0.5)" : "rgba(255,255,255,0.08)"}`,
+                }}>
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="flex gap-2 mt-3">
+        {selectedIntent === "transferencia" ? (
+          <button
+            onClick={() => classifyAs(tx.id, "transferencia", "transferencia")}
+            className="px-4 py-1.5 rounded-lg text-xs font-semibold transition-all"
+            style={{ background: "rgba(148,163,184,0.2)", color: "#94A3B8", border: "1px solid rgba(148,163,184,0.3)" }}>
+            Confirmar como Transferência
+          </button>
+        ) : (
+          <button
+            onClick={handleConfirm}
+            disabled={!selectedCategory}
+            className="px-4 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-40"
+            style={{
+              background: selectedCategory ? "rgba(201,168,76,0.2)" : "rgba(255,255,255,0.05)",
+              color: selectedCategory ? "#E8C97A" : "#4A5568",
+              border: `1px solid ${selectedCategory ? "rgba(201,168,76,0.4)" : "transparent"}`,
+            }}>
+            ✓ Confirmar
+          </button>
+        )}
+        <button
+          onClick={() => ignoreTransaction(tx.id)}
+          className="px-3 py-1.5 rounded-lg text-xs transition-all"
+          style={{ color: "#4A5568", border: "1px solid rgba(255,255,255,0.06)" }}>
+          Ignorar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ============ NEW EXPENSE MODAL ============ */
+function NewExpenseModal({ open, onClose, defaultMonth }: { open: boolean; onClose: () => void; defaultMonth: string }) {
+  const qc = useQueryClient();
+  const [form, setForm] = useState({
+    category: "", description: "", amount: "",
+    paid_at: new Date().toISOString().split("T")[0],
+    reference_month: defaultMonth, type: "variable" as string,
+  });
+
+  const handleSave = async () => {
+    if (!form.category || !form.amount || !form.description) {
+      toast.error("Preencha todos os campos obrigatórios");
+      return;
+    }
+    const { error } = await supabase.from("expenses").insert({
+      category: form.category,
+      description: form.description,
+      amount: parseFloat(form.amount.replace(",", ".")),
+      type: form.type,
+      paid_at: form.paid_at,
+      reference_month: form.reference_month,
+    });
+    if (error) { toast.error(error.message); return; }
+    toast.success("Despesa criada!");
+    qc.invalidateQueries({ queryKey: ["expenses"] });
+    onClose();
+    setForm({ category: "", description: "", amount: "", paid_at: new Date().toISOString().split("T")[0], reference_month: defaultMonth, type: "variable" });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent style={{ background: "#0D1318", border: "1px solid #1A2535" }} className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle style={{ color: "#F0F4F8" }}>💸 Nova Despesa</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div>
+            <label className="text-xs font-mono uppercase mb-2 block" style={{ color: "#94A3B8" }}>Categoria *</label>
+            <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pr-1">
+              {DESPESA_OPTIONS.map(opt => (
+                <button key={opt.value} type="button"
+                  onClick={() => setForm(f => ({ ...f, category: opt.value }))}
+                  className="px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all"
+                  style={{
+                    background: form.category === opt.value ? "rgba(244,63,94,0.2)" : "rgba(255,255,255,0.05)",
+                    color: form.category === opt.value ? "#F43F5E" : "#94A3B8",
+                    border: `1px solid ${form.category === opt.value ? "rgba(244,63,94,0.4)" : "rgba(255,255,255,0.08)"}`,
+                  }}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-mono uppercase mb-1 block" style={{ color: "#94A3B8" }}>Descrição *</label>
+            <Input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+              placeholder="Ex: Fatura Cartão Nubank"
+              style={{ background: "#080C10", borderColor: "#1A2535", color: "#F0F4F8" }} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-mono uppercase mb-1 block" style={{ color: "#94A3B8" }}>Valor (R$) *</label>
+              <Input value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
+                placeholder="0,00" type="number"
+                style={{ background: "#080C10", borderColor: "#1A2535", color: "#F0F4F8" }} />
+            </div>
+            <div>
+              <label className="text-xs font-mono uppercase mb-1 block" style={{ color: "#94A3B8" }}>Data</label>
+              <Input type="date" value={form.paid_at} onChange={e => setForm(f => ({ ...f, paid_at: e.target.value }))}
+                style={{ background: "#080C10", borderColor: "#1A2535", color: "#F0F4F8" }} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-mono uppercase mb-1 block" style={{ color: "#94A3B8" }}>Tipo</label>
+              <Select value={form.type} onValueChange={(v) => setForm(f => ({ ...f, type: v }))}>
+                <SelectTrigger style={{ background: "#080C10", borderColor: "#1A2535", color: "#F0F4F8" }}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent style={{ background: "#0D1318", borderColor: "#1A2535" }}>
+                  <SelectItem value="fixed" style={{ color: "#F0F4F8" }}>Fixo</SelectItem>
+                  <SelectItem value="variable" style={{ color: "#F0F4F8" }}>Variável</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-xs font-mono uppercase mb-1 block" style={{ color: "#94A3B8" }}>Mês referência</label>
+              <Input type="month" value={form.reference_month}
+                onChange={e => setForm(f => ({ ...f, reference_month: e.target.value }))}
+                style={{ background: "#080C10", borderColor: "#1A2535", color: "#F0F4F8" }} />
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg" style={{ color: "#94A3B8" }}>Cancelar</button>
+          <GoldButton onClick={handleSave}>Salvar Despesa</GoldButton>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ============ NEW REVENUE MODAL ============ */
+function NewRevenueModal({ open, onClose, defaultMonth }: { open: boolean; onClose: () => void; defaultMonth: string }) {
+  const qc = useQueryClient();
+  const [form, setForm] = useState({
+    source: "", description: "", amount: "",
+    received_at: new Date().toISOString().split("T")[0],
+    reference_month: defaultMonth, type: "variable" as string,
+  });
+
+  const handleSave = async () => {
+    if (!form.source || !form.amount || !form.description) {
+      toast.error("Preencha todos os campos obrigatórios");
+      return;
+    }
+    const { error } = await supabase.from("revenues").insert({
+      source: form.source,
+      description: form.description,
+      amount: parseFloat(form.amount.replace(",", ".")),
+      type: form.type,
+      received_at: form.received_at,
+      reference_month: form.reference_month,
+    });
+    if (error) { toast.error(error.message); return; }
+    toast.success("Receita criada!");
+    qc.invalidateQueries({ queryKey: ["revenues"] });
+    onClose();
+    setForm({ source: "", description: "", amount: "", received_at: new Date().toISOString().split("T")[0], reference_month: defaultMonth, type: "variable" });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent style={{ background: "#0D1318", border: "1px solid #1A2535" }} className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle style={{ color: "#F0F4F8" }}>💰 Nova Receita</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div>
+            <label className="text-xs font-mono uppercase mb-2 block" style={{ color: "#94A3B8" }}>Fonte *</label>
+            <div className="flex flex-wrap gap-1.5">
+              {RECEITA_OPTIONS.map(opt => (
+                <button key={opt.value} type="button"
+                  onClick={() => setForm(f => ({ ...f, source: opt.value }))}
+                  className="px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all"
+                  style={{
+                    background: form.source === opt.value ? "rgba(16,185,129,0.2)" : "rgba(255,255,255,0.05)",
+                    color: form.source === opt.value ? "#10B981" : "#94A3B8",
+                    border: `1px solid ${form.source === opt.value ? "rgba(16,185,129,0.4)" : "rgba(255,255,255,0.08)"}`,
+                  }}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-mono uppercase mb-1 block" style={{ color: "#94A3B8" }}>Descrição *</label>
+            <Input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+              placeholder="Ex: Repasse RWT02 Março"
+              style={{ background: "#080C10", borderColor: "#1A2535", color: "#F0F4F8" }} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-mono uppercase mb-1 block" style={{ color: "#94A3B8" }}>Valor (R$) *</label>
+              <Input value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
+                placeholder="0,00" type="number"
+                style={{ background: "#080C10", borderColor: "#1A2535", color: "#F0F4F8" }} />
+            </div>
+            <div>
+              <label className="text-xs font-mono uppercase mb-1 block" style={{ color: "#94A3B8" }}>Data</label>
+              <Input type="date" value={form.received_at}
+                onChange={e => setForm(f => ({ ...f, received_at: e.target.value }))}
+                style={{ background: "#080C10", borderColor: "#1A2535", color: "#F0F4F8" }} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-mono uppercase mb-1 block" style={{ color: "#94A3B8" }}>Tipo</label>
+              <Select value={form.type} onValueChange={(v) => setForm(f => ({ ...f, type: v }))}>
+                <SelectTrigger style={{ background: "#080C10", borderColor: "#1A2535", color: "#F0F4F8" }}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent style={{ background: "#0D1318", borderColor: "#1A2535" }}>
+                  <SelectItem value="fixed" style={{ color: "#F0F4F8" }}>Fixo</SelectItem>
+                  <SelectItem value="variable" style={{ color: "#F0F4F8" }}>Variável</SelectItem>
+                  <SelectItem value="eventual" style={{ color: "#F0F4F8" }}>Eventual</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-xs font-mono uppercase mb-1 block" style={{ color: "#94A3B8" }}>Mês referência</label>
+              <Input type="month" value={form.reference_month}
+                onChange={e => setForm(f => ({ ...f, reference_month: e.target.value }))}
+                style={{ background: "#080C10", borderColor: "#1A2535", color: "#F0F4F8" }} />
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg" style={{ color: "#94A3B8" }}>Cancelar</button>
+          <GoldButton onClick={handleSave}>Salvar Receita</GoldButton>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+
 function HistoryTab({ month, accounts }: { month: string; accounts: any[] }) {
   const { data: transactions = [], isLoading } = useBankTransactions({ month });
 
