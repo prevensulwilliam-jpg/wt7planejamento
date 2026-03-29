@@ -14,12 +14,12 @@ export function normalizeDescription(description: string): string {
     .slice(0, 60);
 }
 
-export async function getAllPatterns() {
+export async function getAllPatterns(): Promise<any[]> {
   const { data } = await supabase
     .from("classification_patterns" as any)
     .select("*")
     .eq("auto_apply", true)
-    .order("count", { ascending: false });
+    .order("count", { ascending: false }) as { data: any[] | null };
   return data ?? [];
 }
 
