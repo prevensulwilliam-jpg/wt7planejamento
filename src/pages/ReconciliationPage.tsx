@@ -94,7 +94,7 @@ export default function ReconciliationPage() {
 /* ============ IMPORT TAB ============ */
 function ImportTab({ accounts }: { accounts: any[] }) {
   const [selectedAccount, setSelectedAccount] = useState("");
-  const [preview, setPreview] = useState<ParsedTransaction[]>([]);
+  const [preview, setPreview] = useState<any[]>([]);
   const [fileName, setFileName] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const importMutation = useImportTransactions();
@@ -111,11 +111,31 @@ function ImportTab({ accounts }: { accounts: any[] }) {
       } else {
         parsed = parseCSV(text);
       }
-      setPreview(parsed);
-      if (parsed.length === 0) toast.error("Nenhuma transação encontrada no arquivo.");
+      if (parsed.length === 0) {
+        toast.error("Nenhuma transação encontrada no arquivo.");
+        return;
+      }
+      const accountNames = accounts.map((a: any) => a.bank_name).filter(Boolean);
+      const categorized = parsed.map((tx, idx) => {
+        const result = categorizeTransaction(tx.description, tx.type, tx.amount, accountNames);
+        return {
+          ...tx,
+          _previewId: `preview-${idx}`,
+          category_suggestion: result.category,
+          category_intent: result.intent,
+          category_confidence: result.confidence,
+          category_label: result.label,
+          status: result.confidence === "high" && result.intent !== "duvida"
+            ? "auto_categorized"
+            : result.intent === "transferencia"
+            ? "transferencia"
+            : "pending",
+        };
+      });
+      setPreview(categorized);
     };
-    reader.readAsText(file);
-  }, []);
+    reader.readAsText(file, "latin1");
+  }, [accounts]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();

@@ -32,10 +32,27 @@ export function useImportTransactions() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (transactions: any[]) => {
+      if (!transactions.length) return { imported: 0, skipped: 0 };
+
+      const externalIds = transactions.map(t => t.external_id).filter(Boolean);
+      const { data: existing } = await supabase
+        .from("bank_transactions" as any)
+        .select("external_id")
+        .in("external_id", externalIds);
+
+      const existingIds = new Set((existing ?? []).map((r: any) => r.external_id));
+      const newTxs = transactions.filter(t => !existingIds.has(t.external_id));
+
+      if (!newTxs.length) {
+        throw new Error("Todas as transações desse extrato já foram importadas anteriormente.");
+      }
+
       const { error } = await supabase
         .from("bank_transactions" as any)
-        .upsert(transactions, { onConflict: "external_id" } as any);
-      if (error) throw error;
+        .insert(newTxs);
+
+      if (error) throw new Error(`Erro ao salvar: ${error.message}`);
+      return { imported: newTxs.length, skipped: transactions.length - newTxs.length };
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["bank_transactions"] }),
   });
