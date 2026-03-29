@@ -145,31 +145,31 @@ function ImportTab({ accounts }: { accounts: any[] }) {
 
   const doImport = async () => {
     if (!selectedAccount) { toast.error("Selecione uma conta bancária."); return; }
-    
-    const accountNames = accounts.map((a: any) => a.bank_name).filter(Boolean);
-    
-    const rows = preview.map(tx => {
-      const result = categorizeTransaction(tx.description, tx.type, tx.amount, accountNames);
-      return {
-        ...tx,
-        bank_account_id: selectedAccount,
-        category_suggestion: result.category,
-        category_intent: result.intent,
-        category_confidence: result.confidence,
-        category_label: result.label,
-        status: result.confidence === "high" && result.intent !== "duvida"
-          ? "auto_categorized"
-          : "pending",
-      };
-    });
+    if (!preview.length) { toast.error("Selecione um arquivo primeiro."); return; }
+
+    const rows = preview.map(tx => ({
+      external_id: tx.external_id,
+      date: tx.date,
+      description: tx.description,
+      amount: tx.amount,
+      type: tx.type,
+      source: tx.source,
+      bank_account_id: selectedAccount,
+      category_suggestion: tx.category_suggestion,
+      category_intent: tx.category_intent,
+      category_confidence: tx.category_confidence,
+      category_label: tx.category_label,
+      status: tx.category_intent === "transferencia" ? "ignored" : tx.status,
+      raw_data: null,
+    }));
 
     try {
-      await importMutation.mutateAsync(rows);
+      const result = await importMutation.mutateAsync(rows);
       const transfers = rows.filter(r => r.category_intent === "transferencia").length;
-      const autoOk = rows.filter(r => r.status === "auto_categorized" && r.category_intent !== "transferencia").length;
+      const autoOk = rows.filter(r => r.status === "auto_categorized").length;
       const doubts = rows.filter(r => r.category_intent === "duvida").length;
       toast.success(
-        `${rows.length} transações importadas: ${autoOk} categorizadas, ${transfers} transferências, ${doubts} com dúvidas`
+        `✅ Importado! ${autoOk} prontas para confirmar · ${doubts} com dúvidas · ${transfers} transferências ignoradas`
       );
       setPreview([]);
       setFileName("");
