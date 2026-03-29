@@ -227,47 +227,56 @@ function ImportTab({ accounts }: { accounts: any[] }) {
 
         {preview.length > 0 && (
           <div className="mt-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-mono" style={{ color: "#E8C97A" }}>
-                {preview.length} transações encontradas
-              </p>
-              <GoldButton onClick={doImport} disabled={importMutation.isPending}>
-                {importMutation.isPending ? "Importando..." : `Importar ${preview.length} transações`}
-              </GoldButton>
+            {/* Resumo por intent */}
+            <div className="grid grid-cols-4 gap-2">
+              {[
+                { label: "Receitas", count: preview.filter(t => t.category_intent === "receita").length, color: "#10B981" },
+                { label: "Despesas", count: preview.filter(t => t.category_intent === "despesa").length, color: "#F43F5E" },
+                { label: "Transferências", count: preview.filter(t => t.category_intent === "transferencia").length, color: "#94A3B8" },
+                { label: "Dúvidas", count: preview.filter(t => t.category_intent === "duvida").length, color: "#F59E0B" },
+              ].map(({ label, count, color }) => (
+                <div key={label} className="rounded-lg p-3 text-center" style={{ background: "#0D1318", border: `1px solid ${color}33` }}>
+                  <p className="font-display font-bold text-xl" style={{ color }}>{count}</p>
+                  <p className="text-xs mt-1" style={{ color: "#94A3B8" }}>{label}</p>
+                </div>
+              ))}
             </div>
-            <div className="max-h-60 overflow-auto rounded-lg" style={{ border: "1px solid #1A2535" }}>
-              <Table>
-                <TableHeader>
-                  <TableRow style={{ borderColor: "#1A2535" }}>
-                    <TableHead style={{ color: "#94A3B8" }}>Data</TableHead>
-                    <TableHead style={{ color: "#94A3B8" }}>Descrição</TableHead>
-                    <TableHead style={{ color: "#94A3B8" }}>Tipo</TableHead>
-                    <TableHead className="text-right" style={{ color: "#94A3B8" }}>Valor</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {preview.slice(0, 20).map((tx, i) => (
-                    <TableRow key={i} style={{ borderColor: "#1A2535" }}>
-                      <TableCell style={{ color: "#F0F4F8" }}>{formatDate(tx.date)}</TableCell>
-                      <TableCell className="max-w-[200px] truncate" style={{ color: "#F0F4F8" }}>{tx.description}</TableCell>
-                      <TableCell>
-                        <WtBadge variant={tx.type === "credit" ? "green" : "red"}>
-                          {tx.type === "credit" ? "Crédito" : "Débito"}
-                        </WtBadge>
-                      </TableCell>
-                      <TableCell className="text-right font-mono" style={{ color: tx.type === "credit" ? "#10B981" : "#F43F5E" }}>
-                        {formatCurrency(tx.amount)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+
+            {/* Lista categorizada */}
+            <div className="max-h-80 overflow-y-auto rounded-xl" style={{ border: "1px solid #1A2535" }}>
+              {preview.map((tx) => {
+                const intentColors: Record<string, string> = {
+                  receita: "#10B981", despesa: "#F43F5E",
+                  transferencia: "#94A3B8", duvida: "#F59E0B"
+                };
+                const color = intentColors[tx.category_intent] ?? "#94A3B8";
+                return (
+                  <div key={tx._previewId} className="flex items-center justify-between px-4 py-2.5"
+                    style={{ borderBottom: "1px solid #1A2535" }}>
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
+                      <div className="min-w-0">
+                        <p className="text-xs truncate" style={{ color: "#F0F4F8" }}>{tx.description}</p>
+                        <p className="text-xs" style={{ color: "#64748B" }}>
+                          {tx.date} · {tx.category_label}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-sm font-mono font-bold ml-3 flex-shrink-0"
+                      style={{ color: tx.type === "credit" ? "#10B981" : "#F43F5E" }}>
+                      {tx.type === "credit" ? "+" : "-"}{formatCurrency(tx.amount)}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
-            {preview.length > 20 && (
-              <p className="text-xs text-center" style={{ color: "#4A5568" }}>
-                Mostrando 20 de {preview.length} — todas serão importadas
-              </p>
-            )}
+
+            {/* Botão importar */}
+            <GoldButton onClick={doImport} disabled={importMutation.isPending} className="w-full justify-center">
+              {importMutation.isPending
+                ? "Importando..."
+                : `Importar ${preview.length} transações`}
+            </GoldButton>
           </div>
         )}
 
