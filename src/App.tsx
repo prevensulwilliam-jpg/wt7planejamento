@@ -26,6 +26,7 @@ import AssetsPage from "@/pages/AssetsPage";
 import ProjectionsPage from "@/pages/ProjectionsPage";
 import KitnetsReportPage from "@/pages/KitnetsReportPage";
 import TaxesPage from "@/pages/TaxesPage";
+import WiselyPage from "@/pages/WiselyPage";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient({
