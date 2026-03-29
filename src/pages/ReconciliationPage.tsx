@@ -563,37 +563,44 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
         return;
       }
 
-      await matchMutation.mutateAsync({ id, category, intent });
       const label = ALL_CATEGORY_LABELS[category] || category;
+      let revenueId: string | undefined;
+      let expenseId: string | undefined;
 
       if (intent === "receita") {
-        await supabase.from("revenues").insert({
+        const { data, error } = await supabase.from("revenues").insert({
           source: category,
           description,
           amount: tx.amount,
           type: "variable",
           reference_month: tx.date?.slice(0, 7),
           received_at: tx.date,
-        });
+        }).select("id").single();
+        if (error) throw error;
+        revenueId = data?.id;
         toast.success(`Receita criada: ${formatCurrency(tx.amount)} em ${label}`);
       }
 
       if (intent === "despesa") {
-        await supabase.from("expenses").insert({
+        const { data, error } = await supabase.from("expenses").insert({
           category,
           description,
           amount: tx.amount,
           type: "variable",
           reference_month: tx.date?.slice(0, 7),
           paid_at: tx.date,
-        });
+        }).select("id").single();
+        if (error) throw error;
+        expenseId = data?.id;
         toast.success(`Despesa criada: ${formatCurrency(tx.amount)} em ${label}`);
       }
 
-      // Registrar padrão aprendido
+      await matchMutation.mutateAsync({ id, category, intent, revenueId, expenseId });
       await recordClassification(tx.description, category, intent, label);
-    } catch {
-      toast.error("Erro ao classificar transação.");
+      queryClient.invalidateQueries({ queryKey: ["revenues"] });
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
+    } catch (err: any) {
+      toast.error(`Erro ao classificar: ${err.message || "erro desconhecido"}`);
     }
   };
 
@@ -605,38 +612,44 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
       for (const tx of autoCategorized) {
         const intent = tx.category_intent as string;
         const category = tx.category_suggestion as string;
-
-        await matchMutation.mutateAsync({ id: tx.id, category, intent });
+        let revenueId: string | undefined;
+        let expenseId: string | undefined;
 
         if (intent === "receita") {
-          await supabase.from("revenues").insert({
+          const { data, error } = await supabase.from("revenues").insert({
             source: category,
             description: tx.description,
             amount: tx.amount,
             type: "variable",
             reference_month: tx.date?.slice(0, 7),
             received_at: tx.date,
-          });
+          }).select("id").single();
+          if (error) throw error;
+          revenueId = data?.id;
           revenues++;
         } else if (intent === "despesa") {
-          await supabase.from("expenses").insert({
+          const { data, error } = await supabase.from("expenses").insert({
             category,
             description: tx.description,
             amount: tx.amount,
             type: "variable",
             reference_month: tx.date?.slice(0, 7),
             paid_at: tx.date,
-          });
+          }).select("id").single();
+          if (error) throw error;
+          expenseId = data?.id;
           expenses++;
         }
 
-        // Registrar padrão
+        await matchMutation.mutateAsync({ id: tx.id, category, intent, revenueId, expenseId });
         const pLabel = ALL_CATEGORY_LABELS[category] || category;
         await recordClassification(tx.description, category, intent, pLabel);
       }
+      queryClient.invalidateQueries({ queryKey: ["revenues"] });
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
       toast.success(`${revenues} receitas e ${expenses} despesas criadas automaticamente!`);
-    } catch {
-      toast.error("Erro ao confirmar em lote.");
+    } catch (err: any) {
+      toast.error(`Erro ao confirmar em lote: ${err.message || "erro desconhecido"}`);
     }
   };
 
