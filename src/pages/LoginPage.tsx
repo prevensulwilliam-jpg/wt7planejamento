@@ -5,13 +5,34 @@ import { WT7Logo } from "@/components/wt7/WT7Logo";
 import { GoldButton } from "@/components/wt7/GoldButton";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  const handleForgotPassword = async () => {
+    if (!email) {
+      toast({ title: "Informe o e-mail", description: "Preencha o campo de e-mail primeiro", variant: "destructive" });
+      return;
+    }
+    setResetting(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (error) throw error;
+      toast({ title: "E-mail enviado!", description: "Verifique sua caixa de entrada para redefinir a senha." });
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    } finally {
+      setResetting(false);
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,6 +97,17 @@ export default function LoginPage() {
           <GoldButton type="submit" className="w-full justify-center" disabled={loading}>
             {loading ? "Entrando..." : "Entrar"}
           </GoldButton>
+          <div className="text-center">
+            <Button
+              type="button"
+              variant="link"
+              onClick={handleForgotPassword}
+              disabled={resetting}
+              className="text-xs text-wt-text-muted hover:text-gold"
+            >
+              {resetting ? "Enviando..." : "Esqueci minha senha"}
+            </Button>
+          </div>
         </form>
       </div>
     </div>
