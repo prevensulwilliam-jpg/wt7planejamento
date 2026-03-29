@@ -380,6 +380,36 @@ export type Database = {
           },
         ]
       }
+      custom_categories: {
+        Row: {
+          active: boolean | null
+          color: string | null
+          created_at: string | null
+          emoji: string | null
+          id: string
+          name: string
+          type: string | null
+        }
+        Insert: {
+          active?: boolean | null
+          color?: string | null
+          created_at?: string | null
+          emoji?: string | null
+          id?: string
+          name: string
+          type?: string | null
+        }
+        Update: {
+          active?: boolean | null
+          color?: string | null
+          created_at?: string | null
+          emoji?: string | null
+          id?: string
+          name?: string
+          type?: string | null
+        }
+        Relationships: []
+      }
       debts: {
         Row: {
           created_at: string | null
