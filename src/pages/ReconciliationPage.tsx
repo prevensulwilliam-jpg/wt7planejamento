@@ -2,6 +2,8 @@ import { useState, useRef, useCallback } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
@@ -17,6 +19,59 @@ import { formatCurrency, formatDate, formatMonth, getCurrentMonth } from "@/lib/
 import { Upload, CheckCircle2, XCircle, ArrowLeftRight, FileText, Wifi, Download } from "lucide-react";
 import { toast } from "sonner";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+
+const DESPESA_OPTIONS = [
+  { value: "cartao_credito", label: "💳 Cartão de Crédito" },
+  { value: "energia_eletrica", label: "⚡ Energia Elétrica" },
+  { value: "internet", label: "🌐 Internet" },
+  { value: "telefonia", label: "📱 Telefonia" },
+  { value: "lazer", label: "🎉 Lazer" },
+  { value: "alimentacao", label: "🍽️ Alimentação" },
+  { value: "suplementos", label: "💊 Suplementação" },
+  { value: "saude", label: "🏥 Saúde" },
+  { value: "maconaria", label: "🔷 Maçonaria" },
+  { value: "guarani", label: "⚽ Guarani" },
+  { value: "consorcio", label: "🔄 Consórcio" },
+  { value: "terapia", label: "🧠 Terapia" },
+  { value: "obras", label: "🏗️ Obras" },
+  { value: "terrenos", label: "🌍 Terrenos" },
+  { value: "agua", label: "💧 Água/Saneamento" },
+  { value: "gasolina", label: "⛽ Gasolina" },
+  { value: "farmacia", label: "💊 Farmácia" },
+  { value: "academia", label: "🏋️ Academia" },
+  { value: "impostos", label: "🧾 Impostos/Taxas" },
+  { value: "casamento", label: "💍 Casamento" },
+  { value: "assinaturas", label: "📲 Assinaturas" },
+  { value: "veiculo", label: "🚗 Veículo" },
+  { value: "outros", label: "📦 Outros" },
+];
+
+const RECEITA_OPTIONS = [
+  { value: "kitnets", label: "🏘️ Aluguel/Kitnets" },
+  { value: "salario", label: "💼 Salário" },
+  { value: "comissao_prevensul", label: "📊 Comissão Prevensul" },
+  { value: "solar", label: "☀️ Energia Solar" },
+  { value: "laudos", label: "📋 Laudos Técnicos" },
+  { value: "t7", label: "🚀 T7 Sales" },
+  { value: "dividendos", label: "📈 Dividendos/Rendimentos" },
+  { value: "outros_receita", label: "💰 Outros (Receita)" },
+];
+
+const ALL_CATEGORY_LABELS: Record<string, string> = {
+  ...CATEGORY_LABELS,
+  cartao_credito: "Cartão de Crédito", energia_eletrica: "Energia Elétrica",
+  internet: "Internet", telefonia: "Telefonia", lazer: "Lazer",
+  alimentacao: "Alimentação", suplementos: "Suplementação", saude: "Saúde",
+  maconaria: "Maçonaria", guarani: "Guarani", consorcio: "Consórcio",
+  terapia: "Terapia", obras: "Obras", terrenos: "Terrenos",
+  agua: "Água/Saneamento", gasolina: "Gasolina", farmacia: "Farmácia",
+  academia: "Academia", impostos: "Impostos/Taxas", casamento: "Casamento",
+  assinaturas: "Assinaturas", veiculo: "Veículo", outros: "Outros",
+  kitnets: "Kitnets", salario: "Salário",
+  comissao_prevensul: "Comissão Prevensul", solar: "Energia Solar",
+  laudos: "Laudos", t7: "T7 Sales", dividendos: "Dividendos",
+  outros_receita: "Outros (Receita)", transferencia: "Transferência entre Contas",
+};
 
 const PIE_COLORS = ["#C9A84C", "#2DD4BF", "#8B5CF6", "#F43F5E", "#10B981", "#3B82F6", "#F59E0B", "#EC4899", "#6366F1", "#14B8A6"];
 
@@ -465,18 +520,34 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
     }
   };
 
+  const [newExpenseOpen, setNewExpenseOpen] = useState(false);
+  const [newRevenueOpen, setNewRevenueOpen] = useState(false);
+
   return (
     <div className="space-y-6">
-      {/* Recategorizar */}
-      <div className="flex justify-end">
+      {/* Action buttons */}
+      <div className="flex gap-2 justify-end">
+        <button onClick={() => setNewRevenueOpen(true)}
+          className="text-xs px-4 py-2 rounded-lg font-medium flex items-center gap-1.5"
+          style={{ background: "rgba(16,185,129,0.15)", color: "#10B981", border: "1px solid rgba(16,185,129,0.3)" }}>
+          + Nova Receita
+        </button>
+        <button onClick={() => setNewExpenseOpen(true)}
+          className="text-xs px-4 py-2 rounded-lg font-medium flex items-center gap-1.5"
+          style={{ background: "rgba(244,63,94,0.15)", color: "#F43F5E", border: "1px solid rgba(244,63,94,0.3)" }}>
+          + Nova Despesa
+        </button>
         <button
           onClick={() => recategorizeMutation.mutate()}
           disabled={recategorizeMutation.isPending}
-          className="text-xs px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-all"
+          className="text-xs px-4 py-2 rounded-lg font-medium flex items-center gap-1.5 transition-all"
           style={{ background: "rgba(201,168,76,0.15)", color: "#E8C97A", border: "1px solid rgba(201,168,76,0.3)" }}>
-          {recategorizeMutation.isPending ? "Recategorizando..." : "🔄 Recategorizar todas"}
+          {recategorizeMutation.isPending ? "..." : "🔄 Recategorizar"}
         </button>
       </div>
+
+      <NewExpenseModal open={newExpenseOpen} onClose={() => setNewExpenseOpen(false)} defaultMonth={month} />
+      <NewRevenueModal open={newRevenueOpen} onClose={() => setNewRevenueOpen(false)} defaultMonth={month} />
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -538,77 +609,12 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
               </div>
               <div className="space-y-3">
                 {doubts.map((tx: any) => (
-                  <div key={tx.id} className="rounded-xl p-4" style={{ background: "#0D1318", border: "1px solid rgba(245,158,11,0.3)" }}>
-                    <div className="flex items-start justify-between mb-3">
-                      <div>
-                        <p className="text-xs font-mono" style={{ color: "#94A3B8" }}>{formatDate(tx.date)}</p>
-                        <p className="text-sm font-medium mt-1" style={{ color: "#F0F4F8" }}>{tx.description}</p>
-                      </div>
-                      <span className="font-mono font-bold text-lg" style={{ color: tx.type === "credit" ? "#10B981" : "#F43F5E" }}>
-                        {tx.type === "credit" ? "+" : "-"}{formatCurrency(tx.amount)}
-                      </span>
-                    </div>
-                    <p className="text-xs mb-3" style={{ color: "#94A3B8" }}>Esta transação é:</p>
-                    <div className="flex flex-wrap gap-2">
-                      {tx.type === "credit" ? (
-                        <>
-                          <button onClick={() => classifyAs(tx.id, "receita", "kitnets")}
-                            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-90"
-                            style={{ background: "rgba(201,168,76,0.15)", color: "#E8C97A", border: "1px solid rgba(201,168,76,0.3)" }}>
-                            🏘️ Aluguel/Kitnets
-                          </button>
-                          <button onClick={() => classifyAs(tx.id, "receita", "comissao_prevensul")}
-                            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-90"
-                            style={{ background: "rgba(45,212,191,0.15)", color: "#2DD4BF", border: "1px solid rgba(45,212,191,0.3)" }}>
-                            💼 Comissão
-                          </button>
-                          <button onClick={() => classifyAs(tx.id, "receita", "solar")}
-                            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-90"
-                            style={{ background: "rgba(16,185,129,0.15)", color: "#10B981", border: "1px solid rgba(16,185,129,0.3)" }}>
-                            ☀️ Solar
-                          </button>
-                          <button onClick={() => classifyAs(tx.id, "receita", "outros_receita")}
-                            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-90"
-                            style={{ background: "rgba(16,185,129,0.15)", color: "#10B981", border: "1px solid rgba(16,185,129,0.3)" }}>
-                            💰 Outra Receita
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button onClick={() => classifyAs(tx.id, "despesa", "alimentacao")}
-                            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-90"
-                            style={{ background: "rgba(245,158,11,0.15)", color: "#F59E0B", border: "1px solid rgba(245,158,11,0.3)" }}>
-                            🍽️ Alimentação
-                          </button>
-                          <button onClick={() => classifyAs(tx.id, "despesa", "assinaturas")}
-                            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-90"
-                            style={{ background: "rgba(139,92,246,0.15)", color: "#8B5CF6", border: "1px solid rgba(139,92,246,0.3)" }}>
-                            📱 Assinaturas
-                          </button>
-                          <button onClick={() => classifyAs(tx.id, "despesa", "obras")}
-                            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-90"
-                            style={{ background: "rgba(244,63,94,0.15)", color: "#F43F5E", border: "1px solid rgba(244,63,94,0.3)" }}>
-                            🏗️ Obras
-                          </button>
-                          <button onClick={() => classifyAs(tx.id, "despesa", "outros")}
-                            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-90"
-                            style={{ background: "rgba(244,63,94,0.15)", color: "#F43F5E", border: "1px solid rgba(244,63,94,0.3)" }}>
-                            📦 Outra Despesa
-                          </button>
-                        </>
-                      )}
-                      <button onClick={() => classifyAs(tx.id, "transferencia", "transferencia")}
-                        className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-90"
-                        style={{ background: "rgba(148,163,184,0.15)", color: "#94A3B8", border: "1px solid rgba(148,163,184,0.3)" }}>
-                        🔄 Transferência
-                      </button>
-                      <button onClick={() => ignoreMutation.mutate(tx.id)}
-                        className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-90"
-                        style={{ background: "rgba(74,85,104,0.15)", color: "#4A5568", border: "1px solid rgba(74,85,104,0.3)" }}>
-                        Ignorar
-                      </button>
-                    </div>
-                  </div>
+                  <DoubtCard
+                    key={tx.id}
+                    tx={tx}
+                    classifyAs={classifyAs}
+                    ignoreTransaction={(id) => ignoreMutation.mutate(id)}
+                  />
                 ))}
               </div>
             </PremiumCard>
