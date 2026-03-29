@@ -104,6 +104,82 @@ export type Database = {
         }
         Relationships: []
       }
+      bank_transactions: {
+        Row: {
+          amount: number
+          bank_account_id: string | null
+          category_confirmed: string | null
+          category_suggestion: string | null
+          created_at: string | null
+          date: string
+          description: string | null
+          external_id: string | null
+          id: string
+          matched_expense_id: string | null
+          matched_revenue_id: string | null
+          raw_data: Json | null
+          source: string | null
+          status: string | null
+          type: string | null
+        }
+        Insert: {
+          amount: number
+          bank_account_id?: string | null
+          category_confirmed?: string | null
+          category_suggestion?: string | null
+          created_at?: string | null
+          date: string
+          description?: string | null
+          external_id?: string | null
+          id?: string
+          matched_expense_id?: string | null
+          matched_revenue_id?: string | null
+          raw_data?: Json | null
+          source?: string | null
+          status?: string | null
+          type?: string | null
+        }
+        Update: {
+          amount?: number
+          bank_account_id?: string | null
+          category_confirmed?: string | null
+          category_suggestion?: string | null
+          created_at?: string | null
+          date?: string
+          description?: string | null
+          external_id?: string | null
+          id?: string
+          matched_expense_id?: string | null
+          matched_revenue_id?: string | null
+          raw_data?: Json | null
+          source?: string | null
+          status?: string | null
+          type?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bank_transactions_bank_account_id_fkey"
+            columns: ["bank_account_id"]
+            isOneToOne: false
+            referencedRelation: "bank_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bank_transactions_matched_expense_id_fkey"
+            columns: ["matched_expense_id"]
+            isOneToOne: false
+            referencedRelation: "expenses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bank_transactions_matched_revenue_id_fkey"
+            columns: ["matched_revenue_id"]
+            isOneToOne: false
+            referencedRelation: "revenues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       celesc_invoices: {
         Row: {
           amount_paid: number | null
@@ -585,6 +661,36 @@ export type Database = {
           status?: string | null
           tenant_name?: string | null
           unit_number?: number | null
+        }
+        Relationships: []
+      }
+      pluggy_connections: {
+        Row: {
+          account_id: string | null
+          bank_name: string | null
+          created_at: string | null
+          id: string
+          item_id: string | null
+          last_sync: string | null
+          status: string | null
+        }
+        Insert: {
+          account_id?: string | null
+          bank_name?: string | null
+          created_at?: string | null
+          id?: string
+          item_id?: string | null
+          last_sync?: string | null
+          status?: string | null
+        }
+        Update: {
+          account_id?: string | null
+          bank_name?: string | null
+          created_at?: string | null
+          id?: string
+          item_id?: string | null
+          last_sync?: string | null
+          status?: string | null
         }
         Relationships: []
       }
