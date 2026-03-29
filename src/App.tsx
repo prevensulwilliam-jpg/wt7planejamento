@@ -1,12 +1,51 @@
+import { useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Route, Routes, Navigate, useNavigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import Index from "./pages/Index.tsx";
-import NotFound from "./pages/NotFound.tsx";
+import { supabase } from "@/integrations/supabase/client";
+import LoginPage from "@/pages/LoginPage";
+import AdminLayout from "@/layouts/AdminLayout";
+import DashboardPage from "@/pages/DashboardPage";
+import NotFound from "@/pages/NotFound";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { staleTime: 5 * 60 * 1000 } },
+});
+
+function AuthGuard({ children }: { children: React.ReactNode }) {
+  const [loading, setLoading] = useState(true);
+  const [session, setSession] = useState<any>(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      setLoading(false);
+      if (!session) navigate("/login", { replace: true });
+    });
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setLoading(false);
+      if (!session) navigate("/login", { replace: true });
+    });
+
+    return () => subscription.unsubscribe();
+  }, [navigate]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#05080C' }}>
+        <div className="skeleton-shimmer w-16 h-16 rounded-2xl" />
+      </div>
+    );
+  }
+
+  if (!session) return null;
+  return <>{children}</>;
+}
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -15,13 +54,54 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Index />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+
+          {/* Admin routes */}
+          <Route element={<AuthGuard><AdminLayout /></AuthGuard>}>
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/wisely" element={<PlaceholderPage title="Wisely IA" />} />
+            <Route path="/revenues" element={<PlaceholderPage title="Receitas" />} />
+            <Route path="/expenses" element={<PlaceholderPage title="Despesas" />} />
+            <Route path="/banks" element={<PlaceholderPage title="Bancos & Caixas" />} />
+            <Route path="/kitnets" element={<PlaceholderPage title="Kitnets" />} />
+            <Route path="/energy" element={<PlaceholderPage title="Energia Solar" />} />
+            <Route path="/constructions" element={<PlaceholderPage title="Obras & Terrenos" />} />
+            <Route path="/assets" element={<PlaceholderPage title="Patrimônio" />} />
+            <Route path="/investments" element={<PlaceholderPage title="Investimentos" />} />
+            <Route path="/consortiums" element={<PlaceholderPage title="Consórcios" />} />
+            <Route path="/wedding" element={<PlaceholderPage title="Casamento 2027" />} />
+            <Route path="/goals" element={<PlaceholderPage title="Metas" />} />
+            <Route path="/taxes" element={<PlaceholderPage title="Impostos & Dívidas" />} />
+            <Route path="/projections" element={<PlaceholderPage title="Projeções" />} />
+            <Route path="/reports/kitnets" element={<PlaceholderPage title="Relatório Kitnets" />} />
+            <Route path="/reports/commissions" element={<PlaceholderPage title="Relatório Comissões" />} />
+            <Route path="/users" element={<PlaceholderPage title="Usuários & Acessos" />} />
+          </Route>
+
+          {/* Manager routes */}
+          <Route path="/manager/kitnets" element={<AuthGuard><PlaceholderPage title="Portal Kitnets" /></AuthGuard>} />
+          <Route path="/manager/billing" element={<AuthGuard><PlaceholderPage title="Módulo Financeiro" /></AuthGuard>} />
+
+          {/* Partner routes */}
+          <Route path="/partner/projects" element={<AuthGuard><PlaceholderPage title="Portal do Sócio" /></AuthGuard>} />
+
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
 );
+
+function PlaceholderPage({ title }: { title: string }) {
+  return (
+    <div className="flex items-center justify-center min-h-[60vh]">
+      <div className="text-center">
+        <h1 className="font-display font-bold text-2xl" style={{ color: '#F0F4F8' }}>{title}</h1>
+        <p className="text-sm mt-2" style={{ color: '#94A3B8' }}>Módulo em desenvolvimento</p>
+      </div>
+    </div>
+  );
+}
 
 export default App;
