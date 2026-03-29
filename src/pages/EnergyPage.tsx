@@ -1,0 +1,353 @@
+import { useState, useMemo } from "react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { GoldButton } from "@/components/wt7/GoldButton";
+import { PremiumCard } from "@/components/wt7/PremiumCard";
+import { KpiCard } from "@/components/wt7/KpiCard";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useKitnets, useCelescInvoices, useCreateCelescInvoice, useEnergyReadings, useSaveEnergyReadings } from "@/hooks/useKitnets";
+import { formatCurrency, formatMonth, getCurrentMonth } from "@/lib/formatters";
+import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import { Plus, Save } from "lucide-react";
+
+export default function EnergyPage() {
+  return (
+    <div className="space-y-6">
+      <h1 className="font-display font-bold text-2xl text-foreground">Energia Solar</h1>
+      <Tabs defaultValue="invoices">
+        <TabsList className="bg-card border border-border">
+          <TabsTrigger value="invoices">Faturas CELESC</TabsTrigger>
+          <TabsTrigger value="readings">Leituras & Cobrança</TabsTrigger>
+        </TabsList>
+        <TabsContent value="invoices"><InvoicesTab /></TabsContent>
+        <TabsContent value="readings"><ReadingsTab /></TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+// ─── Invoices Tab ───
+function InvoicesTab() {
+  const { data: invoices, isLoading } = useCelescInvoices();
+  const [open, setOpen] = useState(false);
+  const createMut = useCreateCelescInvoice();
+  const { toast } = useToast();
+  const [form, setForm] = useState({
+    residencial_code: "RWT02",
+    reference_month: getCurrentMonth(),
+    due_date: "",
+    kwh_total: "",
+    invoice_total: "",
+    cosip: "0",
+    pis_cofins_pct: "0",
+    icms_pct: "0",
+    solar_kwh_offset: "0",
+    amount_paid: "",
+  });
+
+  const invoiceTotal = Number(form.invoice_total) || 0;
+  const cosip = Number(form.cosip) || 0;
+  const kwhTotal = Number(form.kwh_total) || 0;
+  const tariff = kwhTotal > 0 ? (invoiceTotal - cosip) / kwhTotal : 0;
+
+  const handleSave = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      await createMut.mutateAsync({
+        residencial_code: form.residencial_code,
+        reference_month: form.reference_month,
+        due_date: form.due_date || null,
+        kwh_total: kwhTotal,
+        invoice_total: invoiceTotal,
+        cosip: cosip,
+        pis_cofins_pct: Number(form.pis_cofins_pct) || 0,
+        icms_pct: Number(form.icms_pct) || 0,
+        solar_kwh_offset: Number(form.solar_kwh_offset) || 0,
+        amount_paid: Number(form.amount_paid) || 0,
+        tariff_per_kwh: Number(tariff.toFixed(6)),
+        created_by: user?.id,
+      });
+      toast({ title: "Fatura salva!" });
+      setOpen(false);
+    } catch (e: any) {
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    }
+  };
+
+  const set = (key: string, val: string) => setForm(f => ({ ...f, [key]: val }));
+
+  return (
+    <div className="space-y-4 mt-4">
+      <div className="flex justify-end">
+        <GoldButton onClick={() => setOpen(true)}><Plus className="w-4 h-4 mr-1" />Nova Fatura</GoldButton>
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-12 rounded" />)}</div>
+      ) : !invoices?.length ? (
+        <PremiumCard className="text-center py-12">
+          <p className="text-muted-foreground">Nenhuma fatura cadastrada</p>
+        </PremiumCard>
+      ) : (
+        <div className="rounded-xl overflow-hidden border border-border">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-border">
+                <TableHead className="text-muted-foreground">Complexo</TableHead>
+                <TableHead className="text-muted-foreground">Mês</TableHead>
+                <TableHead className="text-muted-foreground">kWh</TableHead>
+                <TableHead className="text-muted-foreground">Total Fatura</TableHead>
+                <TableHead className="text-muted-foreground">Solar kWh</TableHead>
+                <TableHead className="text-muted-foreground">Pago</TableHead>
+                <TableHead className="text-muted-foreground">Tarifa/kWh</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {invoices.map(inv => (
+                <TableRow key={inv.id} className="border-border">
+                  <TableCell className="font-mono text-foreground">{inv.residencial_code}</TableCell>
+                  <TableCell className="text-muted-foreground">{inv.reference_month ? formatMonth(inv.reference_month) : "—"}</TableCell>
+                  <TableCell className="font-mono text-foreground">{inv.kwh_total ?? 0}</TableCell>
+                  <TableCell className="font-mono text-foreground">{formatCurrency(inv.invoice_total ?? 0)}</TableCell>
+                  <TableCell className="font-mono text-foreground">{inv.solar_kwh_offset ?? 0}</TableCell>
+                  <TableCell className="font-mono text-foreground">{formatCurrency(inv.amount_paid ?? 0)}</TableCell>
+                  <TableCell className="font-mono text-foreground">R$ {(inv.tariff_per_kwh ?? 0).toFixed(4)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      {/* New Invoice Dialog */}
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="bg-card border-border max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle className="text-foreground">Nova Fatura CELESC</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Complexo</label>
+                <Select value={form.residencial_code} onValueChange={v => set("residencial_code", v)}>
+                  <SelectTrigger className="bg-background border-border text-foreground"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="RWT02">RWT02</SelectItem>
+                    <SelectItem value="RWT03">RWT03</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Mês Referência</label>
+                <Input type="month" value={form.reference_month} onChange={e => set("reference_month", e.target.value)} className="bg-background border-border text-foreground font-mono" />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Vencimento</label>
+              <Input type="date" value={form.due_date} onChange={e => set("due_date", e.target.value)} className="bg-background border-border text-foreground" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">kWh Total</label>
+                <Input type="number" value={form.kwh_total} onChange={e => set("kwh_total", e.target.value)} className="bg-background border-border text-foreground" />
+              </div>
+              <div>
+                <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Valor Total Fatura</label>
+                <Input type="number" value={form.invoice_total} onChange={e => set("invoice_total", e.target.value)} className="bg-background border-border text-foreground" />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">COSIP</label>
+                <Input type="number" value={form.cosip} onChange={e => set("cosip", e.target.value)} className="bg-background border-border text-foreground" />
+              </div>
+              <div>
+                <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">% PIS/COFINS</label>
+                <Input type="number" value={form.pis_cofins_pct} onChange={e => set("pis_cofins_pct", e.target.value)} className="bg-background border-border text-foreground" />
+              </div>
+              <div>
+                <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">% ICMS</label>
+                <Input type="number" value={form.icms_pct} onChange={e => set("icms_pct", e.target.value)} className="bg-background border-border text-foreground" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">kWh Solar Abatido</label>
+                <Input type="number" value={form.solar_kwh_offset} onChange={e => set("solar_kwh_offset", e.target.value)} className="bg-background border-border text-foreground" />
+              </div>
+              <div>
+                <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Valor Pago</label>
+                <Input type="number" value={form.amount_paid} onChange={e => set("amount_paid", e.target.value)} className="bg-background border-border text-foreground" />
+              </div>
+            </div>
+
+            {/* Calculated tariff */}
+            <PremiumCard glowColor="hsl(43 52% 54%)" className="text-center py-3">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">Tarifa Calculada R$/kWh</p>
+              <p className="font-mono text-2xl font-bold mt-1" style={{ color: '#E8C97A' }}>R$ {tariff.toFixed(4)}</p>
+              <p className="text-xs text-muted-foreground mt-1">(Total - COSIP) ÷ kWh</p>
+            </PremiumCard>
+          </div>
+          <DialogFooter>
+            <GoldButton onClick={handleSave} disabled={createMut.isPending} className="w-full justify-center">
+              {createMut.isPending ? "Salvando..." : "Salvar Fatura"}
+            </GoldButton>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ─── Readings Tab ───
+function ReadingsTab() {
+  const [month, setMonth] = useState(getCurrentMonth());
+  const [complex, setComplex] = useState("RWT02");
+  const { data: kitnets } = useKitnets();
+  const { data: invoices } = useCelescInvoices(month);
+  const { data: existingReadings } = useEnergyReadings(month, complex);
+  const saveMut = useSaveEnergyReadings();
+  const { toast } = useToast();
+
+  const tariff = useMemo(() => {
+    const inv = (invoices ?? []).find(i => i.residencial_code === complex);
+    return inv?.tariff_per_kwh ?? 0;
+  }, [invoices, complex]);
+
+  const units = useMemo(() => {
+    return (kitnets ?? []).filter(k => k.residencial_code === complex);
+  }, [kitnets, complex]);
+
+  const [readings, setReadings] = useState<Record<string, string>>({});
+
+  // Pre-fill from existing readings
+  useMemo(() => {
+    const map: Record<string, string> = {};
+    (existingReadings ?? []).forEach((r: any) => {
+      if (r.kitnet_id) map[r.kitnet_id] = String(r.reading_current ?? "");
+    });
+    setReadings(map);
+  }, [existingReadings]);
+
+  const getPreviousReading = (kitnetId: string) => {
+    const existing = (existingReadings ?? []).find((r: any) => r.kitnet_id === kitnetId);
+    return existing?.reading_previous ?? 0;
+  };
+
+  const calculateRow = (kitnetId: string) => {
+    const current = Number(readings[kitnetId]) || 0;
+    const previous = getPreviousReading(kitnetId);
+    const kwh = Math.max(0, current - previous);
+    const amount = kwh * tariff;
+    return { current, previous, kwh, amount };
+  };
+
+  const totals = useMemo(() => {
+    let totalCharged = 0;
+    units.forEach(u => {
+      const { amount } = calculateRow(u.id);
+      totalCharged += amount;
+    });
+    const invoiceAmount = (invoices ?? []).find(i => i.residencial_code === complex)?.amount_paid ?? 0;
+    return { totalCharged, invoicePaid: invoiceAmount, margin: totalCharged - invoiceAmount };
+  }, [units, readings, invoices, complex, tariff]);
+
+  const handleSave = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const invoiceId = (invoices ?? []).find(i => i.residencial_code === complex)?.id;
+      const toSave = units.map(u => {
+        const { current, previous, kwh, amount } = calculateRow(u.id);
+        const existing = (existingReadings ?? []).find((r: any) => r.kitnet_id === u.id);
+        return {
+          ...(existing?.id ? { id: existing.id } : {}),
+          kitnet_id: u.id,
+          reference_month: month,
+          reading_current: current,
+          reading_previous: previous,
+          consumption_kwh: kwh,
+          amount_to_charge: Number(amount.toFixed(2)),
+          tariff_per_kwh: tariff,
+          celesc_invoice_id: invoiceId ?? null,
+          created_by: user?.id,
+        };
+      });
+      await saveMut.mutateAsync(toSave as any);
+      toast({ title: "Leituras salvas!" });
+    } catch (e: any) {
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    }
+  };
+
+  return (
+    <div className="space-y-4 mt-4">
+      <div className="flex items-center gap-3">
+        <Input type="month" value={month} onChange={e => setMonth(e.target.value)} className="w-44 bg-background border-border text-foreground font-mono" />
+        <Select value={complex} onValueChange={setComplex}>
+          <SelectTrigger className="w-36 bg-background border-border text-foreground"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="RWT02">RWT02</SelectItem>
+            <SelectItem value="RWT03">RWT03</SelectItem>
+          </SelectContent>
+        </Select>
+        <div className="ml-auto">
+          <GoldButton onClick={handleSave} disabled={saveMut.isPending}>
+            <Save className="w-4 h-4 mr-1" />{saveMut.isPending ? "Salvando..." : "Salvar Leituras"}
+          </GoldButton>
+        </div>
+      </div>
+
+      {tariff === 0 && (
+        <PremiumCard className="text-center py-4">
+          <p className="text-muted-foreground text-sm">Nenhuma fatura CELESC cadastrada para {complex} em {formatMonth(month)}. Cadastre primeiro na aba Faturas.</p>
+        </PremiumCard>
+      )}
+
+      <div className="rounded-xl overflow-hidden border border-border">
+        <Table>
+          <TableHeader>
+            <TableRow className="border-border">
+              <TableHead className="text-muted-foreground">Unidade</TableHead>
+              <TableHead className="text-muted-foreground">Inquilino</TableHead>
+              <TableHead className="text-muted-foreground">Anterior</TableHead>
+              <TableHead className="text-muted-foreground">Atual</TableHead>
+              <TableHead className="text-muted-foreground">kWh</TableHead>
+              <TableHead className="text-muted-foreground">Valor</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {units.map(u => {
+              const { previous, kwh, amount } = calculateRow(u.id);
+              return (
+                <TableRow key={u.id} className="border-border">
+                  <TableCell className="font-mono text-foreground">{u.code}</TableCell>
+                  <TableCell className="text-muted-foreground">{u.tenant_name || "—"}</TableCell>
+                  <TableCell className="font-mono text-muted-foreground">{previous}</TableCell>
+                  <TableCell>
+                    <Input
+                      type="number"
+                      value={readings[u.id] ?? ""}
+                      onChange={e => setReadings(r => ({ ...r, [u.id]: e.target.value }))}
+                      className="w-24 bg-background border-border text-foreground font-mono"
+                    />
+                  </TableCell>
+                  <TableCell className="font-mono text-foreground">{kwh}</TableCell>
+                  <TableCell className="font-mono text-foreground">{formatCurrency(amount)}</TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* Summary cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <KpiCard label="Total Cobrado Inquilinos" value={totals.totalCharged} color="gold" />
+        <KpiCard label="Total Pago CELESC" value={totals.invoicePaid} color="red" />
+        <KpiCard label="Margem Solar" value={totals.margin} color="green" />
+      </div>
+    </div>
+  );
+}
