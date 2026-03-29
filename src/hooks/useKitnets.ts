@@ -1,0 +1,139 @@
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
+
+// ─── Kitnets ───
+export function useKitnets() {
+  return useQuery({
+    queryKey: ["kitnets"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("kitnets")
+        .select("*")
+        .order("residencial_code")
+        .order("unit_number");
+      if (error) throw error;
+      return data as Tables<"kitnets">[];
+    },
+  });
+}
+
+export function useUpdateKitnet() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...updates }: TablesUpdate<"kitnets"> & { id: string }) => {
+      const { error } = await supabase.from("kitnets").update(updates).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["kitnets"] }),
+  });
+}
+
+// ─── Kitnet Entries ───
+export function useKitnetEntries(month: string) {
+  return useQuery({
+    queryKey: ["kitnet_entries", month],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("kitnet_entries")
+        .select("*, kitnets(code, tenant_name, residencial_code)")
+        .eq("reference_month", month)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!month,
+  });
+}
+
+export function useCreateKitnetEntry() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (entry: TablesInsert<"kitnet_entries">) => {
+      const { error } = await supabase.from("kitnet_entries").insert(entry);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["kitnet_entries"] }),
+  });
+}
+
+// ─── Summary KPIs ───
+export function useKitnetSummary(month: string) {
+  const kitnets = useKitnets();
+  const entries = useKitnetEntries(month);
+
+  const data = kitnets.data ?? [];
+  const entryData = entries.data ?? [];
+
+  const occupied = data.filter(k => k.status === "occupied").length;
+  const maintenance = data.filter(k => k.status === "maintenance").length;
+  const vacant = data.filter(k => k.status === "vacant").length;
+  const totalReceived = entryData.reduce((s, e) => s + (e.total_liquid ?? 0), 0);
+
+  return {
+    occupied,
+    maintenance,
+    vacant,
+    totalReceived,
+    isLoading: kitnets.isLoading || entries.isLoading,
+  };
+}
+
+// ─── CELESC Invoices ───
+export function useCelescInvoices(month?: string) {
+  return useQuery({
+    queryKey: ["celesc_invoices", month],
+    queryFn: async () => {
+      let q = supabase.from("celesc_invoices").select("*").order("reference_month", { ascending: false });
+      if (month) q = q.eq("reference_month", month);
+      const { data, error } = await q;
+      if (error) throw error;
+      return data as Tables<"celesc_invoices">[];
+    },
+  });
+}
+
+export function useCreateCelescInvoice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (invoice: TablesInsert<"celesc_invoices">) => {
+      const { error } = await supabase.from("celesc_invoices").insert(invoice);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["celesc_invoices"] }),
+  });
+}
+
+// ─── Energy Readings ───
+export function useEnergyReadings(month: string, residencialCode?: string) {
+  return useQuery({
+    queryKey: ["energy_readings", month, residencialCode],
+    queryFn: async () => {
+      let q = supabase
+        .from("energy_readings")
+        .select("*, kitnets(code, tenant_name, residencial_code, unit_number)")
+        .eq("reference_month", month);
+      const { data, error } = await q;
+      if (error) throw error;
+      // Filter by residencial code client-side since it's on the joined table
+      if (residencialCode) {
+        return data.filter((r: any) => r.kitnets?.residencial_code === residencialCode);
+      }
+      return data;
+    },
+    enabled: !!month,
+  });
+}
+
+export function useSaveEnergyReadings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (readings: TablesInsert<"energy_readings">[]) => {
+      const { error } = await supabase.from("energy_readings").upsert(readings, {
+        onConflict: "id",
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["energy_readings"] }),
+  });
+}
