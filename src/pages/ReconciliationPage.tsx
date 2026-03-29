@@ -737,6 +737,13 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
           + Nova Despesa
         </button>
         <button
+          onClick={() => syncMutation.mutate()}
+          disabled={syncMutation.isPending}
+          className="text-xs px-4 py-2 rounded-lg font-medium flex items-center gap-1.5 transition-all"
+          style={{ background: "rgba(99,102,241,0.15)", color: "#818CF8", border: "1px solid rgba(99,102,241,0.3)" }}>
+          {syncMutation.isPending ? "..." : "🔗 Sincronizar"}
+        </button>
+        <button
           onClick={() => recategorizeMutation.mutate()}
           disabled={recategorizeMutation.isPending}
           className="text-xs px-4 py-2 rounded-lg font-medium flex items-center gap-1.5 transition-all"
