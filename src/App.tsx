@@ -69,8 +69,8 @@ const App = () => (
             <Route path="/revenues" element={<PlaceholderPage title="Receitas" />} />
             <Route path="/expenses" element={<PlaceholderPage title="Despesas" />} />
             <Route path="/banks" element={<PlaceholderPage title="Bancos & Caixas" />} />
-            <Route path="/kitnets" element={<PlaceholderPage title="Kitnets" />} />
-            <Route path="/energy" element={<PlaceholderPage title="Energia Solar" />} />
+            <Route path="/kitnets" element={<KitnetsPage />} />
+            <Route path="/energy" element={<EnergyPage />} />
             <Route path="/constructions" element={<PlaceholderPage title="Obras & Terrenos" />} />
             <Route path="/assets" element={<PlaceholderPage title="Patrimônio" />} />
             <Route path="/investments" element={<PlaceholderPage title="Investimentos" />} />
@@ -85,8 +85,7 @@ const App = () => (
           </Route>
 
           {/* Manager routes */}
-          <Route path="/manager/kitnets" element={<AuthGuard><PlaceholderPage title="Portal Kitnets" /></AuthGuard>} />
-          <Route path="/manager/billing" element={<AuthGuard><PlaceholderPage title="Módulo Financeiro" /></AuthGuard>} />
+          <Route path="/manager/kitnets" element={<AuthGuard><ManagerKitnetsPage /></AuthGuard>} />
 
           {/* Partner routes */}
           <Route path="/partner/projects" element={<AuthGuard><PlaceholderPage title="Portal do Sócio" /></AuthGuard>} />
