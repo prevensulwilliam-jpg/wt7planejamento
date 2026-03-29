@@ -14,6 +14,10 @@ import EnergyPage from "@/pages/EnergyPage";
 import ManagerKitnetsPage from "@/pages/ManagerKitnetsPage";
 import FinancialBillingPage from "@/pages/FinancialBillingPage";
 import CommissionsPage from "@/pages/CommissionsPage";
+import RevenuesPage from "@/pages/RevenuesPage";
+import ExpensesPage from "@/pages/ExpensesPage";
+import BanksPage from "@/pages/BanksPage";
+import UsersPage from "@/pages/UsersPage";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -68,9 +72,9 @@ const App = () => (
           <Route element={<AuthGuard><AdminLayout /></AuthGuard>}>
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/wisely" element={<PlaceholderPage title="Wisely IA" />} />
-            <Route path="/revenues" element={<PlaceholderPage title="Receitas" />} />
-            <Route path="/expenses" element={<PlaceholderPage title="Despesas" />} />
-            <Route path="/banks" element={<PlaceholderPage title="Bancos & Caixas" />} />
+            <Route path="/revenues" element={<RevenuesPage />} />
+            <Route path="/expenses" element={<ExpensesPage />} />
+            <Route path="/banks" element={<BanksPage />} />
             <Route path="/kitnets" element={<KitnetsPage />} />
             <Route path="/energy" element={<EnergyPage />} />
             <Route path="/constructions" element={<PlaceholderPage title="Obras & Terrenos" />} />
@@ -83,7 +87,7 @@ const App = () => (
             <Route path="/projections" element={<PlaceholderPage title="Projeções" />} />
             <Route path="/reports/kitnets" element={<PlaceholderPage title="Relatório Kitnets" />} />
             <Route path="/reports/commissions" element={<CommissionsPage />} />
-            <Route path="/users" element={<PlaceholderPage title="Usuários & Acessos" />} />
+            <Route path="/users" element={<UsersPage />} />
           </Route>
 
           {/* Manager routes */}

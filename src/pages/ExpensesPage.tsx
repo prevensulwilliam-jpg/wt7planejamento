@@ -176,7 +176,7 @@ export default function ExpensesPage() {
                 <KpiCard label="Total do Mês" value={totalMonth} color="red" />
                 <KpiCard label="Despesas Fixas" value={totalFixed} color="gold" />
                 <KpiCard label="Despesas Variáveis" value={totalVariable} color="cyan" />
-                <KpiCard label="Maior Categoria" value={topCategory?.[1] ?? 0} color="gray" />
+                <KpiCard label="Maior Categoria" value={topCategory?.[1] ?? 0} color="cyan" />
               </>
             )}
           </div>
