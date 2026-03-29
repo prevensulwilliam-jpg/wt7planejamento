@@ -202,10 +202,14 @@ function ImportTab({ accounts }: { accounts: any[] }) {
     if (!selectedAccount) { toast.error("Selecione uma conta bancária."); return; }
     if (!preview.length) { toast.error("Selecione um arquivo primeiro."); return; }
 
+    const selectedBankName = accounts.find((a: any) => a.id === selectedAccount)?.bank_name ?? "";
+
     const rows = preview.map(tx => ({
       external_id: tx.external_id,
       date: tx.date,
-      description: tx.description,
+      description: selectedBankName
+        ? `${tx.description} [${selectedBankName}]`
+        : tx.description,
       amount: tx.amount,
       type: tx.type,
       source: tx.source,
@@ -748,15 +752,11 @@ function DoubtCard({ tx, classifyAs, ignoreTransaction }: {
   const [selectedIntent, setSelectedIntent] = useState<"receita" | "despesa" | "transferencia">(
     tx.type === "credit" ? "receita" : "despesa"
   );
-  const [bankNote, setBankNote] = useState("");
-
   const options = selectedIntent === "receita" ? RECEITA_OPTIONS : DESPESA_OPTIONS;
-
-  const buildDescription = () => bankNote.trim() ? `${tx.description} [${bankNote.trim()}]` : undefined;
 
   const handleConfirm = () => {
     if (!selectedCategory) return;
-    classifyAs(tx.id, selectedIntent, selectedCategory, buildDescription());
+    classifyAs(tx.id, selectedIntent, selectedCategory);
   };
 
   return (
@@ -816,28 +816,10 @@ function DoubtCard({ tx, classifyAs, ignoreTransaction }: {
         </div>
       )}
 
-      <div className="mb-3">
-        <label className="text-xs font-mono uppercase mb-1 block" style={{ color: "#94A3B8" }}>
-          Banco / Origem (opcional)
-        </label>
-        <input
-          type="text"
-          value={bankNote}
-          onChange={e => setBankNote(e.target.value)}
-          placeholder="Ex: Nubank, Ailos, XP, Jairo..."
-          className="w-full px-3 py-2 rounded-lg text-sm outline-none"
-          style={{
-            background: "#080C10",
-            border: "1px solid #1A2535",
-            color: "#F0F4F8",
-          }}
-        />
-      </div>
-
       <div className="flex gap-2 mt-3">
         {selectedIntent === "transferencia" ? (
           <button
-            onClick={() => classifyAs(tx.id, "transferencia", "transferencia", buildDescription())}
+            onClick={() => classifyAs(tx.id, "transferencia", "transferencia")}
             className="px-4 py-1.5 rounded-lg text-xs font-semibold transition-all"
             style={{ background: "rgba(148,163,184,0.2)", color: "#94A3B8", border: "1px solid rgba(148,163,184,0.3)" }}>
             Confirmar como Transferência
