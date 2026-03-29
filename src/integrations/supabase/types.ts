@@ -108,7 +108,10 @@ export type Database = {
         Row: {
           amount: number
           bank_account_id: string | null
+          category_confidence: string | null
           category_confirmed: string | null
+          category_intent: string | null
+          category_label: string | null
           category_suggestion: string | null
           created_at: string | null
           date: string
@@ -125,7 +128,10 @@ export type Database = {
         Insert: {
           amount: number
           bank_account_id?: string | null
+          category_confidence?: string | null
           category_confirmed?: string | null
+          category_intent?: string | null
+          category_label?: string | null
           category_suggestion?: string | null
           created_at?: string | null
           date: string
@@ -142,7 +148,10 @@ export type Database = {
         Update: {
           amount?: number
           bank_account_id?: string | null
+          category_confidence?: string | null
           category_confirmed?: string | null
+          category_intent?: string | null
+          category_label?: string | null
           category_suggestion?: string | null
           created_at?: string | null
           date?: string

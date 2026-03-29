@@ -47,11 +47,13 @@ export function useMatchTransaction() {
     mutationFn: async ({
       id,
       category,
+      intent,
       revenueId,
       expenseId,
     }: {
       id: string;
       category: string;
+      intent?: string;
       revenueId?: string;
       expenseId?: string;
     }) => {
@@ -59,6 +61,7 @@ export function useMatchTransaction() {
         .from("bank_transactions" as any)
         .update({
           category_confirmed: category,
+          category_intent: intent ?? null,
           status: "matched",
           matched_revenue_id: revenueId ?? null,
           matched_expense_id: expenseId ?? null,
@@ -107,5 +110,8 @@ export function useReconciliationSummary(month: string) {
   const pending = data.filter((t: any) => t.status === "pending").length;
   const matched = data.filter((t: any) => t.status === "matched").length;
   const ignored = data.filter((t: any) => t.status === "ignored").length;
-  return { totalCredits, totalDebits, pending, matched, ignored, total: data.length, isLoading };
+  const autoCategorized = data.filter((t: any) => t.status === "auto_categorized").length;
+  const doubts = data.filter((t: any) => t.category_intent === "duvida" && t.status === "pending").length;
+  const transfers = data.filter((t: any) => t.category_intent === "transferencia").length;
+  return { totalCredits, totalDebits, pending, matched, ignored, autoCategorized, doubts, transfers, total: data.length, isLoading };
 }
