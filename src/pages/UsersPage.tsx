@@ -1,11 +1,13 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
 import { WtBadge } from "@/components/wt7/WtBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDate } from "@/lib/formatters";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Users, Link as LinkIcon } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { Users, Link as LinkIcon, Trash2, AlertTriangle } from "lucide-react";
 
 const roleBadge: Record<string, { variant: 'gold' | 'green' | 'cyan' | 'gray'; label: string }> = {
   admin: { variant: 'gold', label: 'Admin' },
