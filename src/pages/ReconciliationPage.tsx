@@ -15,6 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useBankTransactions, useImportTransactions, useMatchTransaction, useIgnoreTransaction, useReconciliationSummary } from "@/hooks/useBankReconciliation";
 import { parseOFX, parseCSV, type ParsedTransaction } from "@/lib/parseOFX";
 import { categorizeTransaction, CATEGORY_LABELS, INTENT_CONFIG } from "@/lib/categorizeTransaction";
+import { getAllPatterns, normalizeDescription, recordClassification } from "@/lib/patternLearning";
 import { formatCurrency, formatDate, formatMonth, getCurrentMonth } from "@/lib/formatters";
 import { Upload, CheckCircle2, XCircle, ArrowLeftRight, FileText, Wifi, Download } from "lucide-react";
 import { toast } from "sonner";
@@ -154,10 +155,10 @@ function ImportTab({ accounts }: { accounts: any[] }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const importMutation = useImportTransactions();
 
-  const handleFile = useCallback((file: File) => {
+  const handleFile = useCallback(async (file: File) => {
     setFileName(file.name);
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       const text = e.target?.result as string;
       const ext = file.name.toLowerCase();
       let parsed: ParsedTransaction[] = [];
@@ -170,8 +171,34 @@ function ImportTab({ accounts }: { accounts: any[] }) {
         toast.error("Nenhuma transação encontrada no arquivo.");
         return;
       }
+
+      // Buscar padrões aprendidos
+      const learnedPatterns = await getAllPatterns();
       const accountNames = accounts.map((a: any) => a.bank_name).filter(Boolean);
+
       const categorized = parsed.map((tx, idx) => {
+        // 1. Tentar padrão aprendido primeiro
+        const normalized = normalizeDescription(tx.description);
+        const learned = learnedPatterns.find((p: any) => {
+          const pNorm = p.description_pattern as string;
+          return normalized.includes(pNorm) || pNorm.includes(normalized);
+        });
+
+        if (learned) {
+          return {
+            ...tx,
+            _previewId: `preview-${idx}`,
+            category_suggestion: learned.category,
+            category_intent: learned.intent,
+            category_confidence: "high",
+            category_label: learned.label,
+            status: learned.intent === "transferencia" ? "transferencia" : "auto_categorized",
+            _learned: true,
+            _learnedCount: learned.count,
+          };
+        }
+
+        // 2. Fallback para regras manuais
         const result = categorizeTransaction(tx.description, tx.type, tx.amount, accountNames);
         return {
           ...tx,
@@ -185,6 +212,7 @@ function ImportTab({ accounts }: { accounts: any[] }) {
             : result.intent === "transferencia"
             ? "transferencia"
             : "pending",
+          _learned: false,
         };
       });
       setPreview(categorized);
@@ -318,6 +346,12 @@ function ImportTab({ accounts }: { accounts: any[] }) {
                         <p className="text-xs truncate" style={{ color: "#F0F4F8" }}>{tx.description}</p>
                         <p className="text-xs" style={{ color: "#64748B" }}>
                           {tx.date} · {tx.category_label}
+                          {tx._learned && (
+                            <span className="ml-1 text-xs px-1.5 py-0.5 rounded"
+                              style={{ background: "rgba(139,92,246,0.2)", color: "#8B5CF6" }}>
+                              🧠 {tx._learnedCount}x
+                            </span>
+                          )}
                         </p>
                       </div>
                     </div>
@@ -452,11 +486,13 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
     try {
       if (intent === "transferencia") {
         await ignoreMutation.mutateAsync(id);
+        await recordClassification(tx.description, "transferencia", "transferencia", "Transferência entre Contas");
         toast.info("Transferência entre contas — ignorada.");
         return;
       }
 
       await matchMutation.mutateAsync({ id, category, intent });
+      const label = ALL_CATEGORY_LABELS[category] || category;
 
       if (intent === "receita") {
         await supabase.from("revenues").insert({
@@ -467,7 +503,7 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
           reference_month: tx.date?.slice(0, 7),
           received_at: tx.date,
         });
-        toast.success(`Receita criada: ${formatCurrency(tx.amount)} em ${CATEGORY_LABELS[category] || category}`);
+        toast.success(`Receita criada: ${formatCurrency(tx.amount)} em ${label}`);
       }
 
       if (intent === "despesa") {
@@ -479,8 +515,11 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
           reference_month: tx.date?.slice(0, 7),
           paid_at: tx.date,
         });
-        toast.success(`Despesa criada: ${formatCurrency(tx.amount)} em ${CATEGORY_LABELS[category] || category}`);
+        toast.success(`Despesa criada: ${formatCurrency(tx.amount)} em ${label}`);
       }
+
+      // Registrar padrão aprendido
+      await recordClassification(tx.description, category, intent, label);
     } catch {
       toast.error("Erro ao classificar transação.");
     }
@@ -518,6 +557,10 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
           });
           expenses++;
         }
+
+        // Registrar padrão
+        const pLabel = ALL_CATEGORY_LABELS[category] || category;
+        await recordClassification(tx.description, category, intent, pLabel);
       }
       toast.success(`${revenues} receitas e ${expenses} despesas criadas automaticamente!`);
     } catch {

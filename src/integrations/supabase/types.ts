@@ -243,6 +243,42 @@ export type Database = {
         }
         Relationships: []
       }
+      classification_patterns: {
+        Row: {
+          auto_apply: boolean | null
+          category: string
+          count: number | null
+          created_at: string | null
+          description_pattern: string
+          id: string
+          intent: string
+          label: string
+          updated_at: string | null
+        }
+        Insert: {
+          auto_apply?: boolean | null
+          category: string
+          count?: number | null
+          created_at?: string | null
+          description_pattern: string
+          id?: string
+          intent: string
+          label: string
+          updated_at?: string | null
+        }
+        Update: {
+          auto_apply?: boolean | null
+          category?: string
+          count?: number | null
+          created_at?: string | null
+          description_pattern?: string
+          id?: string
+          intent?: string
+          label?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       consortiums: {
         Row: {
           id: string

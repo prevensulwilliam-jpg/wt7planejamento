@@ -3,7 +3,7 @@ import { WT7Logo } from "@/components/wt7/WT7Logo";
 import {
   LayoutDashboard, Bot, TrendingUp, TrendingDown, Landmark,
   Home, Zap, HardHat, Building2, BarChart3, RefreshCw, Heart,
-  Target, Receipt, Radio, ClipboardList, Coins, Users, ArrowLeftRight
+  Target, Receipt, Radio, ClipboardList, Coins, Users, ArrowLeftRight, Brain
 } from "lucide-react";
 
 const navGroups = [
@@ -21,6 +21,7 @@ const navGroups = [
       { label: "Despesas", icon: TrendingDown, href: "/expenses" },
       { label: "Bancos & Caixas", icon: Landmark, href: "/banks" },
       { label: "Conciliação", icon: ArrowLeftRight, href: "/reconciliation" },
+      { label: "Padrões IA", icon: Brain, href: "/patterns" },
     ],
   },
   {

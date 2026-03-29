@@ -28,6 +28,7 @@ import KitnetsReportPage from "@/pages/KitnetsReportPage";
 import TaxesPage from "@/pages/TaxesPage";
 import WiselyPage from "@/pages/WiselyPage";
 import ReconciliationPage from "@/pages/ReconciliationPage";
+import PatternsPage from "@/pages/PatternsPage";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -86,6 +87,7 @@ const App = () => (
             <Route path="/expenses" element={<ExpensesPage />} />
             <Route path="/banks" element={<BanksPage />} />
             <Route path="/reconciliation" element={<ReconciliationPage />} />
+            <Route path="/patterns" element={<PatternsPage />} />
             <Route path="/kitnets" element={<KitnetsPage />} />
             <Route path="/energy" element={<EnergyPage />} />
             <Route path="/constructions" element={<ConstructionsPage />} />
