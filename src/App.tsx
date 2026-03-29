@@ -26,6 +26,7 @@ import AssetsPage from "@/pages/AssetsPage";
 import ProjectionsPage from "@/pages/ProjectionsPage";
 import KitnetsReportPage from "@/pages/KitnetsReportPage";
 import TaxesPage from "@/pages/TaxesPage";
+import WiselyPage from "@/pages/WiselyPage";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -79,7 +80,7 @@ const App = () => (
           {/* Admin routes */}
           <Route element={<AuthGuard><AdminLayout /></AuthGuard>}>
             <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/wisely" element={<PlaceholderPage title="Wisely IA" />} />
+            <Route path="/wisely" element={<WiselyPage />} />
             <Route path="/revenues" element={<RevenuesPage />} />
             <Route path="/expenses" element={<ExpensesPage />} />
             <Route path="/banks" element={<BanksPage />} />

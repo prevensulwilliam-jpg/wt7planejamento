@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, Plus, Sparkles } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { ChevronLeft, ChevronRight, Plus, Sparkles, RefreshCw } from "lucide-react";
 import { KpiCard } from "@/components/wt7/KpiCard";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
 import { GoldButton } from "@/components/wt7/GoldButton";
@@ -8,6 +9,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency, formatMonth, getCurrentMonth } from "@/lib/formatters";
 import { useDashboardKPIs, useRevenueExpenseTrend, useGoals } from "@/hooks/useFinances";
 import { useKitnets } from "@/hooks/useKitnets";
+import { useWiselyAnalysis } from "@/hooks/useWisely";
+import ReactMarkdown from "react-markdown";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend
@@ -64,6 +67,61 @@ function navigateMonth(current: string, delta: number): string {
   const [y, m] = current.split("-").map(Number);
   const d = new Date(y, m - 1 + delta, 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function WiselyDashboardCard() {
+  const { analysis, loading, generate, context } = useWiselyAnalysis();
+  const navigate = useNavigate();
+
+  return (
+    <PremiumCard glowColor="rgba(45,212,191,0.3)">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">🤖</span>
+          <h3 className="font-display font-bold" style={{ color: '#2DD4BF' }}>
+            WISELY — Análise de {context?.month ?? '...'}
+          </h3>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => generate()}
+            disabled={loading}
+            className="text-xs flex items-center gap-1 hover:text-wt-text-primary transition-colors disabled:opacity-50"
+            style={{ color: '#94A3B8' }}
+          >
+            <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
+            Atualizar
+          </button>
+          <button
+            onClick={() => navigate('/wisely')}
+            className="text-xs flex items-center gap-1 hover:text-wt-text-primary transition-colors"
+            style={{ color: '#2DD4BF' }}
+          >
+            Wisely →
+          </button>
+        </div>
+      </div>
+      {loading ? (
+        <div className="space-y-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-4 rounded" style={{ background: '#131B22', width: `${90 - i * 10}%` }} />
+          ))}
+        </div>
+      ) : (
+        <div className="prose prose-sm prose-invert max-w-none text-sm" style={{ color: '#F0F4F8' }}>
+          <ReactMarkdown
+            components={{
+              strong: ({ children }) => <strong style={{ color: '#E8C97A' }}>{children}</strong>,
+              li: ({ children }) => <li style={{ color: '#F0F4F8', marginBottom: 4 }}>{children}</li>,
+              p: ({ children }) => <p style={{ margin: '4px 0' }}>{children}</p>,
+            }}
+          >
+            {analysis}
+          </ReactMarkdown>
+        </div>
+      )}
+    </PremiumCard>
+  );
 }
 
 export default function DashboardPage() {
@@ -133,23 +191,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Wisely Card */}
-      <PremiumCard glowColor="rgba(45,212,191,0.3)">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <span className="text-lg">🤖</span>
-            <h3 className="font-display font-bold" style={{ color: '#2DD4BF' }}>WISELY — Análise de {formatMonth(currentMonth)}</h3>
-          </div>
-          <button className="text-xs flex items-center gap-1 hover:text-wt-text-primary transition-colors" style={{ color: '#94A3B8' }}>
-            ↻ Atualizar
-          </button>
-        </div>
-        <ul className="space-y-2 text-sm" style={{ color: '#F0F4F8' }}>
-          <li>• Receita +6,2% vs fev — acima da meta trimestral</li>
-          <li>• Kitnet K07 em manutenção há 3 meses: custo oculto estimado R$4.620</li>
-          <li>• Comissão GRAND FOOD pendente: R$39k esperados em abr/26</li>
-          <li>• Margem solar RWT02 cresceu 12% — maior geração desde nov/25</li>
-        </ul>
-      </PremiumCard>
+      <WiselyDashboardCard />
 
       {/* KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
