@@ -12,6 +12,8 @@ import DashboardPage from "@/pages/DashboardPage";
 import KitnetsPage from "@/pages/KitnetsPage";
 import EnergyPage from "@/pages/EnergyPage";
 import ManagerKitnetsPage from "@/pages/ManagerKitnetsPage";
+import FinancialBillingPage from "@/pages/FinancialBillingPage";
+import CommissionsPage from "@/pages/CommissionsPage";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -80,12 +82,13 @@ const App = () => (
             <Route path="/taxes" element={<PlaceholderPage title="Impostos & Dívidas" />} />
             <Route path="/projections" element={<PlaceholderPage title="Projeções" />} />
             <Route path="/reports/kitnets" element={<PlaceholderPage title="Relatório Kitnets" />} />
-            <Route path="/reports/commissions" element={<PlaceholderPage title="Relatório Comissões" />} />
+            <Route path="/reports/commissions" element={<CommissionsPage />} />
             <Route path="/users" element={<PlaceholderPage title="Usuários & Acessos" />} />
           </Route>
 
           {/* Manager routes */}
           <Route path="/manager/kitnets" element={<ManagerKitnetsPage />} />
+          <Route path="/financial/billing" element={<FinancialBillingPage />} />
 
           {/* Partner routes */}
           <Route path="/partner/projects" element={<AuthGuard><PlaceholderPage title="Portal do Sócio" /></AuthGuard>} />
