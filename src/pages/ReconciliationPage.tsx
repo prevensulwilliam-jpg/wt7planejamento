@@ -440,9 +440,10 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
   const autoCategorized = allTransactions.filter((t: any) => t.status === "auto_categorized");
   const matched = allTransactions.filter((t: any) => t.status === "matched");
 
-  const classifyAs = async (id: string, intent: "receita" | "despesa" | "transferencia", category: string) => {
+  const classifyAs = async (id: string, intent: "receita" | "despesa" | "transferencia", category: string, enrichedDescription?: string) => {
     const tx = allTransactions.find((t: any) => t.id === id);
     if (!tx) return;
+    const description = enrichedDescription ?? tx.description;
 
     try {
       if (intent === "transferencia") {
@@ -456,7 +457,7 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
       if (intent === "receita") {
         await supabase.from("revenues").insert({
           source: category,
-          description: tx.description,
+          description,
           amount: tx.amount,
           type: "variable",
           reference_month: tx.date?.slice(0, 7),
@@ -468,7 +469,7 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
       if (intent === "despesa") {
         await supabase.from("expenses").insert({
           category,
-          description: tx.description,
+          description,
           amount: tx.amount,
           type: "variable",
           reference_month: tx.date?.slice(0, 7),
@@ -740,19 +741,22 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
 /* ============ DOUBT CARD ============ */
 function DoubtCard({ tx, classifyAs, ignoreTransaction }: {
   tx: any;
-  classifyAs: (id: string, intent: "receita" | "despesa" | "transferencia", category: string) => void;
+  classifyAs: (id: string, intent: "receita" | "despesa" | "transferencia", category: string, enrichedDescription?: string) => void;
   ignoreTransaction: (id: string) => void;
 }) {
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedIntent, setSelectedIntent] = useState<"receita" | "despesa" | "transferencia">(
     tx.type === "credit" ? "receita" : "despesa"
   );
+  const [bankNote, setBankNote] = useState("");
 
   const options = selectedIntent === "receita" ? RECEITA_OPTIONS : DESPESA_OPTIONS;
 
+  const buildDescription = () => bankNote.trim() ? `${tx.description} [${bankNote.trim()}]` : undefined;
+
   const handleConfirm = () => {
     if (!selectedCategory) return;
-    classifyAs(tx.id, selectedIntent, selectedCategory);
+    classifyAs(tx.id, selectedIntent, selectedCategory, buildDescription());
   };
 
   return (
@@ -812,10 +816,28 @@ function DoubtCard({ tx, classifyAs, ignoreTransaction }: {
         </div>
       )}
 
+      <div className="mb-3">
+        <label className="text-xs font-mono uppercase mb-1 block" style={{ color: "#94A3B8" }}>
+          Banco / Origem (opcional)
+        </label>
+        <input
+          type="text"
+          value={bankNote}
+          onChange={e => setBankNote(e.target.value)}
+          placeholder="Ex: Nubank, Ailos, XP, Jairo..."
+          className="w-full px-3 py-2 rounded-lg text-sm outline-none"
+          style={{
+            background: "#080C10",
+            border: "1px solid #1A2535",
+            color: "#F0F4F8",
+          }}
+        />
+      </div>
+
       <div className="flex gap-2 mt-3">
         {selectedIntent === "transferencia" ? (
           <button
-            onClick={() => classifyAs(tx.id, "transferencia", "transferencia")}
+            onClick={() => classifyAs(tx.id, "transferencia", "transferencia", buildDescription())}
             className="px-4 py-1.5 rounded-lg text-xs font-semibold transition-all"
             style={{ background: "rgba(148,163,184,0.2)", color: "#94A3B8", border: "1px solid rgba(148,163,184,0.3)" }}>
             Confirmar como Transferência
