@@ -8,6 +8,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency, formatMonth, getCurrentMonth } from "@/lib/formatters";
 import { useDashboardKPIs, useRevenueExpenseTrend, useGoals } from "@/hooks/useFinances";
 import { useKitnets } from "@/hooks/useKitnets";
+import { useWiselyAnalysis } from "@/hooks/useWisely";
+import ReactMarkdown from "react-markdown";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend
@@ -133,23 +135,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Wisely Card */}
-      <PremiumCard glowColor="rgba(45,212,191,0.3)">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <span className="text-lg">🤖</span>
-            <h3 className="font-display font-bold" style={{ color: '#2DD4BF' }}>WISELY — Análise de {formatMonth(currentMonth)}</h3>
-          </div>
-          <button className="text-xs flex items-center gap-1 hover:text-wt-text-primary transition-colors" style={{ color: '#94A3B8' }}>
-            ↻ Atualizar
-          </button>
-        </div>
-        <ul className="space-y-2 text-sm" style={{ color: '#F0F4F8' }}>
-          <li>• Receita +6,2% vs fev — acima da meta trimestral</li>
-          <li>• Kitnet K07 em manutenção há 3 meses: custo oculto estimado R$4.620</li>
-          <li>• Comissão GRAND FOOD pendente: R$39k esperados em abr/26</li>
-          <li>• Margem solar RWT02 cresceu 12% — maior geração desde nov/25</li>
-        </ul>
-      </PremiumCard>
+      <WiselyDashboardCard />
 
       {/* KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
