@@ -18,9 +18,15 @@ const TRANSFER_KEYWORDS = [
   "doc proprio", "doc próprio",
   "aplicacao automatica", "aplicação automática",
   "resgate automatico", "resgate automático",
-  "bb rende facil",        // aplicação automática BB
+  "bb rende facil",
   "rendimento bb",
-  "william tavares",       // pix para si mesmo
+  "william tavares",
+  "rende facil",
+  "aplic automatica",
+  "cheque compensado",
+  "compensacao cheque",
+  "saldo anterior",
+  "saldo do dia",
 ];
 
 // Receitas — alta confiança
