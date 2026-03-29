@@ -18,6 +18,14 @@ import RevenuesPage from "@/pages/RevenuesPage";
 import ExpensesPage from "@/pages/ExpensesPage";
 import BanksPage from "@/pages/BanksPage";
 import UsersPage from "@/pages/UsersPage";
+import ConstructionsPage from "@/pages/ConstructionsPage";
+import PartnerProjectsPage from "@/pages/PartnerProjectsPage";
+import WeddingPage from "@/pages/WeddingPage";
+import GoalsPage from "@/pages/GoalsPage";
+import AssetsPage from "@/pages/AssetsPage";
+import ProjectionsPage from "@/pages/ProjectionsPage";
+import KitnetsReportPage from "@/pages/KitnetsReportPage";
+import TaxesPage from "@/pages/TaxesPage";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -77,15 +85,13 @@ const App = () => (
             <Route path="/banks" element={<BanksPage />} />
             <Route path="/kitnets" element={<KitnetsPage />} />
             <Route path="/energy" element={<EnergyPage />} />
-            <Route path="/constructions" element={<PlaceholderPage title="Obras & Terrenos" />} />
-            <Route path="/assets" element={<PlaceholderPage title="Patrimônio" />} />
-            <Route path="/investments" element={<PlaceholderPage title="Investimentos" />} />
-            <Route path="/consortiums" element={<PlaceholderPage title="Consórcios" />} />
-            <Route path="/wedding" element={<PlaceholderPage title="Casamento 2027" />} />
-            <Route path="/goals" element={<PlaceholderPage title="Metas" />} />
-            <Route path="/taxes" element={<PlaceholderPage title="Impostos & Dívidas" />} />
-            <Route path="/projections" element={<PlaceholderPage title="Projeções" />} />
-            <Route path="/reports/kitnets" element={<PlaceholderPage title="Relatório Kitnets" />} />
+            <Route path="/constructions" element={<ConstructionsPage />} />
+            <Route path="/assets" element={<AssetsPage />} />
+            <Route path="/wedding" element={<WeddingPage />} />
+            <Route path="/goals" element={<GoalsPage />} />
+            <Route path="/taxes" element={<TaxesPage />} />
+            <Route path="/projections" element={<ProjectionsPage />} />
+            <Route path="/reports/kitnets" element={<KitnetsReportPage />} />
             <Route path="/reports/commissions" element={<CommissionsPage />} />
             <Route path="/users" element={<UsersPage />} />
           </Route>
@@ -95,7 +101,7 @@ const App = () => (
           <Route path="/financial/billing" element={<FinancialBillingPage />} />
 
           {/* Partner routes */}
-          <Route path="/partner/projects" element={<AuthGuard><PlaceholderPage title="Portal do Sócio" /></AuthGuard>} />
+          <Route path="/partner/projects" element={<PartnerProjectsPage />} />
 
           <Route path="*" element={<NotFound />} />
         </Routes>
