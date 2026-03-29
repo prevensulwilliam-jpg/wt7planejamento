@@ -216,7 +216,7 @@ function ImportTab({ accounts }: { accounts: any[] }) {
                       <TableCell style={{ color: "#F0F4F8" }}>{formatDate(tx.date)}</TableCell>
                       <TableCell className="max-w-[200px] truncate" style={{ color: "#F0F4F8" }}>{tx.description}</TableCell>
                       <TableCell>
-                        <WtBadge variant={tx.type === "credit" ? "success" : "danger"}>
+                        <WtBadge variant={tx.type === "credit" ? "green" : "red"}>
                           {tx.type === "credit" ? "Crédito" : "Débito"}
                         </WtBadge>
                       </TableCell>
@@ -256,7 +256,7 @@ function ImportTab({ accounts }: { accounts: any[] }) {
           <h2 className="font-display font-semibold text-lg" style={{ color: "#F0F4F8" }}>
             Conexão Automática (Open Finance)
           </h2>
-          <WtBadge variant="warning">Em breve</WtBadge>
+          <WtBadge variant="gold">Em breve</WtBadge>
         </div>
         <p className="text-sm mb-4" style={{ color: "#94A3B8" }}>
           Conecte seu banco e o WT7 importa automaticamente a cada 24h via Pluggy
@@ -383,7 +383,7 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
                       </span>
                     </TableCell>
                     <TableCell>
-                      <WtBadge variant={tx.type === "credit" ? "success" : "danger"}>
+                      <WtBadge variant={tx.type === "credit" ? "green" : "red"}>
                         {tx.type === "credit" ? "Crédito" : "Débito"}
                       </WtBadge>
                     </TableCell>
@@ -391,7 +391,7 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
                       {formatCurrency(tx.amount)}
                     </TableCell>
                     <TableCell>
-                      <WtBadge variant={tx.status === "matched" ? "success" : tx.status === "ignored" ? "neutral" : "warning"}>
+                      <WtBadge variant={tx.status === "matched" ? "green" : tx.status === "ignored" ? "gray" : "gold"}>
                         {tx.status === "matched" ? "Conciliado" : tx.status === "ignored" ? "Ignorado" : "Pendente"}
                       </WtBadge>
                     </TableCell>
@@ -566,7 +566,7 @@ function HistoryTab({ month, accounts }: { month: string; accounts: any[] }) {
                         {CATEGORY_LABELS[tx.category_confirmed || tx.category_suggestion] || "—"}
                       </TableCell>
                       <TableCell>
-                        <WtBadge variant={tx.type === "credit" ? "success" : "danger"}>
+                        <WtBadge variant={tx.type === "credit" ? "green" : "red"}>
                           {tx.type === "credit" ? "Crédito" : "Débito"}
                         </WtBadge>
                       </TableCell>
@@ -574,7 +574,7 @@ function HistoryTab({ month, accounts }: { month: string; accounts: any[] }) {
                         {formatCurrency(tx.amount)}
                       </TableCell>
                       <TableCell>
-                        <WtBadge variant={tx.status === "matched" ? "success" : tx.status === "ignored" ? "neutral" : "warning"}>
+                        <WtBadge variant={tx.status === "matched" ? "green" : tx.status === "ignored" ? "gray" : "gold"}>
                           {tx.status === "matched" ? "✓" : tx.status === "ignored" ? "—" : "⏳"}
                         </WtBadge>
                       </TableCell>
