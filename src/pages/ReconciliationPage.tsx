@@ -259,32 +259,48 @@ function ImportTab({ accounts }: { accounts: any[] }) {
     try {
       await importMutation.mutateAsync(rows);
 
-      // Auto-create revenues/expenses for confirmed rows
+      // Auto-create revenues/expenses for confirmed rows and link back
       const autoRows = rows.filter(r => r.status === "matched" && r.category_intent !== "transferencia");
       let revenues = 0;
       let expenses = 0;
 
+      // We need the inserted bank_transaction IDs — fetch by external_id
       for (const tx of autoRows) {
+        const { data: btRow } = await supabase
+          .from("bank_transactions" as any)
+          .select("id")
+          .eq("external_id", tx.external_id)
+          .single();
+        const btId = (btRow as any)?.id;
+
         if (tx.category_intent === "receita") {
-          await supabase.from("revenues").insert({
+          const { data, error } = await supabase.from("revenues").insert({
             source: tx.category_suggestion,
             description: tx.description,
             amount: tx.amount,
             type: "variable",
             reference_month: tx.date?.slice(0, 7),
             received_at: tx.date,
-          });
-          revenues++;
+          }).select("id").single();
+          if (!error && data && btId) {
+            await supabase.from("bank_transactions" as any)
+              .update({ matched_revenue_id: data.id }).eq("id", btId);
+            revenues++;
+          }
         } else if (tx.category_intent === "despesa") {
-          await supabase.from("expenses").insert({
+          const { data, error } = await supabase.from("expenses").insert({
             category: tx.category_suggestion,
             description: tx.description,
             amount: tx.amount,
             type: "variable",
             reference_month: tx.date?.slice(0, 7),
             paid_at: tx.date,
-          });
-          expenses++;
+          }).select("id").single();
+          if (!error && data && btId) {
+            await supabase.from("bank_transactions" as any)
+              .update({ matched_expense_id: data.id }).eq("id", btId);
+            expenses++;
+          }
         }
         await recordClassification(
           tx.description,
@@ -495,6 +511,31 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
           ? "ignored"
           : isAuto ? "matched" : "pending";
 
+        let revenueId: string | null = null;
+        let expenseId: string | null = null;
+
+        if (isAuto && result.intent === "receita") {
+          const { data, error } = await supabase.from("revenues").insert({
+            source: result.category,
+            description: tx.description,
+            amount: tx.amount,
+            type: "variable",
+            reference_month: tx.date?.slice(0, 7),
+            received_at: tx.date,
+          }).select("id").single();
+          if (!error && data) { revenueId = data.id; revenues++; }
+        } else if (isAuto && result.intent === "despesa") {
+          const { data, error } = await supabase.from("expenses").insert({
+            category: result.category,
+            description: tx.description,
+            amount: tx.amount,
+            type: "variable",
+            reference_month: tx.date?.slice(0, 7),
+            paid_at: tx.date,
+          }).select("id").single();
+          if (!error && data) { expenseId = data.id; expenses++; }
+        }
+
         await supabase
           .from("bank_transactions" as any)
           .update({
@@ -504,30 +545,10 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
             category_label: result.label,
             category_confirmed: isAuto ? result.category : null,
             status: newStatus,
+            matched_revenue_id: revenueId,
+            matched_expense_id: expenseId,
           })
           .eq("id", tx.id);
-
-        if (isAuto && result.intent === "receita") {
-          await supabase.from("revenues").insert({
-            source: result.category,
-            description: tx.description,
-            amount: tx.amount,
-            type: "variable",
-            reference_month: tx.date?.slice(0, 7),
-            received_at: tx.date,
-          });
-          revenues++;
-        } else if (isAuto && result.intent === "despesa") {
-          await supabase.from("expenses").insert({
-            category: result.category,
-            description: tx.description,
-            amount: tx.amount,
-            type: "variable",
-            reference_month: tx.date?.slice(0, 7),
-            paid_at: tx.date,
-          });
-          expenses++;
-        }
         updated++;
       }
       return { updated, revenues, expenses };
@@ -542,6 +563,67 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
       );
     },
     onError: () => toast.error("Erro ao recategorizar."),
+  });
+
+  // Sync: create missing revenues/expenses for matched transactions without linked IDs
+  const syncMutation = useMutation({
+    mutationFn: async () => {
+      const { data: txs } = await supabase
+        .from("bank_transactions" as any)
+        .select("*")
+        .eq("status", "matched")
+        .is("matched_revenue_id", null)
+        .is("matched_expense_id", null);
+
+      if (!txs?.length) return { revenues: 0, expenses: 0 };
+
+      let revenues = 0, expenses = 0;
+      for (const tx of txs as any[]) {
+        const intent = tx.category_intent;
+        const category = tx.category_confirmed || tx.category_suggestion;
+        if (!category || intent === "transferencia") continue;
+
+        if (intent === "receita") {
+          const { data, error } = await supabase.from("revenues").insert({
+            source: category,
+            description: tx.description,
+            amount: tx.amount,
+            type: "variable",
+            reference_month: tx.date?.slice(0, 7),
+            received_at: tx.date,
+          }).select("id").single();
+          if (!error && data) {
+            await supabase.from("bank_transactions" as any)
+              .update({ matched_revenue_id: data.id }).eq("id", tx.id);
+            revenues++;
+          }
+        } else if (intent === "despesa") {
+          const { data, error } = await supabase.from("expenses").insert({
+            category,
+            description: tx.description,
+            amount: tx.amount,
+            type: "variable",
+            reference_month: tx.date?.slice(0, 7),
+            paid_at: tx.date,
+          }).select("id").single();
+          if (!error && data) {
+            await supabase.from("bank_transactions" as any)
+              .update({ matched_expense_id: data.id }).eq("id", tx.id);
+            expenses++;
+          }
+        }
+      }
+      return { revenues, expenses };
+    },
+    onSuccess: (r) => {
+      queryClient.invalidateQueries({ queryKey: ["bank_transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["revenues"] });
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      toast.success(
+        `🔗 Sincronizado: ${r?.revenues ?? 0} receitas e ${r?.expenses ?? 0} despesas criadas para transações já conciliadas`
+      );
+    },
+    onError: () => toast.error("Erro ao sincronizar."),
   });
 
   // Filter groups
@@ -563,37 +645,44 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
         return;
       }
 
-      await matchMutation.mutateAsync({ id, category, intent });
       const label = ALL_CATEGORY_LABELS[category] || category;
+      let revenueId: string | undefined;
+      let expenseId: string | undefined;
 
       if (intent === "receita") {
-        await supabase.from("revenues").insert({
+        const { data, error } = await supabase.from("revenues").insert({
           source: category,
           description,
           amount: tx.amount,
           type: "variable",
           reference_month: tx.date?.slice(0, 7),
           received_at: tx.date,
-        });
+        }).select("id").single();
+        if (error) throw error;
+        revenueId = data?.id;
         toast.success(`Receita criada: ${formatCurrency(tx.amount)} em ${label}`);
       }
 
       if (intent === "despesa") {
-        await supabase.from("expenses").insert({
+        const { data, error } = await supabase.from("expenses").insert({
           category,
           description,
           amount: tx.amount,
           type: "variable",
           reference_month: tx.date?.slice(0, 7),
           paid_at: tx.date,
-        });
+        }).select("id").single();
+        if (error) throw error;
+        expenseId = data?.id;
         toast.success(`Despesa criada: ${formatCurrency(tx.amount)} em ${label}`);
       }
 
-      // Registrar padrão aprendido
+      await matchMutation.mutateAsync({ id, category, intent, revenueId, expenseId });
       await recordClassification(tx.description, category, intent, label);
-    } catch {
-      toast.error("Erro ao classificar transação.");
+      queryClient.invalidateQueries({ queryKey: ["revenues"] });
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
+    } catch (err: any) {
+      toast.error(`Erro ao classificar: ${err.message || "erro desconhecido"}`);
     }
   };
 
@@ -605,38 +694,44 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
       for (const tx of autoCategorized) {
         const intent = tx.category_intent as string;
         const category = tx.category_suggestion as string;
-
-        await matchMutation.mutateAsync({ id: tx.id, category, intent });
+        let revenueId: string | undefined;
+        let expenseId: string | undefined;
 
         if (intent === "receita") {
-          await supabase.from("revenues").insert({
+          const { data, error } = await supabase.from("revenues").insert({
             source: category,
             description: tx.description,
             amount: tx.amount,
             type: "variable",
             reference_month: tx.date?.slice(0, 7),
             received_at: tx.date,
-          });
+          }).select("id").single();
+          if (error) throw error;
+          revenueId = data?.id;
           revenues++;
         } else if (intent === "despesa") {
-          await supabase.from("expenses").insert({
+          const { data, error } = await supabase.from("expenses").insert({
             category,
             description: tx.description,
             amount: tx.amount,
             type: "variable",
             reference_month: tx.date?.slice(0, 7),
             paid_at: tx.date,
-          });
+          }).select("id").single();
+          if (error) throw error;
+          expenseId = data?.id;
           expenses++;
         }
 
-        // Registrar padrão
+        await matchMutation.mutateAsync({ id: tx.id, category, intent, revenueId, expenseId });
         const pLabel = ALL_CATEGORY_LABELS[category] || category;
         await recordClassification(tx.description, category, intent, pLabel);
       }
+      queryClient.invalidateQueries({ queryKey: ["revenues"] });
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
       toast.success(`${revenues} receitas e ${expenses} despesas criadas automaticamente!`);
-    } catch {
-      toast.error("Erro ao confirmar em lote.");
+    } catch (err: any) {
+      toast.error(`Erro ao confirmar em lote: ${err.message || "erro desconhecido"}`);
     }
   };
 
@@ -656,6 +751,13 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
           className="text-xs px-4 py-2 rounded-lg font-medium flex items-center gap-1.5"
           style={{ background: "rgba(244,63,94,0.15)", color: "#F43F5E", border: "1px solid rgba(244,63,94,0.3)" }}>
           + Nova Despesa
+        </button>
+        <button
+          onClick={() => syncMutation.mutate()}
+          disabled={syncMutation.isPending}
+          className="text-xs px-4 py-2 rounded-lg font-medium flex items-center gap-1.5 transition-all"
+          style={{ background: "rgba(99,102,241,0.15)", color: "#818CF8", border: "1px solid rgba(99,102,241,0.3)" }}>
+          {syncMutation.isPending ? "..." : "🔗 Sincronizar"}
         </button>
         <button
           onClick={() => recategorizeMutation.mutate()}
