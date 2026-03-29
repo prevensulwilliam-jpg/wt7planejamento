@@ -14,16 +14,926 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      assets: {
+        Row: {
+          acquisition_date: string | null
+          estimated_value: number | null
+          id: string
+          name: string | null
+          notes: string | null
+          type: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          acquisition_date?: string | null
+          estimated_value?: number | null
+          id?: string
+          name?: string | null
+          notes?: string | null
+          type?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          acquisition_date?: string | null
+          estimated_value?: number | null
+          id?: string
+          name?: string | null
+          notes?: string | null
+          type?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      audit_log: {
+        Row: {
+          action: string | null
+          created_at: string | null
+          details: Json | null
+          id: string
+          record_id: string | null
+          table_name: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action?: string | null
+          created_at?: string | null
+          details?: Json | null
+          id?: string
+          record_id?: string | null
+          table_name?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action?: string | null
+          created_at?: string | null
+          details?: Json | null
+          id?: string
+          record_id?: string | null
+          table_name?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      celesc_invoices: {
+        Row: {
+          amount_paid: number | null
+          cosip: number | null
+          created_at: string | null
+          created_by: string | null
+          due_date: string | null
+          icms_pct: number | null
+          id: string
+          invoice_total: number | null
+          kwh_total: number | null
+          pdf_url: string | null
+          pis_cofins_pct: number | null
+          reference_month: string | null
+          residencial_code: string | null
+          solar_kwh_offset: number | null
+          tariff_per_kwh: number | null
+        }
+        Insert: {
+          amount_paid?: number | null
+          cosip?: number | null
+          created_at?: string | null
+          created_by?: string | null
+          due_date?: string | null
+          icms_pct?: number | null
+          id?: string
+          invoice_total?: number | null
+          kwh_total?: number | null
+          pdf_url?: string | null
+          pis_cofins_pct?: number | null
+          reference_month?: string | null
+          residencial_code?: string | null
+          solar_kwh_offset?: number | null
+          tariff_per_kwh?: number | null
+        }
+        Update: {
+          amount_paid?: number | null
+          cosip?: number | null
+          created_at?: string | null
+          created_by?: string | null
+          due_date?: string | null
+          icms_pct?: number | null
+          id?: string
+          invoice_total?: number | null
+          kwh_total?: number | null
+          pdf_url?: string | null
+          pis_cofins_pct?: number | null
+          reference_month?: string | null
+          residencial_code?: string | null
+          solar_kwh_offset?: number | null
+          tariff_per_kwh?: number | null
+        }
+        Relationships: []
+      }
+      consortiums: {
+        Row: {
+          id: string
+          installments_paid: number | null
+          installments_total: number | null
+          monthly_payment: number | null
+          name: string | null
+          status: string | null
+          total_value: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          installments_paid?: number | null
+          installments_total?: number | null
+          monthly_payment?: number | null
+          name?: string | null
+          status?: string | null
+          total_value?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          installments_paid?: number | null
+          installments_total?: number | null
+          monthly_payment?: number | null
+          name?: string | null
+          status?: string | null
+          total_value?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      construction_expenses: {
+        Row: {
+          category: string | null
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          expense_date: string | null
+          id: string
+          installments_paid: number | null
+          installments_total: number | null
+          next_due_date: string | null
+          paid_by: string | null
+          partner_amount: number | null
+          payment_type: string | null
+          property_code: string | null
+          property_id: string | null
+          receipt_url: string | null
+          total_amount: number | null
+          william_amount: number | null
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          expense_date?: string | null
+          id?: string
+          installments_paid?: number | null
+          installments_total?: number | null
+          next_due_date?: string | null
+          paid_by?: string | null
+          partner_amount?: number | null
+          payment_type?: string | null
+          property_code?: string | null
+          property_id?: string | null
+          receipt_url?: string | null
+          total_amount?: number | null
+          william_amount?: number | null
+        }
+        Update: {
+          category?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          expense_date?: string | null
+          id?: string
+          installments_paid?: number | null
+          installments_total?: number | null
+          next_due_date?: string | null
+          paid_by?: string | null
+          partner_amount?: number | null
+          payment_type?: string | null
+          property_code?: string | null
+          property_id?: string | null
+          receipt_url?: string | null
+          total_amount?: number | null
+          william_amount?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "construction_expenses_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "real_estate_properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      debts: {
+        Row: {
+          created_at: string | null
+          creditor: string | null
+          due_date: string | null
+          id: string
+          monthly_payment: number | null
+          name: string | null
+          remaining_amount: number | null
+          status: string | null
+          total_amount: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          creditor?: string | null
+          due_date?: string | null
+          id?: string
+          monthly_payment?: number | null
+          name?: string | null
+          remaining_amount?: number | null
+          status?: string | null
+          total_amount?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          creditor?: string | null
+          due_date?: string | null
+          id?: string
+          monthly_payment?: number | null
+          name?: string | null
+          remaining_amount?: number | null
+          status?: string | null
+          total_amount?: number | null
+        }
+        Relationships: []
+      }
+      energy_readings: {
+        Row: {
+          amount_to_charge: number | null
+          celesc_invoice_id: string | null
+          consumption_kwh: number | null
+          created_at: string | null
+          created_by: string | null
+          id: string
+          kitnet_id: string | null
+          reading_current: number | null
+          reading_previous: number | null
+          reference_month: string | null
+          tariff_per_kwh: number | null
+        }
+        Insert: {
+          amount_to_charge?: number | null
+          celesc_invoice_id?: string | null
+          consumption_kwh?: number | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          kitnet_id?: string | null
+          reading_current?: number | null
+          reading_previous?: number | null
+          reference_month?: string | null
+          tariff_per_kwh?: number | null
+        }
+        Update: {
+          amount_to_charge?: number | null
+          celesc_invoice_id?: string | null
+          consumption_kwh?: number | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          kitnet_id?: string | null
+          reading_current?: number | null
+          reading_previous?: number | null
+          reference_month?: string | null
+          tariff_per_kwh?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "energy_readings_celesc_invoice_id_fkey"
+            columns: ["celesc_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "celesc_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "energy_readings_kitnet_id_fkey"
+            columns: ["kitnet_id"]
+            isOneToOne: false
+            referencedRelation: "kitnets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      expenses: {
+        Row: {
+          amount: number | null
+          category: string | null
+          created_at: string | null
+          description: string | null
+          id: string
+          paid_at: string | null
+          reference_month: string | null
+          type: string | null
+        }
+        Insert: {
+          amount?: number | null
+          category?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          paid_at?: string | null
+          reference_month?: string | null
+          type?: string | null
+        }
+        Update: {
+          amount?: number | null
+          category?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          paid_at?: string | null
+          reference_month?: string | null
+          type?: string | null
+        }
+        Relationships: []
+      }
+      goals: {
+        Row: {
+          current_value: number | null
+          deadline: string | null
+          id: string
+          name: string | null
+          notes: string | null
+          target_value: number | null
+          type: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          current_value?: number | null
+          deadline?: string | null
+          id?: string
+          name?: string | null
+          notes?: string | null
+          target_value?: number | null
+          type?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          current_value?: number | null
+          deadline?: string | null
+          id?: string
+          name?: string | null
+          notes?: string | null
+          target_value?: number | null
+          type?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      import_history: {
+        Row: {
+          file_name: string | null
+          id: string
+          imported_at: string | null
+          imported_by: string | null
+          records_imported: number | null
+          reference_month: string | null
+          total_commission: number | null
+          total_paid: number | null
+        }
+        Insert: {
+          file_name?: string | null
+          id?: string
+          imported_at?: string | null
+          imported_by?: string | null
+          records_imported?: number | null
+          reference_month?: string | null
+          total_commission?: number | null
+          total_paid?: number | null
+        }
+        Update: {
+          file_name?: string | null
+          id?: string
+          imported_at?: string | null
+          imported_by?: string | null
+          records_imported?: number | null
+          reference_month?: string | null
+          total_commission?: number | null
+          total_paid?: number | null
+        }
+        Relationships: []
+      }
+      investments: {
+        Row: {
+          bank: string | null
+          current_amount: number | null
+          id: string
+          initial_amount: number | null
+          maturity_date: string | null
+          name: string | null
+          rate_percent: number | null
+          type: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          bank?: string | null
+          current_amount?: number | null
+          id?: string
+          initial_amount?: number | null
+          maturity_date?: string | null
+          name?: string | null
+          rate_percent?: number | null
+          type?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          bank?: string | null
+          current_amount?: number | null
+          id?: string
+          initial_amount?: number | null
+          maturity_date?: string | null
+          name?: string | null
+          rate_percent?: number | null
+          type?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      kitnet_entries: {
+        Row: {
+          adm_fee: number | null
+          broker_creci: string | null
+          broker_name: string | null
+          celesc: number | null
+          created_at: string | null
+          created_by: string | null
+          id: string
+          iptu_taxa: number | null
+          kitnet_id: string | null
+          period_end: string | null
+          period_start: string | null
+          reference_month: string | null
+          rent_gross: number | null
+          semasa: number | null
+          total_liquid: number | null
+        }
+        Insert: {
+          adm_fee?: number | null
+          broker_creci?: string | null
+          broker_name?: string | null
+          celesc?: number | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          iptu_taxa?: number | null
+          kitnet_id?: string | null
+          period_end?: string | null
+          period_start?: string | null
+          reference_month?: string | null
+          rent_gross?: number | null
+          semasa?: number | null
+          total_liquid?: number | null
+        }
+        Update: {
+          adm_fee?: number | null
+          broker_creci?: string | null
+          broker_name?: string | null
+          celesc?: number | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          iptu_taxa?: number | null
+          kitnet_id?: string | null
+          period_end?: string | null
+          period_start?: string | null
+          reference_month?: string | null
+          rent_gross?: number | null
+          semasa?: number | null
+          total_liquid?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kitnet_entries_kitnet_id_fkey"
+            columns: ["kitnet_id"]
+            isOneToOne: false
+            referencedRelation: "kitnets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kitnets: {
+        Row: {
+          code: string | null
+          deposit_account: string | null
+          deposit_agency: string | null
+          deposit_bank: string | null
+          id: string
+          rent_value: number | null
+          residencial_code: string | null
+          status: string | null
+          tenant_name: string | null
+          unit_number: number | null
+        }
+        Insert: {
+          code?: string | null
+          deposit_account?: string | null
+          deposit_agency?: string | null
+          deposit_bank?: string | null
+          id?: string
+          rent_value?: number | null
+          residencial_code?: string | null
+          status?: string | null
+          tenant_name?: string | null
+          unit_number?: number | null
+        }
+        Update: {
+          code?: string | null
+          deposit_account?: string | null
+          deposit_agency?: string | null
+          deposit_bank?: string | null
+          id?: string
+          rent_value?: number | null
+          residencial_code?: string | null
+          status?: string | null
+          tenant_name?: string | null
+          unit_number?: number | null
+        }
+        Relationships: []
+      }
+      prevensul_billing: {
+        Row: {
+          amount_paid: number | null
+          balance_remaining: number | null
+          client_name: string | null
+          closing_date: string | null
+          commission_rate: number | null
+          commission_value: number | null
+          contract_nf: string | null
+          contract_total: number | null
+          created_at: string | null
+          created_by: string | null
+          id: string
+          installment_current: number | null
+          installment_total: number | null
+          notes: string | null
+          reference_month: string | null
+          status: string | null
+        }
+        Insert: {
+          amount_paid?: number | null
+          balance_remaining?: number | null
+          client_name?: string | null
+          closing_date?: string | null
+          commission_rate?: number | null
+          commission_value?: number | null
+          contract_nf?: string | null
+          contract_total?: number | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          installment_current?: number | null
+          installment_total?: number | null
+          notes?: string | null
+          reference_month?: string | null
+          status?: string | null
+        }
+        Update: {
+          amount_paid?: number | null
+          balance_remaining?: number | null
+          client_name?: string | null
+          closing_date?: string | null
+          commission_rate?: number | null
+          commission_value?: number | null
+          contract_nf?: string | null
+          contract_total?: number | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          installment_current?: number | null
+          installment_total?: number | null
+          notes?: string | null
+          reference_month?: string | null
+          status?: string | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string | null
+          id: string
+          name: string | null
+          partner_projects: string[] | null
+        }
+        Insert: {
+          created_at?: string | null
+          id: string
+          name?: string | null
+          partner_projects?: string[] | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          name?: string | null
+          partner_projects?: string[] | null
+        }
+        Relationships: []
+      }
+      real_estate_properties: {
+        Row: {
+          address: string | null
+          city: string | null
+          code: string | null
+          estimated_completion: string | null
+          estimated_rent_per_unit: number | null
+          id: string
+          iptu_annual: number | null
+          name: string | null
+          notes: string | null
+          ownership_pct: number | null
+          partner_name: string | null
+          partner_pct: number | null
+          property_value: number | null
+          status: string | null
+          total_units_built: number | null
+          total_units_planned: number | null
+          total_units_rented: number | null
+          type: string | null
+        }
+        Insert: {
+          address?: string | null
+          city?: string | null
+          code?: string | null
+          estimated_completion?: string | null
+          estimated_rent_per_unit?: number | null
+          id?: string
+          iptu_annual?: number | null
+          name?: string | null
+          notes?: string | null
+          ownership_pct?: number | null
+          partner_name?: string | null
+          partner_pct?: number | null
+          property_value?: number | null
+          status?: string | null
+          total_units_built?: number | null
+          total_units_planned?: number | null
+          total_units_rented?: number | null
+          type?: string | null
+        }
+        Update: {
+          address?: string | null
+          city?: string | null
+          code?: string | null
+          estimated_completion?: string | null
+          estimated_rent_per_unit?: number | null
+          id?: string
+          iptu_annual?: number | null
+          name?: string | null
+          notes?: string | null
+          ownership_pct?: number | null
+          partner_name?: string | null
+          partner_pct?: number | null
+          property_value?: number | null
+          status?: string | null
+          total_units_built?: number | null
+          total_units_planned?: number | null
+          total_units_rented?: number | null
+          type?: string | null
+        }
+        Relationships: []
+      }
+      residenciais: {
+        Row: {
+          address: string | null
+          city: string | null
+          code: string
+          id: string
+          name: string | null
+          total_units: number | null
+        }
+        Insert: {
+          address?: string | null
+          city?: string | null
+          code: string
+          id?: string
+          name?: string | null
+          total_units?: number | null
+        }
+        Update: {
+          address?: string | null
+          city?: string | null
+          code?: string
+          id?: string
+          name?: string | null
+          total_units?: number | null
+        }
+        Relationships: []
+      }
+      revenues: {
+        Row: {
+          amount: number | null
+          created_at: string | null
+          description: string | null
+          id: string
+          received_at: string | null
+          reference_month: string | null
+          source: string | null
+          type: string | null
+        }
+        Insert: {
+          amount?: number | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          received_at?: string | null
+          reference_month?: string | null
+          source?: string | null
+          type?: string | null
+        }
+        Update: {
+          amount?: number | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          received_at?: string | null
+          reference_month?: string | null
+          source?: string | null
+          type?: string | null
+        }
+        Relationships: []
+      }
+      taxes: {
+        Row: {
+          amount: number | null
+          created_at: string | null
+          due_date: string | null
+          id: string
+          name: string | null
+          paid_at: string | null
+          reference_year: number | null
+          status: string | null
+          type: string | null
+        }
+        Insert: {
+          amount?: number | null
+          created_at?: string | null
+          due_date?: string | null
+          id?: string
+          name?: string | null
+          paid_at?: string | null
+          reference_year?: number | null
+          status?: string | null
+          type?: string | null
+        }
+        Update: {
+          amount?: number | null
+          created_at?: string | null
+          due_date?: string | null
+          id?: string
+          name?: string | null
+          paid_at?: string | null
+          reference_year?: number | null
+          status?: string | null
+          type?: string | null
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      wedding_budget: {
+        Row: {
+          amount_paid: number | null
+          amount_remaining: number | null
+          category: string | null
+          contracted_value: number | null
+          created_at: string | null
+          estimated_value: number | null
+          id: string
+          item: string | null
+          notes: string | null
+          status: string | null
+          supplier: string | null
+        }
+        Insert: {
+          amount_paid?: number | null
+          amount_remaining?: number | null
+          category?: string | null
+          contracted_value?: number | null
+          created_at?: string | null
+          estimated_value?: number | null
+          id?: string
+          item?: string | null
+          notes?: string | null
+          status?: string | null
+          supplier?: string | null
+        }
+        Update: {
+          amount_paid?: number | null
+          amount_remaining?: number | null
+          category?: string | null
+          contracted_value?: number | null
+          created_at?: string | null
+          estimated_value?: number | null
+          id?: string
+          item?: string | null
+          notes?: string | null
+          status?: string | null
+          supplier?: string | null
+        }
+        Relationships: []
+      }
+      wedding_installments: {
+        Row: {
+          amount: number | null
+          created_at: string | null
+          description: string | null
+          due_date: string | null
+          id: string
+          paid_at: string | null
+          status: string | null
+          supplier: string | null
+        }
+        Insert: {
+          amount?: number | null
+          created_at?: string | null
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          paid_at?: string | null
+          status?: string | null
+          supplier?: string | null
+        }
+        Update: {
+          amount?: number | null
+          created_at?: string | null
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          paid_at?: string | null
+          status?: string | null
+          supplier?: string | null
+        }
+        Relationships: []
+      }
+      wisely_messages: {
+        Row: {
+          content: string | null
+          created_at: string | null
+          id: string
+          module: string | null
+          role: string | null
+          user_id: string | null
+        }
+        Insert: {
+          content?: string | null
+          created_at?: string | null
+          id?: string
+          module?: string | null
+          role?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          content?: string | null
+          created_at?: string | null
+          id?: string
+          module?: string | null
+          role?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_user_role: {
+        Args: { _user_id: string }
+        Returns: Database["public"]["Enums"]["app_role"]
+      }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "kitnet_manager" | "financial" | "partner"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +1060,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "kitnet_manager", "financial", "partner"],
+    },
   },
 } as const
