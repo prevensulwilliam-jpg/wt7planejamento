@@ -9,6 +9,9 @@ import LoginPage from "@/pages/LoginPage";
 import ResetPasswordPage from "@/pages/ResetPasswordPage";
 import AdminLayout from "@/layouts/AdminLayout";
 import DashboardPage from "@/pages/DashboardPage";
+import KitnetsPage from "@/pages/KitnetsPage";
+import EnergyPage from "@/pages/EnergyPage";
+import ManagerKitnetsPage from "@/pages/ManagerKitnetsPage";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient({
