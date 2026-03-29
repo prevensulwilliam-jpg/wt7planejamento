@@ -8,7 +8,7 @@ import { PremiumCard } from "@/components/wt7/PremiumCard";
 import { KpiCard } from "@/components/wt7/KpiCard";
 import { GoldButton } from "@/components/wt7/GoldButton";
 import { WtBadge } from "@/components/wt7/WtBadge";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useBankTransactions, useImportTransactions, useMatchTransaction, useIgnoreTransaction, useReconciliationSummary } from "@/hooks/useBankReconciliation";
 import { parseOFX, parseCSV, type ParsedTransaction } from "@/lib/parseOFX";
@@ -332,10 +332,52 @@ function ImportTab({ accounts }: { accounts: any[] }) {
 function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountFilter, setAccountFilter }: {
   month: string; accounts: any[]; statusFilter: string; setStatusFilter: (v: string) => void; accountFilter: string; setAccountFilter: (v: string) => void;
 }) {
+  const queryClient = useQueryClient();
   const summary = useReconciliationSummary(month);
   const { data: allTransactions = [], isLoading } = useBankTransactions({ month });
   const matchMutation = useMatchTransaction();
   const ignoreMutation = useIgnoreTransaction();
+
+  const recategorizeMutation = useMutation({
+    mutationFn: async () => {
+      const { data: txs } = await supabase
+        .from("bank_transactions" as any)
+        .select("*")
+        .in("status", ["pending", "matched", "auto_categorized"]);
+
+      if (!txs?.length) return { updated: 0 };
+
+      let updated = 0;
+      for (const tx of txs as any[]) {
+        const result = categorizeTransaction(
+          tx.description, tx.type, tx.amount, []
+        );
+        const newStatus = result.confidence === "high" && result.intent !== "duvida"
+          ? "auto_categorized"
+          : result.intent === "transferencia"
+          ? "ignored"
+          : "pending";
+
+        await supabase
+          .from("bank_transactions" as any)
+          .update({
+            category_suggestion: result.category,
+            category_intent: result.intent,
+            category_confidence: result.confidence,
+            category_label: result.label,
+            status: newStatus,
+          })
+          .eq("id", tx.id);
+        updated++;
+      }
+      return { updated };
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["bank_transactions"] });
+      toast.success(`${result?.updated} transações recategorizadas!`);
+    },
+    onError: () => toast.error("Erro ao recategorizar."),
+  });
 
   // Filter groups
   const doubts = allTransactions.filter((t: any) => t.category_intent === "duvida" && t.status === "pending");
@@ -425,6 +467,17 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
 
   return (
     <div className="space-y-6">
+      {/* Recategorizar */}
+      <div className="flex justify-end">
+        <button
+          onClick={() => recategorizeMutation.mutate()}
+          disabled={recategorizeMutation.isPending}
+          className="text-xs px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-all"
+          style={{ background: "rgba(201,168,76,0.15)", color: "#E8C97A", border: "1px solid rgba(201,168,76,0.3)" }}>
+          {recategorizeMutation.isPending ? "Recategorizando..." : "🔄 Recategorizar todas"}
+        </button>
+      </div>
+
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KpiCard label="Com Dúvidas" value={summary.doubts} color="gold" compact />
