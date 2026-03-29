@@ -14,14 +14,19 @@ export default function ResetPasswordPage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    // Listen for PASSWORD_RECOVERY event
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "PASSWORD_RECOVERY") {
+    // Check for existing session (token may arrive before mount)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) setReady(true);
+    });
+    // Listen for future events
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "PASSWORD_RECOVERY" || (event === "SIGNED_IN" && session)) {
         setReady(true);
       }
     });
-    // Also check hash for type=recovery
-    if (window.location.hash.includes("type=recovery")) {
+    // Fallback: check URL hash and search params
+    if (window.location.hash.includes("type=recovery") ||
+        window.location.search.includes("type=recovery")) {
       setReady(true);
     }
     return () => subscription.unsubscribe();
