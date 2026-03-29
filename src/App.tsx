@@ -12,6 +12,8 @@ import DashboardPage from "@/pages/DashboardPage";
 import KitnetsPage from "@/pages/KitnetsPage";
 import EnergyPage from "@/pages/EnergyPage";
 import ManagerKitnetsPage from "@/pages/ManagerKitnetsPage";
+import FinancialBillingPage from "@/pages/FinancialBillingPage";
+import CommissionsPage from "@/pages/CommissionsPage";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient({
