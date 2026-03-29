@@ -1,1 +1,5 @@
 project_id = "hbyzmuxkgsogbxhykhhu"
+
+[auth]
+site_url = "https://wt7planejamento.lovable.app"
+additional_redirect_urls = ["https://wt7planejamento.lovable.app/reset-password"]
