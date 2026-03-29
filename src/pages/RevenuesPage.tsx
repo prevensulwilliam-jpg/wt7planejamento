@@ -1,0 +1,282 @@
+import { useState } from "react";
+import { Plus, Download, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { KpiCard } from "@/components/wt7/KpiCard";
+import { PremiumCard } from "@/components/wt7/PremiumCard";
+import { GoldButton } from "@/components/wt7/GoldButton";
+import { WtBadge } from "@/components/wt7/WtBadge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useRevenues, useCreateRevenue, useDeleteRevenue, exportCSV } from "@/hooks/useFinances";
+import { formatCurrency, formatDate, formatMonth, getCurrentMonth } from "@/lib/formatters";
+import { useToast } from "@/hooks/use-toast";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
+
+const sourceOptions = [
+  { value: "kitnets", label: "Kitnets" },
+  { value: "salario", label: "Salário" },
+  { value: "comissao_prevensul", label: "Comissão Prevensul" },
+  { value: "t7", label: "T7 Sales" },
+  { value: "solar_energia", label: "Energia Solar" },
+  { value: "laudos", label: "Laudos" },
+  { value: "casamento_energia", label: "Casamento Energia" },
+  { value: "outros", label: "Outros" },
+];
+
+const sourceColors: Record<string, string> = {
+  kitnets: '#C9A84C', comissao_prevensul: '#2DD4BF', salario: '#10B981',
+  solar_energia: '#F59E0B', t7: '#8B5CF6', laudos: '#3B82F6', casamento_energia: '#EC4899', outros: '#4A5568',
+};
+
+const sourceBadgeVariant: Record<string, 'gold' | 'green' | 'cyan' | 'gray'> = {
+  kitnets: 'gold', comissao_prevensul: 'cyan', salario: 'green',
+  solar_energia: 'gold', t7: 'cyan', laudos: 'cyan', casamento_energia: 'green', outros: 'gray',
+};
+
+function navigateMonth(current: string, delta: number): string {
+  const [y, m] = current.split("-").map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+export default function RevenuesPage() {
+  const [month, setMonth] = useState(getCurrentMonth());
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const { data = [], isLoading } = useRevenues(month);
+  const createRevenue = useCreateRevenue();
+  const deleteRevenue = useDeleteRevenue();
+  const { toast } = useToast();
+
+  const [form, setForm] = useState({ source: "", description: "", amount: "", type: "variable", received_at: "", reference_month: month });
+
+  const totalMonth = data.reduce((s, r) => s + (r.amount ?? 0), 0);
+  const totalFixed = data.filter(r => r.type === 'fixed').reduce((s, r) => s + (r.amount ?? 0), 0);
+  const totalVariable = data.filter(r => r.type !== 'fixed').reduce((s, r) => s + (r.amount ?? 0), 0);
+
+  const bySource = data.reduce((acc, r) => {
+    const src = r.source ?? 'outros';
+    acc[src] = (acc[src] ?? 0) + (r.amount ?? 0);
+    return acc;
+  }, {} as Record<string, number>);
+
+  const pieData = Object.entries(bySource).map(([k, v]) => ({
+    name: sourceOptions.find(s => s.value === k)?.label ?? k,
+    value: v,
+    color: sourceColors[k] ?? '#4A5568',
+  }));
+
+  const handleSubmit = async () => {
+    if (!form.source || !form.amount) return;
+    try {
+      await createRevenue.mutateAsync({
+        source: form.source,
+        description: form.description || null,
+        amount: parseFloat(form.amount),
+        type: form.type,
+        received_at: form.received_at || null,
+        reference_month: form.reference_month,
+      });
+      toast({ title: "Receita registrada com sucesso" });
+      setDialogOpen(false);
+      setForm({ source: "", description: "", amount: "", type: "variable", received_at: "", reference_month: month });
+    } catch {
+      toast({ title: "Erro ao registrar receita", variant: "destructive" });
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteRevenue.mutateAsync(id);
+      toast({ title: "Receita removida" });
+    } catch {
+      toast({ title: "Erro ao remover", variant: "destructive" });
+    }
+  };
+
+  const handleExportCSV = () => {
+    exportCSV(data, ["Fonte", "Descrição", "Tipo", "Valor", "Data", "Mês"], ["source", "description", "type", "amount", "received_at", "reference_month"], `receitas_${month}.csv`);
+  };
+
+  return (
+    <div className="space-y-6 max-w-[1400px] mx-auto">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <button onClick={() => setMonth(m => navigateMonth(m, -1))} className="text-wt-text-muted hover:text-wt-text-secondary"><ChevronLeft className="w-5 h-5" /></button>
+          <h1 className="font-display font-bold text-xl text-wt-text-primary">{formatMonth(month)}</h1>
+          <button onClick={() => setMonth(m => navigateMonth(m, 1))} className="text-wt-text-muted hover:text-wt-text-secondary"><ChevronRight className="w-5 h-5" /></button>
+        </div>
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogTrigger asChild>
+            <GoldButton><Plus className="w-4 h-4" /> Nova Receita</GoldButton>
+          </DialogTrigger>
+          <DialogContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+            <DialogHeader><DialogTitle style={{ color: '#F0F4F8' }}>Nova Receita</DialogTitle></DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label style={{ color: '#94A3B8' }}>Fonte</Label>
+                <Select value={form.source} onValueChange={v => setForm(f => ({ ...f, source: v }))}>
+                  <SelectTrigger style={{ background: '#080C10', borderColor: '#1A2535', color: '#F0F4F8' }}><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent style={{ background: '#0D1318', borderColor: '#1A2535' }}>
+                    {sourceOptions.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label style={{ color: '#94A3B8' }}>Descrição</Label>
+                <Input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} style={{ background: '#080C10', borderColor: '#1A2535', color: '#F0F4F8' }} />
+              </div>
+              <div>
+                <Label style={{ color: '#94A3B8' }}>Valor (R$)</Label>
+                <Input type="number" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} style={{ background: '#080C10', borderColor: '#1A2535', color: '#F0F4F8' }} />
+              </div>
+              <div>
+                <Label style={{ color: '#94A3B8' }}>Tipo</Label>
+                <Select value={form.type} onValueChange={v => setForm(f => ({ ...f, type: v }))}>
+                  <SelectTrigger style={{ background: '#080C10', borderColor: '#1A2535', color: '#F0F4F8' }}><SelectValue /></SelectTrigger>
+                  <SelectContent style={{ background: '#0D1318', borderColor: '#1A2535' }}>
+                    <SelectItem value="fixed">Fixo</SelectItem>
+                    <SelectItem value="variable">Variável</SelectItem>
+                    <SelectItem value="eventual">Eventual</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label style={{ color: '#94A3B8' }}>Data Recebimento</Label>
+                <Input type="date" value={form.received_at} onChange={e => setForm(f => ({ ...f, received_at: e.target.value }))} style={{ background: '#080C10', borderColor: '#1A2535', color: '#F0F4F8' }} />
+              </div>
+              <div>
+                <Label style={{ color: '#94A3B8' }}>Mês Referência</Label>
+                <Input type="month" value={form.reference_month} onChange={e => setForm(f => ({ ...f, reference_month: e.target.value }))} style={{ background: '#080C10', borderColor: '#1A2535', color: '#F0F4F8' }} />
+              </div>
+              <GoldButton onClick={handleSubmit} disabled={createRevenue.isPending} className="w-full justify-center">
+                {createRevenue.isPending ? "Salvando..." : "Registrar Receita"}
+              </GoldButton>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <Tabs defaultValue="lancamentos">
+        <TabsList style={{ background: '#0D1318', borderColor: '#1A2535' }}>
+          <TabsTrigger value="lancamentos">Lançamentos</TabsTrigger>
+          <TabsTrigger value="analise">Análise</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="lancamentos" className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {isLoading ? Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-[120px] rounded-2xl" style={{ background: '#0D1318' }} />) : (
+              <>
+                <KpiCard label="Total do Mês" value={totalMonth} color="gold" />
+                <KpiCard label="Receitas Fixas" value={totalFixed} color="green" />
+                <KpiCard label="Receitas Variáveis" value={totalVariable} color="cyan" />
+                <KpiCard label="Quantidade" value={data.length} color="cyan" />
+              </>
+            )}
+          </div>
+
+          <PremiumCard>
+            {isLoading ? <Skeleton className="h-[300px] rounded-xl" style={{ background: '#131B22' }} /> : data.length === 0 ? (
+              <div className="text-center py-12" style={{ color: '#4A5568' }}>
+                <p className="text-lg mb-2">💰</p>
+                <p className="text-sm">Nenhuma receita neste mês</p>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow style={{ borderColor: '#1A2535' }}>
+                    <TableHead style={{ color: '#94A3B8' }}>Fonte</TableHead>
+                    <TableHead style={{ color: '#94A3B8' }}>Descrição</TableHead>
+                    <TableHead style={{ color: '#94A3B8' }}>Tipo</TableHead>
+                    <TableHead style={{ color: '#94A3B8' }} className="text-right">Valor</TableHead>
+                    <TableHead style={{ color: '#94A3B8' }}>Data</TableHead>
+                    <TableHead style={{ color: '#94A3B8' }} className="w-12"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {data.map(r => (
+                    <TableRow key={r.id} style={{ borderColor: '#1A2535' }}>
+                      <TableCell><WtBadge variant={sourceBadgeVariant[r.source ?? ''] ?? 'gray'}>{sourceOptions.find(s => s.value === r.source)?.label ?? r.source}</WtBadge></TableCell>
+                      <TableCell style={{ color: '#F0F4F8' }}>{r.description}</TableCell>
+                      <TableCell style={{ color: '#94A3B8' }} className="text-xs font-mono">{r.type === 'fixed' ? 'Fixo' : r.type === 'variable' ? 'Variável' : 'Eventual'}</TableCell>
+                      <TableCell className="text-right font-mono" style={{ color: '#E8C97A' }}>{formatCurrency(r.amount ?? 0)}</TableCell>
+                      <TableCell className="font-mono text-xs" style={{ color: '#94A3B8' }}>{r.received_at ? formatDate(r.received_at) : '—'}</TableCell>
+                      <TableCell>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild><button className="text-wt-text-muted hover:text-red-400"><Trash2 className="w-4 h-4" /></button></AlertDialogTrigger>
+                          <AlertDialogContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle style={{ color: '#F0F4F8' }}>Excluir receita?</AlertDialogTitle>
+                              <AlertDialogDescription>Esta ação não pode ser desfeita.</AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleDelete(r.id)} className="bg-red-600 hover:bg-red-700">Excluir</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+                <TableFooter style={{ background: '#080C10' }}>
+                  <TableRow style={{ borderColor: '#1A2535' }}>
+                    <TableCell colSpan={3} className="font-display font-bold" style={{ color: '#F0F4F8' }}>TOTAL</TableCell>
+                    <TableCell className="text-right font-mono font-bold" style={{ color: '#E8C97A' }}>{formatCurrency(totalMonth)}</TableCell>
+                    <TableCell colSpan={2} />
+                  </TableRow>
+                </TableFooter>
+              </Table>
+            )}
+          </PremiumCard>
+        </TabsContent>
+
+        <TabsContent value="analise" className="space-y-6">
+          <div className="flex justify-end">
+            <GoldButton variant="outline" onClick={handleExportCSV}><Download className="w-4 h-4" /> Exportar CSV</GoldButton>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <PremiumCard>
+              <h3 className="font-display font-bold text-sm mb-4" style={{ color: '#F0F4F8' }}>Receita por Fonte</h3>
+              {pieData.length === 0 ? (
+                <div className="h-[260px] flex items-center justify-center text-sm" style={{ color: '#4A5568' }}>Sem dados</div>
+              ) : (
+                <ResponsiveContainer width="100%" height={260}>
+                  <BarChart data={pieData} layout="vertical">
+                    <XAxis type="number" tick={{ fill: '#4A5568', fontSize: 11 }} axisLine={false} tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
+                    <YAxis type="category" dataKey="name" width={100} tick={{ fill: '#94A3B8', fontSize: 12 }} axisLine={false} tickLine={false} />
+                    <Tooltip formatter={(v: number) => formatCurrency(v)} contentStyle={{ background: '#131B22', border: '1px solid #2A3F55', borderRadius: 10 }} />
+                    <Bar dataKey="value" radius={[0, 6, 6, 0]}>
+                      {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </PremiumCard>
+
+            <PremiumCard>
+              <h3 className="font-display font-bold text-sm mb-4" style={{ color: '#F0F4F8' }}>Composição</h3>
+              {pieData.length === 0 ? (
+                <div className="h-[260px] flex items-center justify-center text-sm" style={{ color: '#4A5568' }}>Sem dados</div>
+              ) : (
+                <ResponsiveContainer width="100%" height={260}>
+                  <PieChart>
+                    <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={95} paddingAngle={2} dataKey="value">
+                      {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                    </Pie>
+                    <Tooltip formatter={(v: number) => formatCurrency(v)} contentStyle={{ background: '#131B22', border: '1px solid #2A3F55', borderRadius: 10 }} />
+                    <Legend iconType="circle" formatter={v => <span style={{ color: '#94A3B8', fontSize: 12 }}>{v}</span>} />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+            </PremiumCard>
+          </div>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}

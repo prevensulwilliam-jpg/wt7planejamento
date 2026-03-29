@@ -74,6 +74,36 @@ export type Database = {
         }
         Relationships: []
       }
+      bank_accounts: {
+        Row: {
+          account_type: string | null
+          balance: number | null
+          bank_name: string
+          created_at: string | null
+          id: string
+          last_updated: string | null
+          notes: string | null
+        }
+        Insert: {
+          account_type?: string | null
+          balance?: number | null
+          bank_name: string
+          created_at?: string | null
+          id?: string
+          last_updated?: string | null
+          notes?: string | null
+        }
+        Update: {
+          account_type?: string | null
+          balance?: number | null
+          bank_name?: string
+          created_at?: string | null
+          id?: string
+          last_updated?: string | null
+          notes?: string | null
+        }
+        Relationships: []
+      }
       celesc_invoices: {
         Row: {
           amount_paid: number | null
