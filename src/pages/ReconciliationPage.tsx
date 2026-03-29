@@ -346,6 +346,12 @@ function ImportTab({ accounts }: { accounts: any[] }) {
                         <p className="text-xs truncate" style={{ color: "#F0F4F8" }}>{tx.description}</p>
                         <p className="text-xs" style={{ color: "#64748B" }}>
                           {tx.date} · {tx.category_label}
+                          {tx._learned && (
+                            <span className="ml-1 text-xs px-1.5 py-0.5 rounded"
+                              style={{ background: "rgba(139,92,246,0.2)", color: "#8B5CF6" }}>
+                              🧠 {tx._learnedCount}x
+                            </span>
+                          )}
                         </p>
                       </div>
                     </div>
@@ -480,11 +486,13 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
     try {
       if (intent === "transferencia") {
         await ignoreMutation.mutateAsync(id);
+        await recordClassification(tx.description, "transferencia", "transferencia", "Transferência entre Contas");
         toast.info("Transferência entre contas — ignorada.");
         return;
       }
 
       await matchMutation.mutateAsync({ id, category, intent });
+      const label = ALL_CATEGORY_LABELS[category] || category;
 
       if (intent === "receita") {
         await supabase.from("revenues").insert({
@@ -495,7 +503,7 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
           reference_month: tx.date?.slice(0, 7),
           received_at: tx.date,
         });
-        toast.success(`Receita criada: ${formatCurrency(tx.amount)} em ${CATEGORY_LABELS[category] || category}`);
+        toast.success(`Receita criada: ${formatCurrency(tx.amount)} em ${label}`);
       }
 
       if (intent === "despesa") {
@@ -507,8 +515,11 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
           reference_month: tx.date?.slice(0, 7),
           paid_at: tx.date,
         });
-        toast.success(`Despesa criada: ${formatCurrency(tx.amount)} em ${CATEGORY_LABELS[category] || category}`);
+        toast.success(`Despesa criada: ${formatCurrency(tx.amount)} em ${label}`);
       }
+
+      // Registrar padrão aprendido
+      await recordClassification(tx.description, category, intent, label);
     } catch {
       toast.error("Erro ao classificar transação.");
     }
@@ -546,6 +557,10 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
           });
           expenses++;
         }
+
+        // Registrar padrão
+        const pLabel = ALL_CATEGORY_LABELS[category] || category;
+        await recordClassification(tx.description, category, intent, pLabel);
       }
       toast.success(`${revenues} receitas e ${expenses} despesas criadas automaticamente!`);
     } catch {
