@@ -94,7 +94,7 @@ export default function ReconciliationPage() {
 /* ============ IMPORT TAB ============ */
 function ImportTab({ accounts }: { accounts: any[] }) {
   const [selectedAccount, setSelectedAccount] = useState("");
-  const [preview, setPreview] = useState<ParsedTransaction[]>([]);
+  const [preview, setPreview] = useState<any[]>([]);
   const [fileName, setFileName] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const importMutation = useImportTransactions();
@@ -111,11 +111,31 @@ function ImportTab({ accounts }: { accounts: any[] }) {
       } else {
         parsed = parseCSV(text);
       }
-      setPreview(parsed);
-      if (parsed.length === 0) toast.error("Nenhuma transação encontrada no arquivo.");
+      if (parsed.length === 0) {
+        toast.error("Nenhuma transação encontrada no arquivo.");
+        return;
+      }
+      const accountNames = accounts.map((a: any) => a.bank_name).filter(Boolean);
+      const categorized = parsed.map((tx, idx) => {
+        const result = categorizeTransaction(tx.description, tx.type, tx.amount, accountNames);
+        return {
+          ...tx,
+          _previewId: `preview-${idx}`,
+          category_suggestion: result.category,
+          category_intent: result.intent,
+          category_confidence: result.confidence,
+          category_label: result.label,
+          status: result.confidence === "high" && result.intent !== "duvida"
+            ? "auto_categorized"
+            : result.intent === "transferencia"
+            ? "transferencia"
+            : "pending",
+        };
+      });
+      setPreview(categorized);
     };
-    reader.readAsText(file);
-  }, []);
+    reader.readAsText(file, "latin1");
+  }, [accounts]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -125,31 +145,31 @@ function ImportTab({ accounts }: { accounts: any[] }) {
 
   const doImport = async () => {
     if (!selectedAccount) { toast.error("Selecione uma conta bancária."); return; }
-    
-    const accountNames = accounts.map((a: any) => a.bank_name).filter(Boolean);
-    
-    const rows = preview.map(tx => {
-      const result = categorizeTransaction(tx.description, tx.type, tx.amount, accountNames);
-      return {
-        ...tx,
-        bank_account_id: selectedAccount,
-        category_suggestion: result.category,
-        category_intent: result.intent,
-        category_confidence: result.confidence,
-        category_label: result.label,
-        status: result.confidence === "high" && result.intent !== "duvida"
-          ? "auto_categorized"
-          : "pending",
-      };
-    });
+    if (!preview.length) { toast.error("Selecione um arquivo primeiro."); return; }
+
+    const rows = preview.map(tx => ({
+      external_id: tx.external_id,
+      date: tx.date,
+      description: tx.description,
+      amount: tx.amount,
+      type: tx.type,
+      source: tx.source,
+      bank_account_id: selectedAccount,
+      category_suggestion: tx.category_suggestion,
+      category_intent: tx.category_intent,
+      category_confidence: tx.category_confidence,
+      category_label: tx.category_label,
+      status: tx.category_intent === "transferencia" ? "ignored" : tx.status,
+      raw_data: null,
+    }));
 
     try {
-      await importMutation.mutateAsync(rows);
+      const result = await importMutation.mutateAsync(rows);
       const transfers = rows.filter(r => r.category_intent === "transferencia").length;
-      const autoOk = rows.filter(r => r.status === "auto_categorized" && r.category_intent !== "transferencia").length;
+      const autoOk = rows.filter(r => r.status === "auto_categorized").length;
       const doubts = rows.filter(r => r.category_intent === "duvida").length;
       toast.success(
-        `${rows.length} transações importadas: ${autoOk} categorizadas, ${transfers} transferências, ${doubts} com dúvidas`
+        `✅ Importado! ${autoOk} prontas para confirmar · ${doubts} com dúvidas · ${transfers} transferências ignoradas`
       );
       setPreview([]);
       setFileName("");
@@ -207,47 +227,56 @@ function ImportTab({ accounts }: { accounts: any[] }) {
 
         {preview.length > 0 && (
           <div className="mt-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-mono" style={{ color: "#E8C97A" }}>
-                {preview.length} transações encontradas
-              </p>
-              <GoldButton onClick={doImport} disabled={importMutation.isPending}>
-                {importMutation.isPending ? "Importando..." : `Importar ${preview.length} transações`}
-              </GoldButton>
+            {/* Resumo por intent */}
+            <div className="grid grid-cols-4 gap-2">
+              {[
+                { label: "Receitas", count: preview.filter(t => t.category_intent === "receita").length, color: "#10B981" },
+                { label: "Despesas", count: preview.filter(t => t.category_intent === "despesa").length, color: "#F43F5E" },
+                { label: "Transferências", count: preview.filter(t => t.category_intent === "transferencia").length, color: "#94A3B8" },
+                { label: "Dúvidas", count: preview.filter(t => t.category_intent === "duvida").length, color: "#F59E0B" },
+              ].map(({ label, count, color }) => (
+                <div key={label} className="rounded-lg p-3 text-center" style={{ background: "#0D1318", border: `1px solid ${color}33` }}>
+                  <p className="font-display font-bold text-xl" style={{ color }}>{count}</p>
+                  <p className="text-xs mt-1" style={{ color: "#94A3B8" }}>{label}</p>
+                </div>
+              ))}
             </div>
-            <div className="max-h-60 overflow-auto rounded-lg" style={{ border: "1px solid #1A2535" }}>
-              <Table>
-                <TableHeader>
-                  <TableRow style={{ borderColor: "#1A2535" }}>
-                    <TableHead style={{ color: "#94A3B8" }}>Data</TableHead>
-                    <TableHead style={{ color: "#94A3B8" }}>Descrição</TableHead>
-                    <TableHead style={{ color: "#94A3B8" }}>Tipo</TableHead>
-                    <TableHead className="text-right" style={{ color: "#94A3B8" }}>Valor</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {preview.slice(0, 20).map((tx, i) => (
-                    <TableRow key={i} style={{ borderColor: "#1A2535" }}>
-                      <TableCell style={{ color: "#F0F4F8" }}>{formatDate(tx.date)}</TableCell>
-                      <TableCell className="max-w-[200px] truncate" style={{ color: "#F0F4F8" }}>{tx.description}</TableCell>
-                      <TableCell>
-                        <WtBadge variant={tx.type === "credit" ? "green" : "red"}>
-                          {tx.type === "credit" ? "Crédito" : "Débito"}
-                        </WtBadge>
-                      </TableCell>
-                      <TableCell className="text-right font-mono" style={{ color: tx.type === "credit" ? "#10B981" : "#F43F5E" }}>
-                        {formatCurrency(tx.amount)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+
+            {/* Lista categorizada */}
+            <div className="max-h-80 overflow-y-auto rounded-xl" style={{ border: "1px solid #1A2535" }}>
+              {preview.map((tx) => {
+                const intentColors: Record<string, string> = {
+                  receita: "#10B981", despesa: "#F43F5E",
+                  transferencia: "#94A3B8", duvida: "#F59E0B"
+                };
+                const color = intentColors[tx.category_intent] ?? "#94A3B8";
+                return (
+                  <div key={tx._previewId} className="flex items-center justify-between px-4 py-2.5"
+                    style={{ borderBottom: "1px solid #1A2535" }}>
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
+                      <div className="min-w-0">
+                        <p className="text-xs truncate" style={{ color: "#F0F4F8" }}>{tx.description}</p>
+                        <p className="text-xs" style={{ color: "#64748B" }}>
+                          {tx.date} · {tx.category_label}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-sm font-mono font-bold ml-3 flex-shrink-0"
+                      style={{ color: tx.type === "credit" ? "#10B981" : "#F43F5E" }}>
+                      {tx.type === "credit" ? "+" : "-"}{formatCurrency(tx.amount)}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
-            {preview.length > 20 && (
-              <p className="text-xs text-center" style={{ color: "#4A5568" }}>
-                Mostrando 20 de {preview.length} — todas serão importadas
-              </p>
-            )}
+
+            {/* Botão importar */}
+            <GoldButton onClick={doImport} disabled={importMutation.isPending} className="w-full justify-center">
+              {importMutation.isPending
+                ? "Importando..."
+                : `Importar ${preview.length} transações`}
+            </GoldButton>
           </div>
         )}
 
