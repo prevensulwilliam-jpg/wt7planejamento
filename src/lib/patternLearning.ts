@@ -38,10 +38,10 @@ export async function recordClassification(
     .eq("description_pattern", normalized)
     .eq("category", category)
     .eq("intent", intent)
-    .single();
+    .single() as { data: any };
 
   if (existing) {
-    const newCount = (existing.count as number) + 1;
+    const newCount = (existing.count ?? 0) + 1;
     await supabase
       .from("classification_patterns" as any)
       .update({
