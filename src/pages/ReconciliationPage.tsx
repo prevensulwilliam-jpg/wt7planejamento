@@ -737,7 +737,320 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
   );
 }
 
-/* ============ HISTORY TAB ============ */
+/* ============ DOUBT CARD ============ */
+function DoubtCard({ tx, classifyAs, ignoreTransaction }: {
+  tx: any;
+  classifyAs: (id: string, intent: "receita" | "despesa" | "transferencia", category: string) => void;
+  ignoreTransaction: (id: string) => void;
+}) {
+  const [selectedCategory, setSelectedCategory] = useState("");
+  const [selectedIntent, setSelectedIntent] = useState<"receita" | "despesa" | "transferencia">(
+    tx.type === "credit" ? "receita" : "despesa"
+  );
+
+  const options = selectedIntent === "receita" ? RECEITA_OPTIONS : DESPESA_OPTIONS;
+
+  const handleConfirm = () => {
+    if (!selectedCategory) return;
+    classifyAs(tx.id, selectedIntent, selectedCategory);
+  };
+
+  return (
+    <div className="rounded-xl p-4" style={{ background: "#0D1318", border: "1px solid rgba(245,158,11,0.3)" }}>
+      <div className="flex items-start justify-between mb-3">
+        <div>
+          <p className="text-xs font-mono" style={{ color: "#94A3B8" }}>{formatDate(tx.date)}</p>
+          <p className="text-sm font-medium mt-0.5" style={{ color: "#F0F4F8" }}>{tx.description}</p>
+        </div>
+        <span className="font-mono font-bold text-base ml-4 flex-shrink-0"
+          style={{ color: tx.type === "credit" ? "#10B981" : "#F43F5E" }}>
+          {tx.type === "credit" ? "+" : "-"}{formatCurrency(tx.amount)}
+        </span>
+      </div>
+
+      <div className="flex gap-2 mb-3">
+        <p className="text-xs self-center" style={{ color: "#94A3B8" }}>Tipo:</p>
+        {(["receita", "despesa", "transferencia"] as const).map(intent => (
+          <button
+            key={intent}
+            onClick={() => { setSelectedIntent(intent); setSelectedCategory(""); }}
+            className="px-3 py-1 rounded-lg text-xs font-medium transition-all"
+            style={{
+              background: selectedIntent === intent
+                ? intent === "receita" ? "rgba(16,185,129,0.25)" : intent === "despesa" ? "rgba(244,63,94,0.25)" : "rgba(148,163,184,0.25)"
+                : "rgba(255,255,255,0.05)",
+              color: selectedIntent === intent
+                ? intent === "receita" ? "#10B981" : intent === "despesa" ? "#F43F5E" : "#94A3B8"
+                : "#64748B",
+              border: `1px solid ${selectedIntent === intent
+                ? intent === "receita" ? "rgba(16,185,129,0.4)" : intent === "despesa" ? "rgba(244,63,94,0.4)" : "rgba(148,163,184,0.4)"
+                : "transparent"}`,
+            }}>
+            {intent === "receita" ? "💰 Receita" : intent === "despesa" ? "💸 Despesa" : "🔄 Transferência"}
+          </button>
+        ))}
+      </div>
+
+      {selectedIntent !== "transferencia" && (
+        <div className="mb-3">
+          <p className="text-xs mb-2" style={{ color: "#94A3B8" }}>Categoria:</p>
+          <div className="flex flex-wrap gap-1.5">
+            {options.map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => setSelectedCategory(opt.value)}
+                className="px-2.5 py-1 rounded-lg text-xs font-medium transition-all"
+                style={{
+                  background: selectedCategory === opt.value ? "rgba(201,168,76,0.25)" : "rgba(255,255,255,0.05)",
+                  color: selectedCategory === opt.value ? "#E8C97A" : "#94A3B8",
+                  border: `1px solid ${selectedCategory === opt.value ? "rgba(201,168,76,0.5)" : "rgba(255,255,255,0.08)"}`,
+                }}>
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="flex gap-2 mt-3">
+        {selectedIntent === "transferencia" ? (
+          <button
+            onClick={() => classifyAs(tx.id, "transferencia", "transferencia")}
+            className="px-4 py-1.5 rounded-lg text-xs font-semibold transition-all"
+            style={{ background: "rgba(148,163,184,0.2)", color: "#94A3B8", border: "1px solid rgba(148,163,184,0.3)" }}>
+            Confirmar como Transferência
+          </button>
+        ) : (
+          <button
+            onClick={handleConfirm}
+            disabled={!selectedCategory}
+            className="px-4 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-40"
+            style={{
+              background: selectedCategory ? "rgba(201,168,76,0.2)" : "rgba(255,255,255,0.05)",
+              color: selectedCategory ? "#E8C97A" : "#4A5568",
+              border: `1px solid ${selectedCategory ? "rgba(201,168,76,0.4)" : "transparent"}`,
+            }}>
+            ✓ Confirmar
+          </button>
+        )}
+        <button
+          onClick={() => ignoreTransaction(tx.id)}
+          className="px-3 py-1.5 rounded-lg text-xs transition-all"
+          style={{ color: "#4A5568", border: "1px solid rgba(255,255,255,0.06)" }}>
+          Ignorar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ============ NEW EXPENSE MODAL ============ */
+function NewExpenseModal({ open, onClose, defaultMonth }: { open: boolean; onClose: () => void; defaultMonth: string }) {
+  const qc = useQueryClient();
+  const [form, setForm] = useState({
+    category: "", description: "", amount: "",
+    paid_at: new Date().toISOString().split("T")[0],
+    reference_month: defaultMonth, type: "variable" as string,
+  });
+
+  const handleSave = async () => {
+    if (!form.category || !form.amount || !form.description) {
+      toast.error("Preencha todos os campos obrigatórios");
+      return;
+    }
+    const { error } = await supabase.from("expenses").insert({
+      category: form.category,
+      description: form.description,
+      amount: parseFloat(form.amount.replace(",", ".")),
+      type: form.type,
+      paid_at: form.paid_at,
+      reference_month: form.reference_month,
+    });
+    if (error) { toast.error(error.message); return; }
+    toast.success("Despesa criada!");
+    qc.invalidateQueries({ queryKey: ["expenses"] });
+    onClose();
+    setForm({ category: "", description: "", amount: "", paid_at: new Date().toISOString().split("T")[0], reference_month: defaultMonth, type: "variable" });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent style={{ background: "#0D1318", border: "1px solid #1A2535" }} className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle style={{ color: "#F0F4F8" }}>💸 Nova Despesa</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div>
+            <label className="text-xs font-mono uppercase mb-2 block" style={{ color: "#94A3B8" }}>Categoria *</label>
+            <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pr-1">
+              {DESPESA_OPTIONS.map(opt => (
+                <button key={opt.value} type="button"
+                  onClick={() => setForm(f => ({ ...f, category: opt.value }))}
+                  className="px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all"
+                  style={{
+                    background: form.category === opt.value ? "rgba(244,63,94,0.2)" : "rgba(255,255,255,0.05)",
+                    color: form.category === opt.value ? "#F43F5E" : "#94A3B8",
+                    border: `1px solid ${form.category === opt.value ? "rgba(244,63,94,0.4)" : "rgba(255,255,255,0.08)"}`,
+                  }}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-mono uppercase mb-1 block" style={{ color: "#94A3B8" }}>Descrição *</label>
+            <Input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+              placeholder="Ex: Fatura Cartão Nubank"
+              style={{ background: "#080C10", borderColor: "#1A2535", color: "#F0F4F8" }} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-mono uppercase mb-1 block" style={{ color: "#94A3B8" }}>Valor (R$) *</label>
+              <Input value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
+                placeholder="0,00" type="number"
+                style={{ background: "#080C10", borderColor: "#1A2535", color: "#F0F4F8" }} />
+            </div>
+            <div>
+              <label className="text-xs font-mono uppercase mb-1 block" style={{ color: "#94A3B8" }}>Data</label>
+              <Input type="date" value={form.paid_at} onChange={e => setForm(f => ({ ...f, paid_at: e.target.value }))}
+                style={{ background: "#080C10", borderColor: "#1A2535", color: "#F0F4F8" }} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-mono uppercase mb-1 block" style={{ color: "#94A3B8" }}>Tipo</label>
+              <Select value={form.type} onValueChange={(v) => setForm(f => ({ ...f, type: v }))}>
+                <SelectTrigger style={{ background: "#080C10", borderColor: "#1A2535", color: "#F0F4F8" }}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent style={{ background: "#0D1318", borderColor: "#1A2535" }}>
+                  <SelectItem value="fixed" style={{ color: "#F0F4F8" }}>Fixo</SelectItem>
+                  <SelectItem value="variable" style={{ color: "#F0F4F8" }}>Variável</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-xs font-mono uppercase mb-1 block" style={{ color: "#94A3B8" }}>Mês referência</label>
+              <Input type="month" value={form.reference_month}
+                onChange={e => setForm(f => ({ ...f, reference_month: e.target.value }))}
+                style={{ background: "#080C10", borderColor: "#1A2535", color: "#F0F4F8" }} />
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg" style={{ color: "#94A3B8" }}>Cancelar</button>
+          <GoldButton onClick={handleSave}>Salvar Despesa</GoldButton>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ============ NEW REVENUE MODAL ============ */
+function NewRevenueModal({ open, onClose, defaultMonth }: { open: boolean; onClose: () => void; defaultMonth: string }) {
+  const qc = useQueryClient();
+  const [form, setForm] = useState({
+    source: "", description: "", amount: "",
+    received_at: new Date().toISOString().split("T")[0],
+    reference_month: defaultMonth, type: "variable" as string,
+  });
+
+  const handleSave = async () => {
+    if (!form.source || !form.amount || !form.description) {
+      toast.error("Preencha todos os campos obrigatórios");
+      return;
+    }
+    const { error } = await supabase.from("revenues").insert({
+      source: form.source,
+      description: form.description,
+      amount: parseFloat(form.amount.replace(",", ".")),
+      type: form.type,
+      received_at: form.received_at,
+      reference_month: form.reference_month,
+    });
+    if (error) { toast.error(error.message); return; }
+    toast.success("Receita criada!");
+    qc.invalidateQueries({ queryKey: ["revenues"] });
+    onClose();
+    setForm({ source: "", description: "", amount: "", received_at: new Date().toISOString().split("T")[0], reference_month: defaultMonth, type: "variable" });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent style={{ background: "#0D1318", border: "1px solid #1A2535" }} className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle style={{ color: "#F0F4F8" }}>💰 Nova Receita</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div>
+            <label className="text-xs font-mono uppercase mb-2 block" style={{ color: "#94A3B8" }}>Fonte *</label>
+            <div className="flex flex-wrap gap-1.5">
+              {RECEITA_OPTIONS.map(opt => (
+                <button key={opt.value} type="button"
+                  onClick={() => setForm(f => ({ ...f, source: opt.value }))}
+                  className="px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all"
+                  style={{
+                    background: form.source === opt.value ? "rgba(16,185,129,0.2)" : "rgba(255,255,255,0.05)",
+                    color: form.source === opt.value ? "#10B981" : "#94A3B8",
+                    border: `1px solid ${form.source === opt.value ? "rgba(16,185,129,0.4)" : "rgba(255,255,255,0.08)"}`,
+                  }}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-mono uppercase mb-1 block" style={{ color: "#94A3B8" }}>Descrição *</label>
+            <Input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+              placeholder="Ex: Repasse RWT02 Março"
+              style={{ background: "#080C10", borderColor: "#1A2535", color: "#F0F4F8" }} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-mono uppercase mb-1 block" style={{ color: "#94A3B8" }}>Valor (R$) *</label>
+              <Input value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
+                placeholder="0,00" type="number"
+                style={{ background: "#080C10", borderColor: "#1A2535", color: "#F0F4F8" }} />
+            </div>
+            <div>
+              <label className="text-xs font-mono uppercase mb-1 block" style={{ color: "#94A3B8" }}>Data</label>
+              <Input type="date" value={form.received_at}
+                onChange={e => setForm(f => ({ ...f, received_at: e.target.value }))}
+                style={{ background: "#080C10", borderColor: "#1A2535", color: "#F0F4F8" }} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-mono uppercase mb-1 block" style={{ color: "#94A3B8" }}>Tipo</label>
+              <Select value={form.type} onValueChange={(v) => setForm(f => ({ ...f, type: v }))}>
+                <SelectTrigger style={{ background: "#080C10", borderColor: "#1A2535", color: "#F0F4F8" }}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent style={{ background: "#0D1318", borderColor: "#1A2535" }}>
+                  <SelectItem value="fixed" style={{ color: "#F0F4F8" }}>Fixo</SelectItem>
+                  <SelectItem value="variable" style={{ color: "#F0F4F8" }}>Variável</SelectItem>
+                  <SelectItem value="eventual" style={{ color: "#F0F4F8" }}>Eventual</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-xs font-mono uppercase mb-1 block" style={{ color: "#94A3B8" }}>Mês referência</label>
+              <Input type="month" value={form.reference_month}
+                onChange={e => setForm(f => ({ ...f, reference_month: e.target.value }))}
+                style={{ background: "#080C10", borderColor: "#1A2535", color: "#F0F4F8" }} />
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg" style={{ color: "#94A3B8" }}>Cancelar</button>
+          <GoldButton onClick={handleSave}>Salvar Receita</GoldButton>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+
 function HistoryTab({ month, accounts }: { month: string; accounts: any[] }) {
   const { data: transactions = [], isLoading } = useBankTransactions({ month });
 
