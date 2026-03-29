@@ -114,7 +114,7 @@ function ImportTab({ accounts }: { accounts: any[] }) {
       setPreview(parsed);
       if (parsed.length === 0) toast.error("Nenhuma transação encontrada no arquivo.");
     };
-    reader.readAsText(text);
+    reader.readAsText(file);
   }, []);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
