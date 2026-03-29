@@ -104,18 +104,17 @@ function ImportTab({ accounts }: { accounts: any[] }) {
     setFileName(file.name);
     const reader = new FileReader();
     reader.onload = (e) => {
-      const content = e.target?.result as string;
+      const text = e.target?.result as string;
       const ext = file.name.toLowerCase();
       let parsed: ParsedTransaction[] = [];
       if (ext.endsWith(".ofx")) {
-        parsed = parseOFX(content);
+        parsed = parseOFX(text);
       } else {
-        parsed = parseCSV(content);
+        parsed = parseCSV(text);
       }
       setPreview(parsed);
       if (parsed.length === 0) toast.error("Nenhuma transação encontrada no arquivo.");
     };
-    reader.readAsText(content as any);
     reader.readAsText(file);
   }, []);
 
