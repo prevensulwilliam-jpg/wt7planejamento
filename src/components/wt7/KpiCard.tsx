@@ -5,7 +5,7 @@ interface KpiCardProps {
   label: string;
   value: number;
   change?: number;
-  color: 'gold' | 'green' | 'red' | 'cyan';
+  color: 'gold' | 'green' | 'red' | 'cyan' | 'gray';
   compact?: boolean;
 }
 
@@ -14,6 +14,7 @@ const colorMap = {
   green: { bg: 'rgba(16,185,129,0.08)', border: 'rgba(16,185,129,0.2)', text: '#10B981', badge: 'rgba(16,185,129,0.15)' },
   red: { bg: 'rgba(244,63,94,0.08)', border: 'rgba(244,63,94,0.2)', text: '#F43F5E', badge: 'rgba(244,63,94,0.15)' },
   cyan: { bg: 'rgba(45,212,191,0.08)', border: 'rgba(45,212,191,0.2)', text: '#2DD4BF', badge: 'rgba(45,212,191,0.15)' },
+  gray: { bg: 'rgba(74,85,104,0.08)', border: 'rgba(74,85,104,0.2)', text: '#94A3B8', badge: 'rgba(74,85,104,0.15)' },
 };
 
 export function KpiCard({ label, value, change, color, compact }: KpiCardProps) {
