@@ -23,14 +23,14 @@ const TRANSFER_KEYWORDS = [
   "william tavares",
   "rende facil",
   "aplic automatica",
-  "cheque compensado",
-  "compensacao cheque",
+  "saldo anterior",
   "saldo anterior",
   "saldo do dia",
 ];
 
 // Receitas — alta confiança
 const REVENUE_RULES: { keywords: string[]; category: string; label: string }[] = [
+  { keywords: ["cheque compensado", "cheque credit"], category: "outros_receita", label: "Cheque Recebido" },
   { keywords: ["repasse aluguel", "repasse rwt", "repasse imovel", "repasse imóvel", "locacao", "locação"], category: "kitnets", label: "Kitnets" },
   { keywords: ["salario", "salário", "folha pgto", "folha pagamento", "vencimento clr", "vencimento clt"], category: "salario", label: "Salário" },
   { keywords: ["comissao prevensul", "comissão prevensul", "prevensul comis"], category: "comissao_prevensul", label: "Comissão Prevensul" },
@@ -41,6 +41,7 @@ const REVENUE_RULES: { keywords: string[]; category: string; label: string }[] =
 
 // Despesas — alta confiança
 const EXPENSE_RULES: { keywords: string[]; category: string; label: string }[] = [
+  { keywords: ["cheque compensado"], category: "outros", label: "Cheque Compensado" },
   { keywords: ["ifood", "uber eats", "rappi", "supermercado", "mercadao", "atacadao", "padaria", "restaurante", "lanchonete", "delivery"], category: "alimentacao", label: "Alimentação" },
   { keywords: ["suplemento", "whey protein", "creatina", "growth supplements", "max titanium"], category: "suplementos", label: "Suplementos" },
   { keywords: ["smartfit", "bio ritmo", "personal trainer", "academia"], category: "academia", label: "Academia/Personal" },
