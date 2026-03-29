@@ -1,11 +1,13 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
 import { WtBadge } from "@/components/wt7/WtBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDate } from "@/lib/formatters";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Users, Link as LinkIcon } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { Users, Link as LinkIcon, Trash2, AlertTriangle } from "lucide-react";
 
 const roleBadge: Record<string, { variant: 'gold' | 'green' | 'cyan' | 'gray'; label: string }> = {
   admin: { variant: 'gold', label: 'Admin' },
@@ -54,6 +56,62 @@ function useUsersWithRoles() {
 
 export default function UsersPage() {
   const { data = [], isLoading } = useUsersWithRoles();
+  const [cleaning, setCleaning] = useState(false);
+  const [confirm2, setConfirm2] = useState(false);
+  const { toast } = useToast();
+  const qc = useQueryClient();
+
+  const cleanDemoData = async () => {
+    setCleaning(true);
+    try {
+      const { data: matchedRevenues } = await supabase
+        .from("bank_transactions")
+        .select("matched_revenue_id")
+        .not("matched_revenue_id", "is", null);
+
+      const { data: matchedExpenses } = await supabase
+        .from("bank_transactions")
+        .select("matched_expense_id")
+        .not("matched_expense_id", "is", null);
+
+      const safeRevenueIds = (matchedRevenues ?? [])
+        .map((r: any) => r.matched_revenue_id)
+        .filter(Boolean);
+
+      const safeExpenseIds = (matchedExpenses ?? [])
+        .map((r: any) => r.matched_expense_id)
+        .filter(Boolean);
+
+      let revenueQuery = supabase.from("revenues").delete();
+      if (safeRevenueIds.length > 0) {
+        revenueQuery = revenueQuery.not("id", "in", `(${safeRevenueIds.join(",")})`);
+      }
+      const { error: revError } = await revenueQuery.neq("id", "00000000-0000-0000-0000-000000000000");
+
+      let expenseQuery = supabase.from("expenses").delete();
+      if (safeExpenseIds.length > 0) {
+        expenseQuery = expenseQuery.not("id", "in", `(${safeExpenseIds.join(",")})`);
+      }
+      const { error: expError } = await expenseQuery.neq("id", "00000000-0000-0000-0000-000000000000");
+
+      if (revError || expError) {
+        throw new Error(revError?.message ?? expError?.message);
+      }
+
+      qc.invalidateQueries({ queryKey: ["revenues"] });
+      qc.invalidateQueries({ queryKey: ["expenses"] });
+
+      toast({
+        title: "Dados de demonstração removidos",
+        description: "Receitas e despesas manuais apagadas. Apenas dados de extrato permanecem.",
+      });
+      setConfirm2(false);
+    } catch (err: any) {
+      toast({ title: "Erro ao limpar", description: err.message, variant: "destructive" });
+    } finally {
+      setCleaning(false);
+    }
+  };
 
   return (
     <div className="space-y-6 max-w-[1400px] mx-auto">
@@ -122,6 +180,64 @@ export default function UsersPage() {
             </TableBody>
           </Table>
         )}
+      </PremiumCard>
+
+      {/* Zona de Perigo */}
+      <PremiumCard glowColor="rgba(244,63,94,0.15)">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'rgba(244,63,94,0.15)' }}>
+            <AlertTriangle className="w-5 h-5" style={{ color: '#F43F5E' }} />
+          </div>
+          <div>
+            <h3 className="font-display font-bold text-sm" style={{ color: '#F43F5E' }}>Zona de Perigo</h3>
+            <p className="text-xs mt-0.5" style={{ color: '#94A3B8' }}>Ações irreversíveis</p>
+          </div>
+        </div>
+
+        <div className="rounded-xl p-4" style={{ background: '#080C10', border: '1px solid rgba(244,63,94,0.2)' }}>
+          <h4 className="font-display font-bold text-sm mb-1" style={{ color: '#F0F4F8' }}>
+            <Trash2 className="w-4 h-4 inline mr-1.5" style={{ color: '#F43F5E' }} />
+            Limpar dados de demonstração
+          </h4>
+          <p className="text-xs mb-3" style={{ color: '#94A3B8' }}>
+            Remove todas as receitas e despesas inseridas manualmente ou como exemplo.
+            Mantém apenas os dados que vieram dos seus extratos bancários via conciliação.
+            <strong style={{ color: '#F43F5E' }}> Esta ação não pode ser desfeita.</strong>
+          </p>
+
+          {!confirm2 ? (
+            <button
+              onClick={() => setConfirm2(true)}
+              className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+              style={{ background: 'rgba(244,63,94,0.15)', color: '#F43F5E', border: '1px solid rgba(244,63,94,0.3)' }}
+            >
+              Limpar dados de demonstração
+            </button>
+          ) : (
+            <div className="rounded-lg p-3" style={{ background: 'rgba(244,63,94,0.08)', border: '1px solid rgba(244,63,94,0.3)' }}>
+              <p className="text-xs font-medium mb-3" style={{ color: '#F43F5E' }}>
+                ⚠️ Tem certeza absoluta? Isso apagará TODAS as receitas e despesas que não vieram de extrato.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={cleanDemoData}
+                  disabled={cleaning}
+                  className="px-4 py-2 rounded-lg text-sm font-bold transition-all"
+                  style={{ background: '#F43F5E', color: '#fff' }}
+                >
+                  {cleaning ? "Apagando..." : "Sim, apagar tudo"}
+                </button>
+                <button
+                  onClick={() => setConfirm2(false)}
+                  className="px-4 py-2 rounded-lg text-sm transition-all"
+                  style={{ color: '#94A3B8', border: '1px solid #1A2535' }}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </PremiumCard>
     </div>
   );
