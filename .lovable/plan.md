@@ -1,67 +1,81 @@
 
 
-# Sprint 2 — Módulo Comissões Prevensul + Portal Financeiro + Import Excel
+# Sprint 3 — Dashboard Real + Receitas + Despesas + Bancos + Usuários
 
 ## Resumo
-Criar 3 arquivos novos (hook + 2 páginas), atualizar App.tsx com novas rotas, e instalar dependência `xlsx` para importação de planilhas.
+6 arquivos a criar/atualizar. 1 nova tabela `bank_accounts`. Seed de metas e receitas. Dashboard conectado a dados reais.
 
 ---
 
-## Arquivos a Criar
+## 1. Criar tabela `bank_accounts`
+Migration SQL:
+```sql
+CREATE TABLE bank_accounts (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  bank_name text NOT NULL,
+  account_type text,
+  balance numeric DEFAULT 0,
+  last_updated date,
+  notes text,
+  created_at timestamptz DEFAULT now()
+);
+ALTER TABLE bank_accounts ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Admin can manage bank_accounts" ON bank_accounts FOR ALL USING (has_role(auth.uid(), 'admin'::app_role));
+```
 
-### 1. `src/hooks/useBilling.ts`
-Hook centralizado com React Query conforme especificado:
-- `usePrevensulBilling(month?)` — busca `prevensul_billing` com join em `profiles(name)`
-- `useBillingSummary(month)` — KPIs calculados: totalBilled, totalReceived, totalCommission, totalRecords
-- `useCreateBilling()` — mutation para inserir em `prevensul_billing`
-- `useDeleteBilling()` — mutation para deletar registro
-- `useImportHistory()` — busca últimos 20 registros de `import_history`
-- `useCreateImportHistory()` — mutation para registrar import
+## 2. Seed inicial
+Insert goals (4 records) and revenues de março/2026 (6 records) conforme especificado.
 
-### 2. `src/pages/FinancialBillingPage.tsx` — Portal Financeiro `/financial/billing`
-Página isolada (sem sidebar), role `financial` ou `admin`. Segue padrão do ManagerKitnetsPage para auth check.
+## 3. `src/hooks/useFinances.ts` — Hook centralizado
+- `useRevenues(month?)`, `useCreateRevenue()`, `useDeleteRevenue()`
+- `useExpenses(month?)`, `useCreateExpense()`, `useDeleteExpense()`
+- `useDashboardKPIs(month)` — calcula totalRevenue, totalExpenses, netResult, revenueBySource, expenseByCategory
+- `useRevenueExpenseTrend()` — últimos 6 meses agregados
+- `useGoals()`, `useUpdateGoal()`
+- `useAssets()`
 
-**Componentes:**
-- Header: WT7Logo + "Portal Financeiro Prevensul" + botão Sair
-- 4 KPI cards (destaque ciano #2DD4BF, comissão em dourado)
-- Formulário "Registrar Faturamento" com todos os campos especificados, cálculo de comissão 3% em tempo real
-- Card "Importar Planilha Excel" com upload .xlsx, leitura via `xlsx` (npm), preview em tabela, botão confirmar, verificação de duplicatas, registro em `import_history`
-- Tabela histórico do mês com ações (deletar com AlertDialog de confirmação)
-- Tabela histórico de imports
+## 4. `src/pages/DashboardPage.tsx` — Conectar dados reais
+- Substituir mock data por hooks reais: `useDashboardKPIs`, `useRevenueExpenseTrend`, `useGoals`, `useKitnets`
+- Seletor de mês funcional (ChevronLeft/Right incrementa/decrementa mês)
+- KPIs dinâmicos, gráficos com fallback para empty state
+- Meta R$100k com gap calculado dinamicamente
+- Manter Wisely card como mock
+- Skeleton loading nos KPIs
 
-### 3. `src/pages/CommissionsPage.tsx` — Admin `/reports/commissions`
-Página dentro do AdminLayout com 3 abas:
+## 5. `src/pages/RevenuesPage.tsx`
+2 abas (Lançamentos | Análise):
+- **Lançamentos**: 4 KPIs, modal "Nova Receita" (fonte, descrição, valor, tipo, data, mês), tabela com badges coloridos por fonte, delete com AlertDialog, total no rodapé
+- **Análise**: BarChart horizontal por fonte, PieChart composição, comparativo 3 meses, export CSV
 
-**Aba 1 — Comissões por Mês:**
-- Seletor de período (mês inicial/final)
-- 4 KPIs: Total Faturado, Total Recebido, Comissão Total, Média Mensal
-- LineChart (Recharts) comissão mês a mês
-- Tabela completa com linha de totais + botão Exportar CSV
+## 6. `src/pages/ExpensesPage.tsx`
+2 abas (Lançamentos | Análise):
+- **Lançamentos**: 4 KPIs, modal "Nova Despesa" (categoria com emoji, descrição, valor, tipo, data, mês), tabela com badges, delete com AlertDialog
+- **Análise**: PieChart por categoria, BarChart comparativo, card alertas (categorias +20%), export CSV
 
-**Aba 2 — Clientes:**
-- Tabela agrupada por cliente com totais acumulados
-- Badges de status (verde/dourado/vermelho)
+## 7. `src/pages/BanksPage.tsx`
+- Hook `useBankAccounts` inline (query + mutations)
+- Card total consolidado no topo
+- Grid de cards por conta: banco, tipo (badge), saldo dourado, última atualização
+- Modal "Adicionar Conta" e editar saldo
 
-**Aba 3 — Histórico de Imports:**
-- Tabela de imports com expansão de detalhes
+## 8. `src/pages/UsersPage.tsx`
+- Busca `user_roles` com join em `profiles` (não auth.users diretamente — usar profiles.id = user_roles.user_id)
+- Tabela: Nome, Email (do profile), Role (badge colorido), Data criação
+- Badges: admin=dourado, kitnet_manager=ciano, financial=verde, partner=roxo
+- Card informativo com URLs de acesso por perfil
+- Nota: criação de usuários via painel backend (exibir instrução)
 
-### 4. Atualizar `src/App.tsx`
-- Importar `FinancialBillingPage` e `CommissionsPage`
-- Substituir PlaceholderPage em `/reports/commissions` por `<CommissionsPage />`
-- Adicionar rota isolada `/financial/billing` com `<FinancialBillingPage />` (fora do AuthGuard admin, como `/manager/kitnets`)
-
-### 5. Instalar dependência `xlsx`
-- Adicionar pacote `xlsx` ao projeto para leitura de planilhas Excel no browser
+## 9. `src/App.tsx` — Atualizar rotas
+Importar e substituir PlaceholderPages para `/revenues`, `/expenses`, `/banks`, `/users`.
 
 ---
 
 ## Detalhes Técnicos
-
-- **Import Excel**: Usa `xlsx` (SheetJS) para ler .xlsx no browser. Parse da aba pelo formato "MMYYYY". Começa leitura na linha 3. Parse parcela "3/4" → `installment_current=3, installment_total=4`. Duplicatas checadas por `client_name + reference_month + installment_current`
-- **CSV Export**: Função `exportCSV` com BOM UTF-8, separador `;`, download via Blob/URL
-- **Recharts**: LineChart para evolução de comissões (já disponível no projeto)
-- **Componentes reutilizados**: PremiumCard, GoldButton, WtBadge, KpiCard, WT7Logo, Skeleton
-- **UI**: shadcn Dialog, AlertDialog, Tabs, Select, Table, Input, Textarea
-- **Tema**: fundo #080C10, dourado #C9A84C, ciano #2DD4BF para o portal financeiro
-- **Sem alterações no DB**: tabelas `prevensul_billing` e `import_history` já existem com RLS configurado
+- Todos os componentes reutilizam PremiumCard, KpiCard, GoldButton, WtBadge, Skeleton
+- shadcn: Dialog, AlertDialog, Tabs, Select, Input, Table, Popover
+- Recharts: AreaChart (dashboard), BarChart, PieChart, LineChart
+- `formatCurrency`, `formatMonth`, `getCurrentMonth` de `@/lib/formatters`
+- CSV export com BOM UTF-8, separador `;`
+- Loading skeletons + empty states em todas as views
+- Toast sucesso/erro em todas as mutations
 
