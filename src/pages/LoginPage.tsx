@@ -40,7 +40,7 @@ export default function LoginPage() {
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
-      // Redirect handled by App.tsx auth listener
+      navigate("/dashboard", { replace: true });
     } catch (err: any) {
       toast({ title: "Erro no login", description: err.message, variant: "destructive" });
     } finally {
