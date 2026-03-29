@@ -495,6 +495,31 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
           ? "ignored"
           : isAuto ? "matched" : "pending";
 
+        let revenueId: string | null = null;
+        let expenseId: string | null = null;
+
+        if (isAuto && result.intent === "receita") {
+          const { data, error } = await supabase.from("revenues").insert({
+            source: result.category,
+            description: tx.description,
+            amount: tx.amount,
+            type: "variable",
+            reference_month: tx.date?.slice(0, 7),
+            received_at: tx.date,
+          }).select("id").single();
+          if (!error && data) { revenueId = data.id; revenues++; }
+        } else if (isAuto && result.intent === "despesa") {
+          const { data, error } = await supabase.from("expenses").insert({
+            category: result.category,
+            description: tx.description,
+            amount: tx.amount,
+            type: "variable",
+            reference_month: tx.date?.slice(0, 7),
+            paid_at: tx.date,
+          }).select("id").single();
+          if (!error && data) { expenseId = data.id; expenses++; }
+        }
+
         await supabase
           .from("bank_transactions" as any)
           .update({
@@ -504,30 +529,10 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
             category_label: result.label,
             category_confirmed: isAuto ? result.category : null,
             status: newStatus,
+            matched_revenue_id: revenueId,
+            matched_expense_id: expenseId,
           })
           .eq("id", tx.id);
-
-        if (isAuto && result.intent === "receita") {
-          await supabase.from("revenues").insert({
-            source: result.category,
-            description: tx.description,
-            amount: tx.amount,
-            type: "variable",
-            reference_month: tx.date?.slice(0, 7),
-            received_at: tx.date,
-          });
-          revenues++;
-        } else if (isAuto && result.intent === "despesa") {
-          await supabase.from("expenses").insert({
-            category: result.category,
-            description: tx.description,
-            amount: tx.amount,
-            type: "variable",
-            reference_month: tx.date?.slice(0, 7),
-            paid_at: tx.date,
-          });
-          expenses++;
-        }
         updated++;
       }
       return { updated, revenues, expenses };
@@ -542,6 +547,67 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
       );
     },
     onError: () => toast.error("Erro ao recategorizar."),
+  });
+
+  // Sync: create missing revenues/expenses for matched transactions without linked IDs
+  const syncMutation = useMutation({
+    mutationFn: async () => {
+      const { data: txs } = await supabase
+        .from("bank_transactions" as any)
+        .select("*")
+        .eq("status", "matched")
+        .is("matched_revenue_id", null)
+        .is("matched_expense_id", null);
+
+      if (!txs?.length) return { revenues: 0, expenses: 0 };
+
+      let revenues = 0, expenses = 0;
+      for (const tx of txs as any[]) {
+        const intent = tx.category_intent;
+        const category = tx.category_confirmed || tx.category_suggestion;
+        if (!category || intent === "transferencia") continue;
+
+        if (intent === "receita") {
+          const { data, error } = await supabase.from("revenues").insert({
+            source: category,
+            description: tx.description,
+            amount: tx.amount,
+            type: "variable",
+            reference_month: tx.date?.slice(0, 7),
+            received_at: tx.date,
+          }).select("id").single();
+          if (!error && data) {
+            await supabase.from("bank_transactions" as any)
+              .update({ matched_revenue_id: data.id }).eq("id", tx.id);
+            revenues++;
+          }
+        } else if (intent === "despesa") {
+          const { data, error } = await supabase.from("expenses").insert({
+            category,
+            description: tx.description,
+            amount: tx.amount,
+            type: "variable",
+            reference_month: tx.date?.slice(0, 7),
+            paid_at: tx.date,
+          }).select("id").single();
+          if (!error && data) {
+            await supabase.from("bank_transactions" as any)
+              .update({ matched_expense_id: data.id }).eq("id", tx.id);
+            expenses++;
+          }
+        }
+      }
+      return { revenues, expenses };
+    },
+    onSuccess: (r) => {
+      queryClient.invalidateQueries({ queryKey: ["bank_transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["revenues"] });
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      toast.success(
+        `🔗 Sincronizado: ${r?.revenues ?? 0} receitas e ${r?.expenses ?? 0} despesas criadas para transações já conciliadas`
+      );
+    },
+    onError: () => toast.error("Erro ao sincronizar."),
   });
 
   // Filter groups
