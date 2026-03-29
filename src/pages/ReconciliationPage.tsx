@@ -4,16 +4,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
 import { KpiCard } from "@/components/wt7/KpiCard";
 import { GoldButton } from "@/components/wt7/GoldButton";
 import { WtBadge } from "@/components/wt7/WtBadge";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useBankTransactions, useImportTransactions, useMatchTransaction, useIgnoreTransaction, useBulkConfirmSuggestions, useReconciliationSummary } from "@/hooks/useBankReconciliation";
+import { useBankTransactions, useImportTransactions, useMatchTransaction, useIgnoreTransaction, useReconciliationSummary } from "@/hooks/useBankReconciliation";
 import { parseOFX, parseCSV, type ParsedTransaction } from "@/lib/parseOFX";
-import { categorizeTransaction, CATEGORY_LABELS } from "@/lib/categorizeTransaction";
+import { categorizeTransaction, CATEGORY_LABELS, INTENT_CONFIG } from "@/lib/categorizeTransaction";
 import { formatCurrency, formatDate, formatMonth, getCurrentMonth } from "@/lib/formatters";
 import { Upload, CheckCircle2, XCircle, ArrowLeftRight, FileText, Wifi, Download } from "lucide-react";
 import { toast } from "sonner";
@@ -115,7 +114,7 @@ function ImportTab({ accounts }: { accounts: any[] }) {
       setPreview(parsed);
       if (parsed.length === 0) toast.error("Nenhuma transação encontrada no arquivo.");
     };
-    reader.readAsText(file);
+    reader.readAsText(text);
   }, []);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -126,16 +125,32 @@ function ImportTab({ accounts }: { accounts: any[] }) {
 
   const doImport = async () => {
     if (!selectedAccount) { toast.error("Selecione uma conta bancária."); return; }
-    const rows = preview.map(tx => ({
-      ...tx,
-      bank_account_id: selectedAccount,
-      category_suggestion: categorizeTransaction(tx.description, tx.type),
-      status: "pending",
-    }));
+    
+    const accountNames = accounts.map((a: any) => a.bank_name).filter(Boolean);
+    
+    const rows = preview.map(tx => {
+      const result = categorizeTransaction(tx.description, tx.type, tx.amount, accountNames);
+      return {
+        ...tx,
+        bank_account_id: selectedAccount,
+        category_suggestion: result.category,
+        category_intent: result.intent,
+        category_confidence: result.confidence,
+        category_label: result.label,
+        status: result.confidence === "high" && result.intent !== "duvida"
+          ? "auto_categorized"
+          : "pending",
+      };
+    });
+
     try {
       await importMutation.mutateAsync(rows);
-      const categorized = rows.filter(r => r.category_suggestion !== "outros" && r.category_suggestion !== "outros_receita").length;
-      toast.success(`${rows.length} transações importadas. ${categorized} categorizadas automaticamente.`);
+      const transfers = rows.filter(r => r.category_intent === "transferencia").length;
+      const autoOk = rows.filter(r => r.status === "auto_categorized" && r.category_intent !== "transferencia").length;
+      const doubts = rows.filter(r => r.category_intent === "duvida").length;
+      toast.success(
+        `${rows.length} transações importadas: ${autoOk} categorizadas, ${transfers} transferências, ${doubts} com dúvidas`
+      );
       setPreview([]);
       setFileName("");
     } catch (err: any) {
@@ -289,33 +304,107 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
   month: string; accounts: any[]; statusFilter: string; setStatusFilter: (v: string) => void; accountFilter: string; setAccountFilter: (v: string) => void;
 }) {
   const summary = useReconciliationSummary(month);
-  const filters: any = { month };
-  if (statusFilter !== "all") filters.status = statusFilter;
-  if (accountFilter !== "all") filters.accountId = accountFilter;
-  const { data: transactions = [], isLoading } = useBankTransactions(filters);
+  const { data: allTransactions = [], isLoading } = useBankTransactions({ month });
   const matchMutation = useMatchTransaction();
   const ignoreMutation = useIgnoreTransaction();
-  const bulkMutation = useBulkConfirmSuggestions();
 
-  const pendingWithSuggestion = transactions.filter((t: any) => t.status === "pending" && t.category_suggestion);
+  // Filter groups
+  const doubts = allTransactions.filter((t: any) => t.category_intent === "duvida" && t.status === "pending");
+  const transfers = allTransactions.filter((t: any) => t.category_intent === "transferencia");
+  const autoCategorized = allTransactions.filter((t: any) => t.status === "auto_categorized");
+  const matched = allTransactions.filter((t: any) => t.status === "matched");
 
-  const handleBulkConfirm = async () => {
-    const items = pendingWithSuggestion.map((t: any) => ({ id: t.id, category: t.category_suggestion }));
+  const classifyAs = async (id: string, intent: "receita" | "despesa" | "transferencia", category: string) => {
+    const tx = allTransactions.find((t: any) => t.id === id);
+    if (!tx) return;
+
     try {
-      await bulkMutation.mutateAsync(items);
-      toast.success(`${items.length} transações confirmadas.`);
-    } catch { toast.error("Erro ao confirmar em lote."); }
+      if (intent === "transferencia") {
+        await ignoreMutation.mutateAsync(id);
+        toast.info("Transferência entre contas — ignorada.");
+        return;
+      }
+
+      await matchMutation.mutateAsync({ id, category, intent });
+
+      if (intent === "receita") {
+        await supabase.from("revenues").insert({
+          source: category,
+          description: tx.description,
+          amount: tx.amount,
+          type: "variable",
+          reference_month: tx.date?.slice(0, 7),
+          received_at: tx.date,
+        });
+        toast.success(`Receita criada: ${formatCurrency(tx.amount)} em ${CATEGORY_LABELS[category] || category}`);
+      }
+
+      if (intent === "despesa") {
+        await supabase.from("expenses").insert({
+          category,
+          description: tx.description,
+          amount: tx.amount,
+          type: "variable",
+          reference_month: tx.date?.slice(0, 7),
+          paid_at: tx.date,
+        });
+        toast.success(`Despesa criada: ${formatCurrency(tx.amount)} em ${CATEGORY_LABELS[category] || category}`);
+      }
+    } catch {
+      toast.error("Erro ao classificar transação.");
+    }
+  };
+
+  const confirmAllAuto = async () => {
+    let revenues = 0;
+    let expenses = 0;
+
+    try {
+      for (const tx of autoCategorized) {
+        const intent = tx.category_intent as string;
+        const category = tx.category_suggestion as string;
+
+        await matchMutation.mutateAsync({ id: tx.id, category, intent });
+
+        if (intent === "receita") {
+          await supabase.from("revenues").insert({
+            source: category,
+            description: tx.description,
+            amount: tx.amount,
+            type: "variable",
+            reference_month: tx.date?.slice(0, 7),
+            received_at: tx.date,
+          });
+          revenues++;
+        } else if (intent === "despesa") {
+          await supabase.from("expenses").insert({
+            category,
+            description: tx.description,
+            amount: tx.amount,
+            type: "variable",
+            reference_month: tx.date?.slice(0, 7),
+            paid_at: tx.date,
+          });
+          expenses++;
+        }
+      }
+      toast.success(`${revenues} receitas e ${expenses} despesas criadas automaticamente!`);
+    } catch {
+      toast.error("Erro ao confirmar em lote.");
+    }
   };
 
   return (
     <div className="space-y-6">
+      {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard label="Entradas" value={summary.totalCredits} color="green" />
-        <KpiCard label="Saídas" value={summary.totalDebits} color="red" />
-        <KpiCard label="Pendentes" value={summary.pending} color="gold" compact />
-        <KpiCard label="Conciliados" value={summary.matched} color="cyan" compact />
+        <KpiCard label="Com Dúvidas" value={summary.doubts} color="gold" compact />
+        <KpiCard label="Auto-categorizado" value={summary.autoCategorized} color="cyan" compact />
+        <KpiCard label="Transferências" value={summary.transfers} color="gray" compact />
+        <KpiCard label="Conciliados" value={summary.matched} color="green" compact />
       </div>
 
+      {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-40" style={{ background: "#0D1318", borderColor: "#1A2535", color: "#F0F4F8" }}>
@@ -324,6 +413,7 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
           <SelectContent style={{ background: "#0D1318", borderColor: "#1A2535" }}>
             <SelectItem value="all" style={{ color: "#F0F4F8" }}>Todos</SelectItem>
             <SelectItem value="pending" style={{ color: "#F0F4F8" }}>Pendentes</SelectItem>
+            <SelectItem value="auto_categorized" style={{ color: "#F0F4F8" }}>Auto-categorizado</SelectItem>
             <SelectItem value="matched" style={{ color: "#F0F4F8" }}>Conciliados</SelectItem>
             <SelectItem value="ignored" style={{ color: "#F0F4F8" }}>Ignorados</SelectItem>
           </SelectContent>
@@ -339,89 +429,222 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
             ))}
           </SelectContent>
         </Select>
-        {pendingWithSuggestion.length > 0 && (
-          <GoldButton onClick={handleBulkConfirm} disabled={bulkMutation.isPending}>
-            <CheckCircle2 className="w-4 h-4 mr-1" />
-            Confirmar {pendingWithSuggestion.length} sugestões
-          </GoldButton>
-        )}
       </div>
 
-      <PremiumCard>
-        {isLoading ? (
-          <div className="space-y-3">
-            {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-12 w-full" style={{ background: "#1A2535" }} />)}
-          </div>
-        ) : transactions.length === 0 ? (
+      {isLoading ? (
+        <div className="space-y-3">
+          {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-12 w-full" style={{ background: "#1A2535" }} />)}
+        </div>
+      ) : allTransactions.length === 0 ? (
+        <PremiumCard>
           <div className="text-center py-12">
             <ArrowLeftRight className="w-12 h-12 mx-auto mb-3" style={{ color: "#1A2535" }} />
             <p style={{ color: "#94A3B8" }}>Nenhuma transação para {formatMonth(month)}</p>
             <p className="text-sm mt-1" style={{ color: "#4A5568" }}>Importe um extrato na aba "Importar"</p>
           </div>
-        ) : (
-          <div className="overflow-auto">
-            <Table>
-              <TableHeader>
-                <TableRow style={{ borderColor: "#1A2535" }}>
-                  <TableHead style={{ color: "#94A3B8" }}>Data</TableHead>
-                  <TableHead style={{ color: "#94A3B8" }}>Descrição</TableHead>
-                  <TableHead style={{ color: "#94A3B8" }}>Categoria</TableHead>
-                  <TableHead style={{ color: "#94A3B8" }}>Tipo</TableHead>
-                  <TableHead className="text-right" style={{ color: "#94A3B8" }}>Valor</TableHead>
-                  <TableHead style={{ color: "#94A3B8" }}>Status</TableHead>
-                  <TableHead style={{ color: "#94A3B8" }}>Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {transactions.map((tx: any) => (
-                  <TableRow key={tx.id} style={{ borderColor: "#1A2535" }}>
-                    <TableCell style={{ color: "#F0F4F8" }}>{formatDate(tx.date)}</TableCell>
-                    <TableCell className="max-w-[250px] truncate" style={{ color: "#F0F4F8" }}>{tx.description}</TableCell>
-                    <TableCell>
-                      <span className="text-xs font-mono" style={{ color: "#E8C97A" }}>
-                        {CATEGORY_LABELS[tx.category_confirmed || tx.category_suggestion] || tx.category_suggestion || "—"}
+        </PremiumCard>
+      ) : (
+        <>
+          {/* DOUBTS SECTION */}
+          {doubts.length > 0 && (
+            <PremiumCard glowColor="rgba(245,158,11,0.3)">
+              <div className="flex items-center gap-2 mb-4">
+                <span className="text-lg">🤔</span>
+                <h3 className="font-display font-bold" style={{ color: "#F59E0B" }}>
+                  {doubts.length} transações precisam da sua atenção
+                </h3>
+              </div>
+              <div className="space-y-3">
+                {doubts.map((tx: any) => (
+                  <div key={tx.id} className="rounded-xl p-4" style={{ background: "#0D1318", border: "1px solid rgba(245,158,11,0.3)" }}>
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <p className="text-xs font-mono" style={{ color: "#94A3B8" }}>{formatDate(tx.date)}</p>
+                        <p className="text-sm font-medium mt-1" style={{ color: "#F0F4F8" }}>{tx.description}</p>
+                      </div>
+                      <span className="font-mono font-bold text-lg" style={{ color: tx.type === "credit" ? "#10B981" : "#F43F5E" }}>
+                        {tx.type === "credit" ? "+" : "-"}{formatCurrency(tx.amount)}
                       </span>
-                    </TableCell>
-                    <TableCell>
-                      <WtBadge variant={tx.type === "credit" ? "green" : "red"}>
-                        {tx.type === "credit" ? "Crédito" : "Débito"}
-                      </WtBadge>
-                    </TableCell>
-                    <TableCell className="text-right font-mono" style={{ color: tx.type === "credit" ? "#10B981" : "#F43F5E" }}>
-                      {formatCurrency(tx.amount)}
-                    </TableCell>
-                    <TableCell>
-                      <WtBadge variant={tx.status === "matched" ? "green" : tx.status === "ignored" ? "gray" : "gold"}>
-                        {tx.status === "matched" ? "Conciliado" : tx.status === "ignored" ? "Ignorado" : "Pendente"}
-                      </WtBadge>
-                    </TableCell>
-                    <TableCell>
-                      {tx.status === "pending" && (
-                        <div className="flex gap-1">
-                          <button
-                            onClick={() => matchMutation.mutate({ id: tx.id, category: tx.category_suggestion || "outros" })}
-                            className="p-1 rounded hover:bg-green-500/10"
-                            title="Confirmar"
-                          >
-                            <CheckCircle2 className="w-4 h-4" style={{ color: "#10B981" }} />
+                    </div>
+                    <p className="text-xs mb-3" style={{ color: "#94A3B8" }}>Esta transação é:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {tx.type === "credit" ? (
+                        <>
+                          <button onClick={() => classifyAs(tx.id, "receita", "kitnets")}
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-90"
+                            style={{ background: "rgba(201,168,76,0.15)", color: "#E8C97A", border: "1px solid rgba(201,168,76,0.3)" }}>
+                            🏘️ Aluguel/Kitnets
                           </button>
-                          <button
-                            onClick={() => ignoreMutation.mutate(tx.id)}
-                            className="p-1 rounded hover:bg-red-500/10"
-                            title="Ignorar"
-                          >
-                            <XCircle className="w-4 h-4" style={{ color: "#F43F5E" }} />
+                          <button onClick={() => classifyAs(tx.id, "receita", "comissao_prevensul")}
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-90"
+                            style={{ background: "rgba(45,212,191,0.15)", color: "#2DD4BF", border: "1px solid rgba(45,212,191,0.3)" }}>
+                            💼 Comissão
                           </button>
-                        </div>
+                          <button onClick={() => classifyAs(tx.id, "receita", "solar")}
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-90"
+                            style={{ background: "rgba(16,185,129,0.15)", color: "#10B981", border: "1px solid rgba(16,185,129,0.3)" }}>
+                            ☀️ Solar
+                          </button>
+                          <button onClick={() => classifyAs(tx.id, "receita", "outros_receita")}
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-90"
+                            style={{ background: "rgba(16,185,129,0.15)", color: "#10B981", border: "1px solid rgba(16,185,129,0.3)" }}>
+                            💰 Outra Receita
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button onClick={() => classifyAs(tx.id, "despesa", "alimentacao")}
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-90"
+                            style={{ background: "rgba(245,158,11,0.15)", color: "#F59E0B", border: "1px solid rgba(245,158,11,0.3)" }}>
+                            🍽️ Alimentação
+                          </button>
+                          <button onClick={() => classifyAs(tx.id, "despesa", "assinaturas")}
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-90"
+                            style={{ background: "rgba(139,92,246,0.15)", color: "#8B5CF6", border: "1px solid rgba(139,92,246,0.3)" }}>
+                            📱 Assinaturas
+                          </button>
+                          <button onClick={() => classifyAs(tx.id, "despesa", "obras")}
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-90"
+                            style={{ background: "rgba(244,63,94,0.15)", color: "#F43F5E", border: "1px solid rgba(244,63,94,0.3)" }}>
+                            🏗️ Obras
+                          </button>
+                          <button onClick={() => classifyAs(tx.id, "despesa", "outros")}
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-90"
+                            style={{ background: "rgba(244,63,94,0.15)", color: "#F43F5E", border: "1px solid rgba(244,63,94,0.3)" }}>
+                            📦 Outra Despesa
+                          </button>
+                        </>
                       )}
-                    </TableCell>
-                  </TableRow>
+                      <button onClick={() => classifyAs(tx.id, "transferencia", "transferencia")}
+                        className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-90"
+                        style={{ background: "rgba(148,163,184,0.15)", color: "#94A3B8", border: "1px solid rgba(148,163,184,0.3)" }}>
+                        🔄 Transferência
+                      </button>
+                      <button onClick={() => ignoreMutation.mutate(tx.id)}
+                        className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-90"
+                        style={{ background: "rgba(74,85,104,0.15)", color: "#4A5568", border: "1px solid rgba(74,85,104,0.3)" }}>
+                        Ignorar
+                      </button>
+                    </div>
+                  </div>
                 ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-      </PremiumCard>
+              </div>
+            </PremiumCard>
+          )}
+
+          {/* TRANSFERS INFO */}
+          {transfers.length > 0 && (
+            <div className="rounded-xl px-4 py-3 flex items-center gap-3"
+              style={{ background: "rgba(148,163,184,0.08)", border: "1px solid rgba(148,163,184,0.2)" }}>
+              <span>🔄</span>
+              <p className="text-sm" style={{ color: "#94A3B8" }}>
+                <strong style={{ color: "#F0F4F8" }}>{transfers.length} transferências entre contas</strong> detectadas e ignoradas automaticamente.
+              </p>
+            </div>
+          )}
+
+          {/* AUTO-CATEGORIZED */}
+          {autoCategorized.length > 0 && (
+            <div className="rounded-xl px-4 py-3 flex items-center justify-between"
+              style={{ background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.2)" }}>
+              <div className="flex items-center gap-3">
+                <span>✅</span>
+                <p className="text-sm" style={{ color: "#94A3B8" }}>
+                  <strong style={{ color: "#10B981" }}>{autoCategorized.length} transações</strong> categorizadas automaticamente com alta confiança.
+                </p>
+              </div>
+              <button
+                onClick={confirmAllAuto}
+                className="text-xs px-3 py-1.5 rounded-lg font-medium transition-all hover:opacity-90"
+                style={{ background: "rgba(16,185,129,0.2)", color: "#10B981", border: "1px solid rgba(16,185,129,0.3)" }}>
+                Confirmar todas
+              </button>
+            </div>
+          )}
+
+          {/* MATCHED / ALL TRANSACTIONS TABLE */}
+          <PremiumCard>
+            <h3 className="font-display font-semibold mb-4" style={{ color: "#F0F4F8" }}>
+              Todas as transações ({allTransactions.length})
+            </h3>
+            <div className="overflow-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow style={{ borderColor: "#1A2535" }}>
+                    <TableHead style={{ color: "#94A3B8" }}>Data</TableHead>
+                    <TableHead style={{ color: "#94A3B8" }}>Descrição</TableHead>
+                    <TableHead style={{ color: "#94A3B8" }}>Categoria</TableHead>
+                    <TableHead style={{ color: "#94A3B8" }}>Intent</TableHead>
+                    <TableHead style={{ color: "#94A3B8" }}>Tipo</TableHead>
+                    <TableHead className="text-right" style={{ color: "#94A3B8" }}>Valor</TableHead>
+                    <TableHead style={{ color: "#94A3B8" }}>Status</TableHead>
+                    <TableHead style={{ color: "#94A3B8" }}>Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {allTransactions.map((tx: any) => {
+                    const intentKey = tx.category_intent as keyof typeof INTENT_CONFIG;
+                    const intentCfg = INTENT_CONFIG[intentKey];
+                    return (
+                      <TableRow key={tx.id} style={{ borderColor: "#1A2535" }}>
+                        <TableCell style={{ color: "#F0F4F8" }}>{formatDate(tx.date)}</TableCell>
+                        <TableCell className="max-w-[250px] truncate" style={{ color: "#F0F4F8" }}>{tx.description}</TableCell>
+                        <TableCell>
+                          <span className="text-xs font-mono" style={{ color: "#E8C97A" }}>
+                            {CATEGORY_LABELS[tx.category_confirmed || tx.category_suggestion] || tx.category_label || "—"}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          {intentCfg && <WtBadge variant={intentCfg.badge}>{intentCfg.label}</WtBadge>}
+                        </TableCell>
+                        <TableCell>
+                          <WtBadge variant={tx.type === "credit" ? "green" : "red"}>
+                            {tx.type === "credit" ? "Crédito" : "Débito"}
+                          </WtBadge>
+                        </TableCell>
+                        <TableCell className="text-right font-mono" style={{ color: tx.type === "credit" ? "#10B981" : "#F43F5E" }}>
+                          {formatCurrency(tx.amount)}
+                        </TableCell>
+                        <TableCell>
+                          <WtBadge variant={
+                            tx.status === "matched" ? "green" :
+                            tx.status === "ignored" ? "gray" :
+                            tx.status === "auto_categorized" ? "cyan" : "gold"
+                          }>
+                            {tx.status === "matched" ? "Conciliado" :
+                             tx.status === "ignored" ? "Ignorado" :
+                             tx.status === "auto_categorized" ? "Auto" : "Pendente"}
+                          </WtBadge>
+                        </TableCell>
+                        <TableCell>
+                          {(tx.status === "pending" || tx.status === "auto_categorized") && (
+                            <div className="flex gap-1">
+                              <button
+                                onClick={() => matchMutation.mutate({ id: tx.id, category: tx.category_suggestion || "outros", intent: tx.category_intent })}
+                                className="p-1 rounded hover:bg-green-500/10"
+                                title="Confirmar"
+                              >
+                                <CheckCircle2 className="w-4 h-4" style={{ color: "#10B981" }} />
+                              </button>
+                              <button
+                                onClick={() => ignoreMutation.mutate(tx.id)}
+                                className="p-1 rounded hover:bg-red-500/10"
+                                title="Ignorar"
+                              >
+                                <XCircle className="w-4 h-4" style={{ color: "#F43F5E" }} />
+                              </button>
+                            </div>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          </PremiumCard>
+        </>
+      )}
     </div>
   );
 }
@@ -430,7 +653,6 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
 function HistoryTab({ month, accounts }: { month: string; accounts: any[] }) {
   const { data: transactions = [], isLoading } = useBankTransactions({ month });
 
-  // Weekly bar chart data
   const weeklyData = [1, 2, 3, 4, 5].map(week => {
     const weekTxs = transactions.filter((t: any) => {
       const day = new Date(t.date).getDate();
@@ -444,7 +666,6 @@ function HistoryTab({ month, accounts }: { month: string; accounts: any[] }) {
     };
   }).filter(w => w.entradas > 0 || w.saidas > 0);
 
-  // Pie chart by category
   const categoryMap: Record<string, number> = {};
   transactions.filter((t: any) => t.type === "debit").forEach((t: any) => {
     const cat = t.category_confirmed || t.category_suggestion || "outros";
@@ -457,13 +678,14 @@ function HistoryTab({ month, accounts }: { month: string; accounts: any[] }) {
 
   const exportCSV = () => {
     const bom = "\uFEFF";
-    const header = "Data;Banco;Descrição;Categoria;Tipo;Valor;Status;Origem\n";
+    const header = "Data;Banco;Descrição;Categoria;Intent;Tipo;Valor;Status;Origem\n";
     const rows = transactions.map((t: any) =>
       [
         formatDate(t.date),
         (t as any).bank_accounts?.bank_name || "",
         `"${t.description}"`,
         CATEGORY_LABELS[t.category_confirmed || t.category_suggestion] || "",
+        t.category_intent || "",
         t.type === "credit" ? "Crédito" : "Débito",
         t.amount?.toFixed(2).replace(".", ","),
         t.status,
@@ -574,8 +796,8 @@ function HistoryTab({ month, accounts }: { month: string; accounts: any[] }) {
                         {formatCurrency(tx.amount)}
                       </TableCell>
                       <TableCell>
-                        <WtBadge variant={tx.status === "matched" ? "green" : tx.status === "ignored" ? "gray" : "gold"}>
-                          {tx.status === "matched" ? "✓" : tx.status === "ignored" ? "—" : "⏳"}
+                        <WtBadge variant={tx.status === "matched" ? "green" : tx.status === "ignored" ? "gray" : tx.status === "auto_categorized" ? "cyan" : "gold"}>
+                          {tx.status === "matched" ? "✓" : tx.status === "ignored" ? "—" : tx.status === "auto_categorized" ? "Auto" : "⏳"}
                         </WtBadge>
                       </TableCell>
                       <TableCell className="text-xs uppercase font-mono" style={{ color: "#4A5568" }}>{tx.source}</TableCell>
