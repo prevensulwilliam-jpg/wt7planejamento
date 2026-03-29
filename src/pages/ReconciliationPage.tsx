@@ -808,8 +808,9 @@ function DoubtCard({ tx, classifyAs, ignoreTransaction }: {
         <div>
           <p className="text-xs font-mono" style={{ color: "#94A3B8" }}>{formatDate(tx.date)}</p>
           <p className="text-sm font-medium mt-0.5" style={{ color: "#F0F4F8" }}>{tx.description}</p>
-        </div>
-        <span className="font-mono font-bold text-base ml-4 flex-shrink-0"
+          <p className="text-xs mt-0.5" style={{ color: "#64748B" }}>
+            🏦 {tx.bank_accounts?.bank_name ?? "Banco não identificado"}
+          </p>
           style={{ color: tx.type === "credit" ? "#10B981" : "#F43F5E" }}>
           {tx.type === "credit" ? "+" : "-"}{formatCurrency(tx.amount)}
         </span>
