@@ -247,17 +247,60 @@ function ImportTab({ accounts }: { accounts: any[] }) {
       category_intent: tx.category_intent,
       category_confidence: tx.category_confidence,
       category_label: tx.category_label,
-      status: tx.category_intent === "transferencia" ? "ignored" : tx.status,
+      status: tx.category_intent === "transferencia"
+        ? "ignored"
+        : tx.status === "auto_categorized"
+        ? "matched"
+        : "pending",
+      category_confirmed: tx.status === "auto_categorized" ? tx.category_suggestion : null,
       raw_data: null,
     }));
 
     try {
-      const result = await importMutation.mutateAsync(rows);
-      const transfers = rows.filter(r => r.category_intent === "transferencia").length;
-      const autoOk = rows.filter(r => r.status === "auto_categorized").length;
-      const doubts = rows.filter(r => r.category_intent === "duvida").length;
+      await importMutation.mutateAsync(rows);
+
+      // Auto-create revenues/expenses for confirmed rows
+      const autoRows = rows.filter(r => r.status === "matched" && r.category_intent !== "transferencia");
+      let revenues = 0;
+      let expenses = 0;
+
+      for (const tx of autoRows) {
+        if (tx.category_intent === "receita") {
+          await supabase.from("revenues").insert({
+            source: tx.category_suggestion,
+            description: tx.description,
+            amount: tx.amount,
+            type: "variable",
+            reference_month: tx.date?.slice(0, 7),
+            received_at: tx.date,
+          });
+          revenues++;
+        } else if (tx.category_intent === "despesa") {
+          await supabase.from("expenses").insert({
+            category: tx.category_suggestion,
+            description: tx.description,
+            amount: tx.amount,
+            type: "variable",
+            reference_month: tx.date?.slice(0, 7),
+            paid_at: tx.date,
+          });
+          expenses++;
+        }
+        await recordClassification(
+          tx.description,
+          tx.category_suggestion,
+          tx.category_intent,
+          tx.category_label ?? tx.category_suggestion
+        );
+      }
+
+      const transfers = rows.filter(r => r.status === "ignored").length;
+      const doubts = rows.filter(r => r.status === "pending").length;
+
       toast.success(
-        `✅ Importado! ${autoOk} prontas para confirmar · ${doubts} com dúvidas · ${transfers} transferências ignoradas`
+        `✅ ${revenues} receitas e ${expenses} despesas criadas automaticamente · ` +
+        `${transfers} transferências ignoradas · ` +
+        `${doubts > 0 ? `${doubts} aguardam sua classificação` : "nenhuma dúvida"}`
       );
       setPreview([]);
       setFileName("");
@@ -437,20 +480,20 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
       const { data: txs } = await supabase
         .from("bank_transactions" as any)
         .select("*")
-        .in("status", ["pending", "matched", "auto_categorized"]);
+        .neq("status", "ignored")
+        .neq("status", "matched");
 
-      if (!txs?.length) return { updated: 0 };
+      if (!txs?.length) return { updated: 0, revenues: 0, expenses: 0 };
 
-      let updated = 0;
+      let updated = 0, revenues = 0, expenses = 0;
       for (const tx of txs as any[]) {
         const result = categorizeTransaction(
           tx.description, tx.type, tx.amount, []
         );
-        const newStatus = result.confidence === "high" && result.intent !== "duvida"
-          ? "auto_categorized"
-          : result.intent === "transferencia"
+        const isAuto = result.confidence === "high" && result.intent !== "duvida";
+        const newStatus = result.intent === "transferencia"
           ? "ignored"
-          : "pending";
+          : isAuto ? "matched" : "pending";
 
         await supabase
           .from("bank_transactions" as any)
@@ -459,16 +502,44 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
             category_intent: result.intent,
             category_confidence: result.confidence,
             category_label: result.label,
+            category_confirmed: isAuto ? result.category : null,
             status: newStatus,
           })
           .eq("id", tx.id);
+
+        if (isAuto && result.intent === "receita") {
+          await supabase.from("revenues").insert({
+            source: result.category,
+            description: tx.description,
+            amount: tx.amount,
+            type: "variable",
+            reference_month: tx.date?.slice(0, 7),
+            received_at: tx.date,
+          });
+          revenues++;
+        } else if (isAuto && result.intent === "despesa") {
+          await supabase.from("expenses").insert({
+            category: result.category,
+            description: tx.description,
+            amount: tx.amount,
+            type: "variable",
+            reference_month: tx.date?.slice(0, 7),
+            paid_at: tx.date,
+          });
+          expenses++;
+        }
         updated++;
       }
-      return { updated };
+      return { updated, revenues, expenses };
     },
-    onSuccess: (result) => {
+    onSuccess: (r) => {
       queryClient.invalidateQueries({ queryKey: ["bank_transactions"] });
-      toast.success(`${result?.updated} transações recategorizadas!`);
+      queryClient.invalidateQueries({ queryKey: ["revenues"] });
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      toast.success(
+        `${r?.revenues ?? 0} receitas e ${r?.expenses ?? 0} despesas criadas · ` +
+        `${r?.updated ?? 0} transações processadas`
+      );
     },
     onError: () => toast.error("Erro ao recategorizar."),
   });
