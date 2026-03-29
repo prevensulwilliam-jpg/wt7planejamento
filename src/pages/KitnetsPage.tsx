@@ -1,0 +1,381 @@
+import { useState } from "react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
+import { GoldButton } from "@/components/wt7/GoldButton";
+import { PremiumCard } from "@/components/wt7/PremiumCard";
+import { KpiCard } from "@/components/wt7/KpiCard";
+import { WtBadge } from "@/components/wt7/WtBadge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useKitnets, useKitnetEntries, useKitnetSummary, useUpdateKitnet, useCreateKitnetEntry } from "@/hooks/useKitnets";
+import { formatCurrency, formatMonth, getCurrentMonth, formatDate } from "@/lib/formatters";
+import { useToast } from "@/hooks/use-toast";
+import { Pencil, Plus, Download } from "lucide-react";
+
+const statusLabels: Record<string, { label: string; variant: "green" | "gold" | "red" }> = {
+  occupied: { label: "Ocupada", variant: "green" },
+  maintenance: { label: "Manutenção", variant: "gold" },
+  vacant: { label: "Vaga", variant: "red" },
+};
+
+export default function KitnetsPage() {
+  const [month, setMonth] = useState(getCurrentMonth());
+
+  return (
+    <div className="space-y-6">
+      <h1 className="font-display font-bold text-2xl text-foreground">Kitnets</h1>
+      <Tabs defaultValue="overview">
+        <TabsList className="bg-card border border-border">
+          <TabsTrigger value="overview">Visão Geral</TabsTrigger>
+          <TabsTrigger value="entries">Lançamentos</TabsTrigger>
+          <TabsTrigger value="report">Relatório Mensal</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview"><OverviewTab month={month} /></TabsContent>
+        <TabsContent value="entries"><EntriesTab month={month} setMonth={setMonth} /></TabsContent>
+        <TabsContent value="report"><ReportTab month={month} setMonth={setMonth} /></TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+// ─── Overview Tab ───
+function OverviewTab({ month }: { month: string }) {
+  const { data: kitnets, isLoading } = useKitnets();
+  const summary = useKitnetSummary(month);
+  const [editing, setEditing] = useState<any>(null);
+  const updateMut = useUpdateKitnet();
+  const { toast } = useToast();
+
+  const rwt02 = (kitnets ?? []).filter(k => k.residencial_code === "RWT02");
+  const rwt03 = (kitnets ?? []).filter(k => k.residencial_code === "RWT03");
+
+  const handleSaveEdit = async () => {
+    try {
+      await updateMut.mutateAsync({
+        id: editing.id,
+        tenant_name: editing.tenant_name,
+        rent_value: Number(editing.rent_value),
+        status: editing.status,
+      });
+      toast({ title: "Kitnet atualizada!" });
+      setEditing(null);
+    } catch (e: any) {
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4 mt-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {[1,2,3,4].map(i => <Skeleton key={i} className="h-28 rounded-2xl" />)}
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {[1,2,3,4,5,6,7,8].map(i => <Skeleton key={i} className="h-32 rounded-2xl" />)}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 mt-4">
+      {/* KPIs */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiCard label="Total Recebido" value={summary.totalReceived} color="gold" compact />
+        <KpiCard label="Ocupadas" value={summary.occupied} color="green" compact />
+        <KpiCard label="Manutenção" value={summary.maintenance} color="cyan" compact />
+        <KpiCard label="Vacâncias" value={summary.vacant} color="red" compact />
+      </div>
+
+      {/* RWT02 */}
+      <div>
+        <h2 className="font-display font-bold text-lg text-foreground mb-3">RWT02 — Rua Amauri de Souza, 08</h2>
+        <KitnetGrid kitnets={rwt02} onEdit={setEditing} />
+      </div>
+
+      {/* RWT03 */}
+      <div>
+        <h2 className="font-display font-bold text-lg text-foreground mb-3">RWT03 — Rua Manoel Corrêa, 125</h2>
+        <KitnetGrid kitnets={rwt03} onEdit={setEditing} />
+      </div>
+
+      {/* Edit Dialog */}
+      <Dialog open={!!editing} onOpenChange={o => !o && setEditing(null)}>
+        <DialogContent className="bg-card border-border">
+          <DialogHeader><DialogTitle className="text-foreground">Editar Kitnet {editing?.code}</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Inquilino</label>
+              <Input value={editing?.tenant_name ?? ""} onChange={e => setEditing({ ...editing, tenant_name: e.target.value })} className="bg-background border-border text-foreground" />
+            </div>
+            <div>
+              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Valor Aluguel</label>
+              <Input type="number" value={editing?.rent_value ?? ""} onChange={e => setEditing({ ...editing, rent_value: e.target.value })} className="bg-background border-border text-foreground" />
+            </div>
+            <div>
+              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Status</label>
+              <Select value={editing?.status ?? "occupied"} onValueChange={v => setEditing({ ...editing, status: v })}>
+                <SelectTrigger className="bg-background border-border text-foreground"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="occupied">Ocupada</SelectItem>
+                  <SelectItem value="maintenance">Manutenção</SelectItem>
+                  <SelectItem value="vacant">Vaga</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <GoldButton onClick={handleSaveEdit} disabled={updateMut.isPending}>
+              {updateMut.isPending ? "Salvando..." : "Salvar"}
+            </GoldButton>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function KitnetGrid({ kitnets, onEdit }: { kitnets: any[]; onEdit: (k: any) => void }) {
+  if (!kitnets.length) {
+    return <p className="text-muted-foreground text-sm">Nenhuma kitnet cadastrada.</p>;
+  }
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+      {kitnets.map(k => {
+        const s = statusLabels[k.status ?? "vacant"] ?? statusLabels.vacant;
+        return (
+          <PremiumCard key={k.id} className="relative p-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="font-mono text-sm font-medium text-foreground">{k.code}</span>
+              <WtBadge variant={s.variant}>{s.label}</WtBadge>
+            </div>
+            <p className="text-sm text-muted-foreground truncate">{k.tenant_name || "—"}</p>
+            <p className="font-mono text-lg text-foreground mt-1">{formatCurrency(k.rent_value ?? 0)}</p>
+            <button onClick={() => onEdit(k)} className="absolute top-3 right-3 text-muted-foreground hover:text-foreground transition-colors">
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+          </PremiumCard>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Entries Tab ───
+function EntriesTab({ month, setMonth }: { month: string; setMonth: (m: string) => void }) {
+  const { data: entries, isLoading } = useKitnetEntries(month);
+  const { data: kitnets } = useKitnets();
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ kitnet_id: "", rent_gross: "", reference_month: month, period_start: "", period_end: "" });
+  const createMut = useCreateKitnetEntry();
+  const { toast } = useToast();
+
+  const handleCreate = async () => {
+    try {
+      const { data: { user } } = await (await import("@/integrations/supabase/client")).supabase.auth.getUser();
+      await createMut.mutateAsync({
+        kitnet_id: form.kitnet_id,
+        rent_gross: Number(form.rent_gross),
+        reference_month: form.reference_month,
+        period_start: form.period_start || null,
+        period_end: form.period_end || null,
+        created_by: user?.id,
+      });
+      toast({ title: "Lançamento criado!" });
+      setOpen(false);
+      setForm({ kitnet_id: "", rent_gross: "", reference_month: month, period_start: "", period_end: "" });
+    } catch (e: any) {
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    }
+  };
+
+  return (
+    <div className="space-y-4 mt-4">
+      <div className="flex items-center justify-between">
+        <Input type="month" value={month} onChange={e => setMonth(e.target.value)} className="w-44 bg-background border-border text-foreground font-mono" />
+        <GoldButton onClick={() => setOpen(true)}><Plus className="w-4 h-4 mr-1" />Novo Lançamento</GoldButton>
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-12 rounded" />)}</div>
+      ) : !entries?.length ? (
+        <PremiumCard className="text-center py-12">
+          <p className="text-muted-foreground">Nenhum lançamento em {formatMonth(month)}</p>
+        </PremiumCard>
+      ) : (
+        <div className="rounded-xl overflow-hidden border border-border">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-border">
+                <TableHead className="text-muted-foreground">Kitnet</TableHead>
+                <TableHead className="text-muted-foreground">Inquilino</TableHead>
+                <TableHead className="text-muted-foreground">Aluguel Bruto</TableHead>
+                <TableHead className="text-muted-foreground">Taxa ADM</TableHead>
+                <TableHead className="text-muted-foreground">Total Líquido</TableHead>
+                <TableHead className="text-muted-foreground">Período</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {entries.map((e: any) => (
+                <TableRow key={e.id} className="border-border">
+                  <TableCell className="font-mono text-foreground">{e.kitnets?.code ?? "—"}</TableCell>
+                  <TableCell className="text-muted-foreground">{e.kitnets?.tenant_name ?? "—"}</TableCell>
+                  <TableCell className="font-mono text-foreground">{formatCurrency(e.rent_gross ?? 0)}</TableCell>
+                  <TableCell className="font-mono text-foreground">{formatCurrency(e.adm_fee ?? 0)}</TableCell>
+                  <TableCell className="font-mono text-foreground">{formatCurrency(e.total_liquid ?? 0)}</TableCell>
+                  <TableCell className="text-muted-foreground text-sm">
+                    {e.period_start ? formatDate(e.period_start) : "—"} → {e.period_end ? formatDate(e.period_end) : "—"}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      {/* New Entry Dialog */}
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="bg-card border-border">
+          <DialogHeader><DialogTitle className="text-foreground">Novo Lançamento</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Kitnet</label>
+              <Select value={form.kitnet_id} onValueChange={v => setForm({ ...form, kitnet_id: v })}>
+                <SelectTrigger className="bg-background border-border text-foreground"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                <SelectContent>
+                  {(kitnets ?? []).map(k => (
+                    <SelectItem key={k.id} value={k.id}>{k.code} — {k.tenant_name || "Vaga"}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Aluguel Bruto (R$)</label>
+              <Input type="number" value={form.rent_gross} onChange={e => setForm({ ...form, rent_gross: e.target.value })} className="bg-background border-border text-foreground" />
+            </div>
+            <div>
+              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Mês Referência</label>
+              <Input type="month" value={form.reference_month} onChange={e => setForm({ ...form, reference_month: e.target.value })} className="bg-background border-border text-foreground font-mono" />
+            </div>
+          </div>
+          <DialogFooter>
+            <GoldButton onClick={handleCreate} disabled={createMut.isPending}>
+              {createMut.isPending ? "Salvando..." : "Salvar"}
+            </GoldButton>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ─── Report Tab ───
+function ReportTab({ month, setMonth }: { month: string; setMonth: (m: string) => void }) {
+  const { data: entries, isLoading } = useKitnetEntries(month);
+
+  const grouped = (entries ?? []).reduce((acc: any, e: any) => {
+    const code = e.kitnets?.residencial_code ?? "Outro";
+    if (!acc[code]) acc[code] = [];
+    acc[code].push(e);
+    return acc;
+  }, {});
+
+  const grandTotal = (entries ?? []).reduce((s: number, e: any) => s + (e.total_liquid ?? 0), 0);
+
+  const handleExportCSV = () => {
+    if (!entries?.length) return;
+    const rows = [["Kitnet","Inquilino","Aluguel Bruto","IPTU","CELESC","SEMASA","Taxa ADM","Total Líquido"]];
+    entries.forEach((e: any) => {
+      rows.push([
+        e.kitnets?.code ?? "",
+        e.kitnets?.tenant_name ?? "",
+        String(e.rent_gross ?? 0),
+        String(e.iptu_taxa ?? 0),
+        String(e.celesc ?? 0),
+        String(e.semasa ?? 0),
+        String(e.adm_fee ?? 0),
+        String(e.total_liquid ?? 0),
+      ]);
+    });
+    const csv = rows.map(r => r.join(";")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `relatorio-kitnets-${month}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="space-y-4 mt-4">
+      <div className="flex items-center justify-between">
+        <Input type="month" value={month} onChange={e => setMonth(e.target.value)} className="w-44 bg-background border-border text-foreground font-mono" />
+        <GoldButton onClick={handleExportCSV} disabled={!entries?.length}><Download className="w-4 h-4 mr-1" />Exportar CSV</GoldButton>
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-12 rounded" />)}</div>
+      ) : !entries?.length ? (
+        <PremiumCard className="text-center py-12">
+          <p className="text-muted-foreground">Nenhum dado em {formatMonth(month)}</p>
+        </PremiumCard>
+      ) : (
+        Object.entries(grouped).map(([code, items]: [string, any]) => {
+          const subtotal = items.reduce((s: number, e: any) => s + (e.total_liquid ?? 0), 0);
+          return (
+            <div key={code} className="space-y-2">
+              <h3 className="font-display font-bold text-foreground">{code}</h3>
+              <div className="rounded-xl overflow-hidden border border-border">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-border">
+                      <TableHead className="text-muted-foreground">Unidade</TableHead>
+                      <TableHead className="text-muted-foreground">Inquilino</TableHead>
+                      <TableHead className="text-muted-foreground">Bruto</TableHead>
+                      <TableHead className="text-muted-foreground">IPTU</TableHead>
+                      <TableHead className="text-muted-foreground">CELESC</TableHead>
+                      <TableHead className="text-muted-foreground">SEMASA</TableHead>
+                      <TableHead className="text-muted-foreground">ADM</TableHead>
+                      <TableHead className="text-muted-foreground">Líquido</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {items.map((e: any) => (
+                      <TableRow key={e.id} className="border-border">
+                        <TableCell className="font-mono text-foreground">{e.kitnets?.code}</TableCell>
+                        <TableCell className="text-muted-foreground">{e.kitnets?.tenant_name ?? "—"}</TableCell>
+                        <TableCell className="font-mono text-foreground">{formatCurrency(e.rent_gross ?? 0)}</TableCell>
+                        <TableCell className="font-mono text-foreground">{formatCurrency(e.iptu_taxa ?? 0)}</TableCell>
+                        <TableCell className="font-mono text-foreground">{formatCurrency(e.celesc ?? 0)}</TableCell>
+                        <TableCell className="font-mono text-foreground">{formatCurrency(e.semasa ?? 0)}</TableCell>
+                        <TableCell className="font-mono text-foreground">{formatCurrency(e.adm_fee ?? 0)}</TableCell>
+                        <TableCell className="font-mono text-foreground font-medium">{formatCurrency(e.total_liquid ?? 0)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                  <TableFooter>
+                    <TableRow className="border-border bg-card">
+                      <TableCell colSpan={7} className="text-right font-medium text-muted-foreground">Subtotal {code}</TableCell>
+                      <TableCell className="font-mono font-bold text-foreground">{formatCurrency(subtotal)}</TableCell>
+                    </TableRow>
+                  </TableFooter>
+                </Table>
+              </div>
+            </div>
+          );
+        })
+      )}
+
+      {entries?.length ? (
+        <PremiumCard glowColor="hsl(43 52% 54%)" className="text-center">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground">Total Geral</p>
+          <p className="font-mono text-3xl font-bold mt-1" style={{ color: '#E8C97A' }}>{formatCurrency(grandTotal)}</p>
+        </PremiumCard>
+      ) : null}
+    </div>
+  );
+}
