@@ -16,6 +16,7 @@ import { useBankTransactions, useImportTransactions, useMatchTransaction, useIgn
 import { parseOFX, parseCSV, type ParsedTransaction } from "@/lib/parseOFX";
 import { categorizeTransaction, CATEGORY_LABELS, INTENT_CONFIG } from "@/lib/categorizeTransaction";
 import { getAllPatterns, normalizeDescription, recordClassification } from "@/lib/patternLearning";
+import { useCategories } from "@/hooks/useCategories";
 import { formatCurrency, formatDate, formatMonth, getCurrentMonth } from "@/lib/formatters";
 import { Upload, CheckCircle2, XCircle, ArrowLeftRight, FileText, Wifi, Download } from "lucide-react";
 import { toast } from "sonner";
@@ -795,7 +796,15 @@ function DoubtCard({ tx, classifyAs, ignoreTransaction }: {
   const [selectedIntent, setSelectedIntent] = useState<"receita" | "despesa" | "transferencia">(
     tx.type === "credit" ? "receita" : "despesa"
   );
-  const options = selectedIntent === "receita" ? RECEITA_OPTIONS : DESPESA_OPTIONS;
+  const { data: despesaCats = [] } = useCategories("despesa");
+  const { data: receitaCats = [] } = useCategories("receita");
+  const dynamicDespOpts = despesaCats.length > 0
+    ? despesaCats.map((c: any) => ({ value: c.name.toLowerCase().replace(/[^a-z0-9]/g, "_"), label: `${c.emoji} ${c.name}` }))
+    : DESPESA_OPTIONS;
+  const dynamicRecOpts = receitaCats.length > 0
+    ? receitaCats.map((c: any) => ({ value: c.name.toLowerCase().replace(/[^a-z0-9]/g, "_"), label: `${c.emoji} ${c.name}` }))
+    : RECEITA_OPTIONS;
+  const options = selectedIntent === "receita" ? dynamicRecOpts : dynamicDespOpts;
 
   const handleConfirm = () => {
     if (!selectedCategory) return;
@@ -897,6 +906,10 @@ function DoubtCard({ tx, classifyAs, ignoreTransaction }: {
 /* ============ NEW EXPENSE MODAL ============ */
 function NewExpenseModal({ open, onClose, defaultMonth }: { open: boolean; onClose: () => void; defaultMonth: string }) {
   const qc = useQueryClient();
+  const { data: cats = [] } = useCategories("despesa");
+  const dynamicOpts = cats.length > 0
+    ? cats.map((c: any) => ({ value: c.name.toLowerCase().replace(/[^a-z0-9]/g, "_"), label: `${c.emoji} ${c.name}` }))
+    : DESPESA_OPTIONS;
   const [form, setForm] = useState({
     category: "", description: "", amount: "",
     paid_at: new Date().toISOString().split("T")[0],
@@ -933,7 +946,7 @@ function NewExpenseModal({ open, onClose, defaultMonth }: { open: boolean; onClo
           <div>
             <label className="text-xs font-mono uppercase mb-2 block" style={{ color: "#94A3B8" }}>Categoria *</label>
             <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pr-1">
-              {DESPESA_OPTIONS.map(opt => (
+              {dynamicOpts.map(opt => (
                 <button key={opt.value} type="button"
                   onClick={() => setForm(f => ({ ...f, category: opt.value }))}
                   className="px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all"
@@ -999,6 +1012,10 @@ function NewExpenseModal({ open, onClose, defaultMonth }: { open: boolean; onClo
 /* ============ NEW REVENUE MODAL ============ */
 function NewRevenueModal({ open, onClose, defaultMonth }: { open: boolean; onClose: () => void; defaultMonth: string }) {
   const qc = useQueryClient();
+  const { data: cats = [] } = useCategories("receita");
+  const dynamicOpts = cats.length > 0
+    ? cats.map((c: any) => ({ value: c.name.toLowerCase().replace(/[^a-z0-9]/g, "_"), label: `${c.emoji} ${c.name}` }))
+    : RECEITA_OPTIONS;
   const [form, setForm] = useState({
     source: "", description: "", amount: "",
     received_at: new Date().toISOString().split("T")[0],
@@ -1035,7 +1052,7 @@ function NewRevenueModal({ open, onClose, defaultMonth }: { open: boolean; onClo
           <div>
             <label className="text-xs font-mono uppercase mb-2 block" style={{ color: "#94A3B8" }}>Fonte *</label>
             <div className="flex flex-wrap gap-1.5">
-              {RECEITA_OPTIONS.map(opt => (
+              {dynamicOpts.map(opt => (
                 <button key={opt.value} type="button"
                   onClick={() => setForm(f => ({ ...f, source: opt.value }))}
                   className="px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all"
