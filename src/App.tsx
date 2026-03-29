@@ -88,6 +88,7 @@ const App = () => (
 
           {/* Manager routes */}
           <Route path="/manager/kitnets" element={<ManagerKitnetsPage />} />
+          <Route path="/financial/billing" element={<FinancialBillingPage />} />
 
           {/* Partner routes */}
           <Route path="/partner/projects" element={<AuthGuard><PlaceholderPage title="Portal do Sócio" /></AuthGuard>} />
