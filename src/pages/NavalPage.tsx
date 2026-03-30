@@ -222,7 +222,7 @@ function InsightCard({
   );
 }
 
-export default function WiselyPage() {
+export default function NavalPage() {
   const chatRef = useRef<{ send: (msg: string) => void }>(null);
 
   return (
