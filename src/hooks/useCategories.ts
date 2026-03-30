@@ -38,7 +38,7 @@ export function useCreateCategory() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (cat: { name: string; emoji: string; type: string; color: string }) => {
-      const { error } = await supabase.from("custom_categories" as any).insert(cat);
+      const { error } = await supabase.from("custom_categories").insert(cat);
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["custom_categories"] }),
