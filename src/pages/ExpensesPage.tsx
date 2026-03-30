@@ -171,7 +171,7 @@ export default function ExpensesPage() {
             <div className="space-y-4">
               <div>
                 <Label style={{ color: '#94A3B8' }}>Categoria</Label>
-                <Select value={form.category} onValueChange={v => setForm(f => ({ ...f, category: v }))}>
+                <Select value={form.category} onValueChange={v => { const autoType = detectTransactionType(v, "despesa"); setForm(f => ({ ...f, category: v, type: autoType })); }}>
                   <SelectTrigger style={{ background: '#080C10', borderColor: '#1A2535', color: '#F0F4F8' }}><SelectValue placeholder="Selecione" /></SelectTrigger>
                   <SelectContent style={{ background: '#0D1318', borderColor: '#1A2535' }}>
                     {categoryOptions.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
