@@ -69,8 +69,8 @@ function navigateMonth(current: string, delta: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function WiselyDashboardCard() {
-  const { analysis, loading, generate, context } = useWiselyAnalysis();
+function NavalDashboardCard() {
+  const { analysis, loading, generate, context } = useNavalAnalysis();
   const navigate = useNavigate();
 
   return (
