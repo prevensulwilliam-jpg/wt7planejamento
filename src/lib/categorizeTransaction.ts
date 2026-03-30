@@ -26,6 +26,19 @@ const TRANSFER_KEYWORDS = [
   "saldo anterior",
   "saldo anterior",
   "saldo do dia",
+  // Aplicações automáticas Ailos/Credifoz
+  "db.apl.rdcpos",
+  "cr.apl.rdcpos",
+  "db. cotas",
+  "cr.dep.interc",
+  "cr.trf.interc",
+  "db.trf.interc",
+  "apl.rdcpos",
+  "rdcpos",
+  // Transferências entre contas próprias
+  "credito pix - william tavares",
+  "debito pix - william tavares",
+  "camila fuenfstueck adriano",
 ];
 
 // Receitas — alta confiança
