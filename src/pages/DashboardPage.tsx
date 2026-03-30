@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency, formatMonth, getCurrentMonth } from "@/lib/formatters";
 import { useDashboardKPIs, useRevenueExpenseTrend, useGoals, useNetWorth } from "@/hooks/useFinances";
 import { useKitnets } from "@/hooks/useKitnets";
-import { useWiselyAnalysis } from "@/hooks/useWisely";
+import { useNavalAnalysis } from "@/hooks/useNaval";
 import ReactMarkdown from "react-markdown";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
