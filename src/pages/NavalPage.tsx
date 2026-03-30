@@ -18,7 +18,7 @@ const SUGGESTIONS = [
 ];
 
 function AnalysisCard() {
-  const { analysis, loading, generate, context } = useWiselyAnalysis();
+  const { analysis, loading, generate, context } = useNavalAnalysis();
 
   return (
     <PremiumCard glowColor="rgba(45,212,191,0.3)">
