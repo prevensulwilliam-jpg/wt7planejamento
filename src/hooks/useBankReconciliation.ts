@@ -48,7 +48,7 @@ export function useImportTransactions() {
       }
 
       const { error } = await supabase
-        .from("bank_transactions" as any)
+        .from("bank_transactions")
         .insert(newTxs);
 
       if (error) throw new Error(`Erro ao salvar: ${error.message}`);
