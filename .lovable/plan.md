@@ -1,44 +1,44 @@
 
 
-# Feature — Filtros, ordenação e edição inline em Despesas e Receitas
+# Feature — Classificação automática Fixo/Variável por recorrência
 
 ## Summary
-Add `useUpdateExpense` and `useUpdateRevenue` hooks, then enhance both pages with column sorting, type/category filters, and inline editing.
+Add `detectTransactionType()` to `categorizeTransaction.ts`, then use it in ReconciliationPage (classifyAs + confirmAllAuto), ExpensesPage and RevenuesPage modals. Also run a migration to fix existing records.
 
 ## Changes
 
-### 1. `src/hooks/useFinances.ts`
-Add two new mutation hooks:
-- `useUpdateExpense` — updates expense by id (category, type, description, amount)
-- `useUpdateRevenue` — updates revenue by id (source, type, description, amount)
+### 1. `src/lib/categorizeTransaction.ts`
+Add at the end of file:
+- `FIXED_CATEGORIES`, `VARIABLE_CATEGORIES`, `FIXED_REVENUE_SOURCES`, `VARIABLE_REVENUE_SOURCES` arrays
+- `detectTransactionType(category, intent)` → returns `"fixed" | "variable"`
 
-### 2. `src/pages/ExpensesPage.tsx`
-- Add imports: `useMemo` from React, `useUpdateExpense`, `useCategories`, sort/edit icons from lucide
-- Add state: `sortField`, `sortDir`, `filterType`, `filterCategory`, `editingId`, `editForm`
-- Add `filteredExpenses` memo with type filter, category filter, and multi-column sorting
-- Add `toggleSort` helper and `SortIcon` component
-- Add filter bar above table: type toggle buttons (Todos/Fixos/Variáveis), category dropdown from `useCategories("despesa")`, clear filters button, record count
-- Make table headers clickable (Categoria, Tipo, Valor, Data) with sort icons
-- Replace table body with inline-editable rows: category select, description input, type select, amount input — with confirm/cancel buttons via `useUpdateExpense`
-- Use `filteredExpenses` instead of raw `data` in the table and footer total
+### 2. `src/pages/ReconciliationPage.tsx`
+- Import `detectTransactionType`
+- In `classifyAs` (lines 663, 680): replace `type: "variable"` with `type: detectTransactionType(category, intent)`
+- In `confirmAllAuto` (lines 717, 729): same replacement using `detectTransactionType(category, intent as any)`
 
-### 3. `src/pages/RevenuesPage.tsx`
-Same pattern as ExpensesPage but adapted:
-- `useUpdateRevenue` instead of `useUpdateExpense`
-- `source` field instead of `category`
-- `useCategories("receita")` for filter dropdown
-- `received_at` instead of `paid_at`
-- Gold/green color (#10B981) for values instead of red
-- Type options: fixed/variable/eventual
-- Sort fields: source, type, amount, date
+### 3. `src/pages/ExpensesPage.tsx`
+- Import `detectTransactionType`
+- Line 173: change category `onValueChange` to also auto-set type: `onValueChange={v => { const autoType = detectTransactionType(v, "despesa"); setForm(f => ({ ...f, category: v, type: autoType })); }}`
 
-### 4. Forms
-Both pages already have the Tipo (Fixo/Variável) field in the creation dialog — no changes needed there.
+### 4. `src/pages/RevenuesPage.tsx`
+- Import `detectTransactionType`
+- Line 169: change source `onValueChange` to also auto-set type: `onValueChange={v => { const autoType = detectTransactionType(v, "receita"); setForm(f => ({ ...f, source: v, type: autoType })); }}`
+
+### 5. DB Migration — fix existing records
+```sql
+UPDATE revenues SET type = 'fixed' WHERE source IN ('kitnets', 'salario');
+UPDATE revenues SET type = 'variable' WHERE source IN ('comissao_prevensul', 'laudos', 't7', 'solar', 'dividendos', 'outros_receita');
+UPDATE expenses SET type = 'fixed' WHERE category IN ('consorcio', 'academia', 'assinaturas', 'internet', 'telefonia', 'terapia', 'maconaria', 'guarani');
+UPDATE expenses SET type = 'variable' WHERE category IN ('alimentacao', 'lazer', 'viagens', 'gasolina', 'farmacia', 'obras', 'terrenos', 'outros', 'cartao_credito');
+```
 
 ## Files Changed
 | File | Action |
 |------|--------|
-| `src/hooks/useFinances.ts` | Add `useUpdateExpense` + `useUpdateRevenue` |
-| `src/pages/ExpensesPage.tsx` | Add filters, sorting, inline editing |
-| `src/pages/RevenuesPage.tsx` | Add filters, sorting, inline editing |
+| `src/lib/categorizeTransaction.ts` | Add `detectTransactionType` function |
+| `src/pages/ReconciliationPage.tsx` | Use auto-detect in classifyAs + confirmAllAuto |
+| `src/pages/ExpensesPage.tsx` | Auto-set type on category select |
+| `src/pages/RevenuesPage.tsx` | Auto-set type on source select |
+| DB migration | Fix existing records' type field |
 
