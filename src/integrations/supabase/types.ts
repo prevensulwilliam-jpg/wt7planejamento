@@ -1099,6 +1099,101 @@ export type Database = {
         }
         Relationships: []
       }
+      wedding_vendor_payments: {
+        Row: {
+          amount: number
+          created_at: string | null
+          description: string
+          due_date: string | null
+          id: string
+          notes: string | null
+          paid_at: string | null
+          payment_method: string | null
+          receipt_file_name: string | null
+          receipt_url: string | null
+          status: string | null
+          vendor_id: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string | null
+          description: string
+          due_date?: string | null
+          id?: string
+          notes?: string | null
+          paid_at?: string | null
+          payment_method?: string | null
+          receipt_file_name?: string | null
+          receipt_url?: string | null
+          status?: string | null
+          vendor_id?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string | null
+          description?: string
+          due_date?: string | null
+          id?: string
+          notes?: string | null
+          paid_at?: string | null
+          payment_method?: string | null
+          receipt_file_name?: string | null
+          receipt_url?: string | null
+          status?: string | null
+          vendor_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wedding_vendor_payments_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "wedding_vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wedding_vendors: {
+        Row: {
+          contract_file_name: string | null
+          contract_file_url: string | null
+          contracted_value: number | null
+          created_at: string | null
+          estimated_value: number | null
+          id: string
+          notes: string | null
+          service: string
+          status: string | null
+          updated_at: string | null
+          vendor_name: string | null
+        }
+        Insert: {
+          contract_file_name?: string | null
+          contract_file_url?: string | null
+          contracted_value?: number | null
+          created_at?: string | null
+          estimated_value?: number | null
+          id?: string
+          notes?: string | null
+          service: string
+          status?: string | null
+          updated_at?: string | null
+          vendor_name?: string | null
+        }
+        Update: {
+          contract_file_name?: string | null
+          contract_file_url?: string | null
+          contracted_value?: number | null
+          created_at?: string | null
+          estimated_value?: number | null
+          id?: string
+          notes?: string | null
+          service?: string
+          status?: string | null
+          updated_at?: string | null
+          vendor_name?: string | null
+        }
+        Relationships: []
+      }
       wisely_messages: {
         Row: {
           content: string | null
