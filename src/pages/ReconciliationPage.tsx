@@ -1088,7 +1088,168 @@ function DoubtCard({ tx, classifyAs, ignoreTransaction }: {
   );
 }
 
-/* ============ NEW EXPENSE MODAL ============ */
+/* ============ AUTO-CATEGORIZED CARD ============ */
+function AutoCategorizedCard({ tx, classifyAs, ignoreTransaction, confirmAs }: {
+  tx: any;
+  classifyAs: (id: string, intent: "receita" | "despesa" | "transferencia", category: string) => void;
+  ignoreTransaction: (id: string) => void;
+  confirmAs: (id: string, category: string, intent: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState(tx.category_suggestion || "");
+  const [selectedIntent, setSelectedIntent] = useState<"receita" | "despesa" | "transferencia">(
+    tx.category_intent === "receita" ? "receita" : tx.category_intent === "transferencia" ? "transferencia" : "despesa"
+  );
+  const { data: despesaCats = [] } = useCategories("despesa");
+  const { data: receitaCats = [] } = useCategories("receita");
+  const dynamicDespOpts = despesaCats.length > 0
+    ? despesaCats.map((c: any) => ({ value: c.name.toLowerCase().replace(/[^a-z0-9]/g, "_"), label: `${c.emoji} ${c.name}` }))
+    : DESPESA_OPTIONS;
+  const dynamicRecOpts = receitaCats.length > 0
+    ? receitaCats.map((c: any) => ({ value: c.name.toLowerCase().replace(/[^a-z0-9]/g, "_"), label: `${c.emoji} ${c.name}` }))
+    : RECEITA_OPTIONS;
+  const options = selectedIntent === "receita" ? dynamicRecOpts : dynamicDespOpts;
+
+  const categoryLabel = CATEGORY_LABELS[tx.category_suggestion] || tx.category_label || tx.category_suggestion || "—";
+  const intentLabel = tx.category_intent === "receita" ? "💰 Receita" : tx.category_intent === "despesa" ? "💸 Despesa" : "🔄 Transferência";
+
+  if (!editing) {
+    return (
+      <div className="rounded-xl p-4" style={{ background: "#0D1318", border: "1px solid rgba(45,212,191,0.3)" }}>
+        <div className="flex items-start justify-between">
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-mono" style={{ color: "#94A3B8" }}>{formatDate(tx.date)}</p>
+            <p className="text-sm font-medium mt-0.5 truncate" style={{ color: "#F0F4F8" }}>{tx.description}</p>
+            <p className="text-xs mt-0.5" style={{ color: "#64748B" }}>
+              🏦 {tx.bank_accounts?.bank_name ?? "—"}
+            </p>
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-xs px-2 py-0.5 rounded-lg font-medium"
+                style={{ background: "rgba(45,212,191,0.15)", color: "#2DD4BF", border: "1px solid rgba(45,212,191,0.3)" }}>
+                {intentLabel}
+              </span>
+              <span className="text-xs px-2 py-0.5 rounded-lg font-medium"
+                style={{ background: "rgba(201,168,76,0.15)", color: "#E8C97A", border: "1px solid rgba(201,168,76,0.3)" }}>
+                {categoryLabel}
+              </span>
+            </div>
+          </div>
+          <span className="font-mono font-bold text-base ml-4 flex-shrink-0"
+            style={{ color: tx.type === "credit" ? "#10B981" : "#F43F5E" }}>
+            {tx.type === "credit" ? "+" : "-"}{formatCurrency(tx.amount)}
+          </span>
+        </div>
+        <div className="flex gap-2 mt-3">
+          <button
+            onClick={() => confirmAs(tx.id, tx.category_suggestion || "outros", tx.category_intent)}
+            className="px-4 py-1.5 rounded-lg text-xs font-semibold transition-all"
+            style={{ background: "rgba(16,185,129,0.2)", color: "#10B981", border: "1px solid rgba(16,185,129,0.3)" }}>
+            ✓ Confirmar
+          </button>
+          <button
+            onClick={() => setEditing(true)}
+            className="px-3 py-1.5 rounded-lg text-xs transition-all"
+            style={{ color: "#E8C97A", border: "1px solid rgba(201,168,76,0.2)" }}>
+            ✏️ Alterar
+          </button>
+          <button
+            onClick={() => ignoreTransaction(tx.id)}
+            className="px-3 py-1.5 rounded-lg text-xs transition-all"
+            style={{ color: "#4A5568", border: "1px solid rgba(255,255,255,0.06)" }}>
+            Ignorar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Editing mode — same as DoubtCard
+  return (
+    <div className="rounded-xl p-4" style={{ background: "#0D1318", border: "1px solid rgba(201,168,76,0.3)" }}>
+      <div className="flex items-start justify-between mb-3">
+        <div>
+          <p className="text-xs font-mono" style={{ color: "#94A3B8" }}>{formatDate(tx.date)}</p>
+          <p className="text-sm font-medium mt-0.5" style={{ color: "#F0F4F8" }}>{tx.description}</p>
+          <p className="text-xs mt-0.5" style={{ color: "#64748B" }}>
+            🏦 {tx.bank_accounts?.bank_name ?? "—"}
+          </p>
+        </div>
+        <span className="font-mono font-bold text-base ml-4 flex-shrink-0"
+          style={{ color: tx.type === "credit" ? "#10B981" : "#F43F5E" }}>
+          {tx.type === "credit" ? "+" : "-"}{formatCurrency(tx.amount)}
+        </span>
+      </div>
+
+      <div className="flex gap-2 mb-3">
+        <p className="text-xs self-center" style={{ color: "#94A3B8" }}>Tipo:</p>
+        {(["receita", "despesa", "transferencia"] as const).map(intent => (
+          <button
+            key={intent}
+            onClick={() => { setSelectedIntent(intent); setSelectedCategory(""); }}
+            className="px-3 py-1 rounded-lg text-xs font-medium transition-all"
+            style={{
+              background: selectedIntent === intent
+                ? intent === "receita" ? "rgba(16,185,129,0.25)" : intent === "despesa" ? "rgba(244,63,94,0.25)" : "rgba(148,163,184,0.25)"
+                : "rgba(255,255,255,0.05)",
+              color: selectedIntent === intent
+                ? intent === "receita" ? "#10B981" : intent === "despesa" ? "#F43F5E" : "#94A3B8"
+                : "#64748B",
+              border: `1px solid ${selectedIntent === intent
+                ? intent === "receita" ? "rgba(16,185,129,0.4)" : intent === "despesa" ? "rgba(244,63,94,0.4)" : "rgba(148,163,184,0.4)"
+                : "transparent"}`,
+            }}>
+            {intent === "receita" ? "💰 Receita" : intent === "despesa" ? "💸 Despesa" : "🔄 Transferência"}
+          </button>
+        ))}
+      </div>
+
+      {selectedIntent !== "transferencia" && (
+        <div className="mb-3">
+          <p className="text-xs mb-2" style={{ color: "#94A3B8" }}>Categoria:</p>
+          <div className="flex flex-wrap gap-1.5">
+            {options.map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => setSelectedCategory(opt.value)}
+                className="px-2.5 py-1 rounded-lg text-xs font-medium transition-all"
+                style={{
+                  background: selectedCategory === opt.value ? "rgba(201,168,76,0.25)" : "rgba(255,255,255,0.05)",
+                  color: selectedCategory === opt.value ? "#E8C97A" : "#94A3B8",
+                  border: `1px solid ${selectedCategory === opt.value ? "rgba(201,168,76,0.5)" : "rgba(255,255,255,0.08)"}`,
+                }}>
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="flex gap-2 mt-3">
+        <button
+          onClick={() => {
+            if (selectedIntent === "transferencia") {
+              classifyAs(tx.id, "transferencia", "transferencia");
+            } else if (selectedCategory) {
+              classifyAs(tx.id, selectedIntent, selectedCategory);
+            }
+          }}
+          disabled={selectedIntent !== "transferencia" && !selectedCategory}
+          className="px-4 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-40"
+          style={{ background: "rgba(201,168,76,0.2)", color: "#E8C97A", border: "1px solid rgba(201,168,76,0.4)" }}>
+          ✓ Confirmar alteração
+        </button>
+        <button
+          onClick={() => setEditing(false)}
+          className="px-3 py-1.5 rounded-lg text-xs transition-all"
+          style={{ color: "#4A5568" }}>
+          ← Voltar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
 function NewExpenseModal({ open, onClose, defaultMonth }: { open: boolean; onClose: () => void; defaultMonth: string }) {
   const qc = useQueryClient();
   const { data: cats = [] } = useCategories("despesa");
