@@ -39,6 +39,8 @@ const TRANSFER_KEYWORDS = [
   "credito pix - william tavares",
   "debito pix - william tavares",
   "camila fuenfstueck adriano",
+  "camila fuenstueck adriano",
+  "fuenfstueck",
 ];
 
 // Receitas — alta confiança
