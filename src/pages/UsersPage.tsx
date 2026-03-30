@@ -58,6 +58,11 @@ export default function UsersPage() {
   const { data = [], isLoading } = useUsersWithRoles();
   const [cleaning, setCleaning] = useState(false);
   const [confirm2, setConfirm2] = useState(false);
+  const [periodOpen, setPeriodOpen] = useState(false);
+  const [cleaningPeriod, setCleaningPeriod] = useState(false);
+  const [confirm3, setConfirm3] = useState(false);
+  const [periodStart, setPeriodStart] = useState("");
+  const [periodEnd, setPeriodEnd] = useState("");
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -110,6 +115,53 @@ export default function UsersPage() {
       toast({ title: "Erro ao limpar", description: err.message, variant: "destructive" });
     } finally {
       setCleaning(false);
+    }
+  };
+
+  const cleanPeriodData = async () => {
+    if (!periodStart || !periodEnd) {
+      toast({ title: "Selecione o período", variant: "destructive" });
+      return;
+    }
+    setCleaningPeriod(true);
+    try {
+      const { count: revCount } = await supabase
+        .from("revenues")
+        .delete({ count: "exact" })
+        .gte("reference_month", periodStart)
+        .lte("reference_month", periodEnd);
+
+      const { count: expCount } = await supabase
+        .from("expenses")
+        .delete({ count: "exact" })
+        .gte("reference_month", periodStart)
+        .lte("reference_month", periodEnd);
+
+      const startDate = `${periodStart}-01`;
+      const [y, m] = periodEnd.split("-");
+      const endDate = new Date(+y, +m, 0).toISOString().split("T")[0];
+      const { count: txCount } = await supabase
+        .from("bank_transactions")
+        .delete({ count: "exact" })
+        .gte("date", startDate)
+        .lte("date", endDate);
+
+      qc.invalidateQueries({ queryKey: ["revenues"] });
+      qc.invalidateQueries({ queryKey: ["expenses"] });
+      qc.invalidateQueries({ queryKey: ["bank_transactions"] });
+
+      toast({
+        title: "Lançamentos removidos",
+        description: `${revCount ?? 0} receitas · ${expCount ?? 0} despesas · ${txCount ?? 0} transações bancárias apagadas do período.`,
+      });
+      setConfirm3(false);
+      setPeriodOpen(false);
+      setPeriodStart("");
+      setPeriodEnd("");
+    } catch (err: any) {
+      toast({ title: "Erro ao limpar período", description: err.message, variant: "destructive" });
+    } finally {
+      setCleaningPeriod(false);
     }
   };
 
@@ -235,6 +287,117 @@ export default function UsersPage() {
                   Cancelar
                 </button>
               </div>
+            </div>
+          )}
+        </div>
+        {/* SEGUNDO CARD DE PERIGO — limpar período */}
+        <div className="rounded-xl p-4 mt-4" style={{ background: '#080C10', border: '1px solid rgba(244,63,94,0.2)' }}>
+          <h4 className="font-display font-bold text-sm mb-1" style={{ color: '#F0F4F8' }}>
+            <Trash2 className="w-4 h-4 inline mr-1.5" style={{ color: '#F43F5E' }} />
+            Limpar lançamentos por período
+          </h4>
+          <p className="text-xs mb-3" style={{ color: '#94A3B8' }}>
+            Remove <strong style={{ color: '#F0F4F8' }}>receitas, despesas e transações bancárias</strong> de um período específico.
+            Não afeta contas bancárias, aplicações, consórcios, casamento, kitnets, obras, patrimônio, metas, impostos, categorias ou padrões IA.
+            <strong style={{ color: '#F43F5E' }}> Irreversível.</strong>
+          </p>
+
+          {!periodOpen ? (
+            <button
+              onClick={() => setPeriodOpen(true)}
+              className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+              style={{ background: 'rgba(244,63,94,0.15)', color: '#F43F5E', border: '1px solid rgba(244,63,94,0.3)' }}
+            >
+              Selecionar período para limpar
+            </button>
+          ) : (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Mês inicial</label>
+                  <input
+                    type="month"
+                    value={periodStart}
+                    onChange={e => { setPeriodStart(e.target.value); setConfirm3(false); }}
+                    className="w-full px-3 py-2 rounded-lg text-sm outline-none"
+                    style={{ background: '#080C10', border: '1px solid #1A2535', color: '#F0F4F8' }}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Mês final</label>
+                  <input
+                    type="month"
+                    value={periodEnd}
+                    onChange={e => { setPeriodEnd(e.target.value); setConfirm3(false); }}
+                    className="w-full px-3 py-2 rounded-lg text-sm outline-none"
+                    style={{ background: '#080C10', border: '1px solid #1A2535', color: '#F0F4F8' }}
+                  />
+                </div>
+              </div>
+
+              {periodStart && periodEnd && periodStart <= periodEnd && !confirm3 && (
+                <div className="rounded-lg p-3" style={{ background: 'rgba(244,63,94,0.08)', border: '1px solid rgba(244,63,94,0.2)' }}>
+                  <p className="text-sm" style={{ color: '#F0F4F8' }}>
+                    Será apagado tudo de{" "}
+                    <strong style={{ color: '#F43F5E' }}>
+                      {new Date(periodStart + "-01").toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}
+                    </strong>
+                    {" "}até{" "}
+                    <strong style={{ color: '#F43F5E' }}>
+                      {new Date(periodEnd + "-01").toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}
+                    </strong>:
+                  </p>
+                  <ul className="mt-2 space-y-1">
+                    {["Receitas", "Despesas", "Transações bancárias (extrato)"].map(item => (
+                      <li key={item} className="text-xs flex items-center gap-2" style={{ color: '#94A3B8' }}>
+                        <span style={{ color: '#F43F5E' }}>✕</span> {item}
+                      </li>
+                    ))}
+                  </ul>
+                  <button
+                    onClick={() => setConfirm3(true)}
+                    className="mt-3 px-4 py-1.5 rounded-lg text-sm font-medium transition-all"
+                    style={{ background: 'rgba(244,63,94,0.2)', color: '#F43F5E', border: '1px solid rgba(244,63,94,0.4)' }}
+                  >
+                    Confirmar limpeza
+                  </button>
+                </div>
+              )}
+
+              {confirm3 && (
+                <div className="rounded-lg p-3" style={{ background: 'rgba(244,63,94,0.08)', border: '1px solid rgba(244,63,94,0.4)' }}>
+                  <p className="text-xs font-medium mb-3" style={{ color: '#F43F5E' }}>
+                    ⚠️ Última confirmação — isso não pode ser desfeito.
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={cleanPeriodData}
+                      disabled={cleaningPeriod}
+                      className="px-4 py-2 rounded-lg text-sm font-bold transition-all disabled:opacity-50"
+                      style={{ background: '#F43F5E', color: '#fff' }}
+                    >
+                      {cleaningPeriod ? "Apagando..." : "Sim, apagar o período"}
+                    </button>
+                    <button
+                      onClick={() => { setConfirm3(false); setPeriodOpen(false); setPeriodStart(""); setPeriodEnd(""); }}
+                      className="px-4 py-2 rounded-lg text-sm transition-all"
+                      style={{ color: '#94A3B8', border: '1px solid #1A2535' }}
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {!confirm3 && (
+                <button
+                  onClick={() => { setPeriodOpen(false); setPeriodStart(""); setPeriodEnd(""); }}
+                  className="text-xs transition-all"
+                  style={{ color: '#64748B' }}
+                >
+                  ← Cancelar
+                </button>
+              )}
             </div>
           )}
         </div>
