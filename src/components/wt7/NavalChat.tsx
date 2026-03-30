@@ -225,7 +225,7 @@ export function NavalChat() {
         }}
       >
         <Sparkles className="w-5 h-5" />
-        <span className="font-display font-bold text-sm">Wisely</span>
+        <span className="font-display font-bold text-sm">Naval</span>
       </button>
     );
   }
