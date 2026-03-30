@@ -74,7 +74,7 @@ export default function AssetsPage() {
 
       <KpiCard label="Patrimônio Líquido Total" value={totalPatrimonio + totalAtualInv} color="gold" />
 
-      <Tabs defaultValue="bens">
+      <Tabs defaultValue={defaultTab}>
         <TabsList style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
           <TabsTrigger value="bens">Bens</TabsTrigger>
           <TabsTrigger value="investimentos">Investimentos</TabsTrigger>
