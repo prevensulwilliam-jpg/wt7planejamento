@@ -1,0 +1,1 @@
+ALTER TABLE public.revenues DROP CONSTRAINT revenues_source_check;
