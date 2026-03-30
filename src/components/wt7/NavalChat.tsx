@@ -250,7 +250,7 @@ export function NavalChat() {
         <div className="flex items-center gap-2.5">
           <Sparkles className="w-4 h-4" style={{ color: "#C9A84C" }} />
           <div>
-            <span className="font-display font-bold text-sm" style={{ color: "#E8C97A" }}>Wisely</span>
+            <span className="font-display font-bold text-sm" style={{ color: "#E8C97A" }}>Naval</span>
             {context && !minimized && (
               <span className="ml-2 text-xs" style={{ color: "rgba(201,168,76,0.6)" }}>{context.label}</span>
             )}
