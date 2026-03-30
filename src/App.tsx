@@ -26,7 +26,7 @@ import AssetsPage from "@/pages/AssetsPage";
 import ProjectionsPage from "@/pages/ProjectionsPage";
 import KitnetsReportPage from "@/pages/KitnetsReportPage";
 import TaxesPage from "@/pages/TaxesPage";
-import WiselyPage from "@/pages/WiselyPage";
+import NavalPage from "@/pages/NavalPage";
 import ReconciliationPage from "@/pages/ReconciliationPage";
 import PatternsPage from "@/pages/PatternsPage";
 import CategoriesPage from "@/pages/CategoriesPage";
