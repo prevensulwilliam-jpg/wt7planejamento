@@ -142,8 +142,8 @@ export function useNavalChat() {
   return { messages, loading, send };
 }
 
-export function useWiselyInsight(topic: string, prompt: string) {
-  const { context, isReady } = useWiselyContext();
+export function useNavalInsight(topic: string, prompt: string) {
+  const { context, isReady } = useNavalContext();
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
   const generated = useRef(false);
