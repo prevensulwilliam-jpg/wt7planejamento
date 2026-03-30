@@ -56,7 +56,7 @@ export function useNavalContext() {
   return { context, isReady };
 }
 
-async function callWisely(
+async function callNaval(
   messages: { role: string; content: string }[]
 ): Promise<string> {
   const { data, error } = await supabase.functions.invoke("wisely-ai", {
