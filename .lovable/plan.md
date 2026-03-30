@@ -1,41 +1,38 @@
 
 
-# Fix — Camila como transferência + anti-duplicata no recategorizar
+# Feature — Wisely Chat Flutuante Global
 
-## 1. `src/lib/categorizeTransaction.ts` — Adicionar variações do sobrenome Camila
+## Summary
+Create a floating chat widget accessible from all pages, with page-aware context fetching from the database. Update the edge function system prompt. Remove the standalone Wisely button from the Dashboard.
 
-Linha 41: substituir `"camila fuenfstueck adriano"` por 3 entradas:
-```
-"camila fuenfstueck adriano",
-"camila fuenstueck adriano",
-"fuenfstueck",
-```
+## Changes
 
-## 2. `src/pages/ReconciliationPage.tsx` — Anti-duplicata no recategorizeMutation
+### 1. New file: `src/components/wt7/WiselyChat.tsx`
+Full floating chat component as specified:
+- `fetchPageContext(pathname)` — queries relevant tables based on current route
+- FAB button (gold gradient, bottom-right corner)
+- Chat window with header, messages area, suggestion chips, input
+- Uses `supabase.functions.invoke("wisely-ai")` for responses
+- ReactMarkdown rendering for responses
+- Auto-fetches context on open/route change
+- Minimize/maximize/close controls
+- Page-specific suggestion chips
 
-Linhas 537-549: após os blocos de insert existentes (que já checam `!tx.matched_revenue_id` / `!tx.matched_expense_id`), adicionar dois `else if` para atualizar a categoria quando já existe vínculo:
+### 2. `src/layouts/AdminLayout.tsx`
+- Import and render `<WiselyChat />` before closing `</div>`
 
-```tsx
-else if (isAuto && result.intent === "receita" && tx.matched_revenue_id) {
-  await supabase.from("revenues").update({ source: result.category }).eq("id", tx.matched_revenue_id);
-} else if (isAuto && result.intent === "despesa" && tx.matched_expense_id) {
-  await supabase.from("expenses").update({ category: result.category }).eq("id", tx.matched_expense_id);
-}
-```
+### 3. `supabase/functions/wisely-ai/index.ts`
+- Replace `SYSTEM_PROMPT` with the expanded version (includes strategic mode, property details, income breakdown, wedding plans)
 
-Also: remove the lines that overwrite `matched_revenue_id`/`matched_expense_id` with null when they already exist (lines 548-549 in the update call should only set these if `revenueId`/`expenseId` are non-null).
-
-## 3. Database cleanup (via migration)
-
-Run SQL to:
-- Clean duplicate revenues/expenses
-- Mark Camila transactions as ignored/transferência
-- Delete erroneous Saúde expenses from Camila
+### 4. `src/pages/DashboardPage.tsx` (line 166)
+- Remove `<GoldButton><Sparkles className="w-4 h-4" /> Wisely</GoldButton>`
+- Keep the WiselyDashboardCard (analysis card) — it's a different feature
 
 ## Files Changed
 | File | Action |
 |------|--------|
-| `src/lib/categorizeTransaction.ts` | Add Camila surname variations |
-| `src/pages/ReconciliationPage.tsx` | Add else-if update branches in recategorizeMutation |
-| DB migration | Cleanup Camila + duplicates |
+| `src/components/wt7/WiselyChat.tsx` | Create — floating chat component |
+| `src/layouts/AdminLayout.tsx` | Add `<WiselyChat />` |
+| `supabase/functions/wisely-ai/index.ts` | Update system prompt |
+| `src/pages/DashboardPage.tsx` | Remove Wisely button (line 166) |
 
