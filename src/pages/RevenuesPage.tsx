@@ -1,11 +1,12 @@
-import { useState } from "react";
-import { Plus, Download, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Plus, Download, Trash2, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, Pencil, Check, X } from "lucide-react";
 import { KpiCard } from "@/components/wt7/KpiCard";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
 import { GoldButton } from "@/components/wt7/GoldButton";
 import { WtBadge } from "@/components/wt7/WtBadge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useRevenues, useCreateRevenue, useDeleteRevenue, exportCSV } from "@/hooks/useFinances";
+import { useRevenues, useCreateRevenue, useDeleteRevenue, useUpdateRevenue, exportCSV } from "@/hooks/useFinances";
+import { useCategories } from "@/hooks/useCategories";
 import { formatCurrency, formatDate, formatMonth, getCurrentMonth } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -44,21 +45,50 @@ function navigateMonth(current: string, delta: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+type SortField = "source" | "type" | "amount" | "date" | null;
+
 export default function RevenuesPage() {
   const [month, setMonth] = useState(getCurrentMonth());
   const [dialogOpen, setDialogOpen] = useState(false);
-  const { data = [], isLoading } = useRevenues(month);
+  const { data: revenues = [], isLoading } = useRevenues(month);
   const createRevenue = useCreateRevenue();
   const deleteRevenue = useDeleteRevenue();
+  const updateRevenue = useUpdateRevenue();
+  const { data: categories = [] } = useCategories("receita");
   const { toast } = useToast();
 
   const [form, setForm] = useState({ source: "", description: "", amount: "", type: "variable", received_at: "", reference_month: month });
 
-  const totalMonth = data.reduce((s, r) => s + (r.amount ?? 0), 0);
-  const totalFixed = data.filter(r => r.type === 'fixed').reduce((s, r) => s + (r.amount ?? 0), 0);
-  const totalVariable = data.filter(r => r.type !== 'fixed').reduce((s, r) => s + (r.amount ?? 0), 0);
+  // Sort & filter state
+  const [sortField, setSortField] = useState<SortField>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [filterType, setFilterType] = useState<"all" | "fixed" | "variable" | "eventual">("all");
+  const [filterSource, setFilterSource] = useState("all");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<Record<string, any>>({});
 
-  const bySource = data.reduce((acc, r) => {
+  const filteredRevenues = useMemo(() => {
+    let data = [...revenues];
+    if (filterType !== "all") data = data.filter(r => r.type === filterType);
+    if (filterSource !== "all") data = data.filter(r => r.source === filterSource);
+    if (sortField) {
+      data.sort((a, b) => {
+        let va: any = sortField === "date" ? (a.received_at ?? "") : (a as any)[sortField] ?? "";
+        let vb: any = sortField === "date" ? (b.received_at ?? "") : (b as any)[sortField] ?? "";
+        if (sortField === "amount") { va = Number(va); vb = Number(vb); }
+        if (va < vb) return sortDir === "asc" ? -1 : 1;
+        if (va > vb) return sortDir === "asc" ? 1 : -1;
+        return 0;
+      });
+    }
+    return data;
+  }, [revenues, sortField, sortDir, filterType, filterSource]);
+
+  const totalMonth = filteredRevenues.reduce((s, r) => s + (r.amount ?? 0), 0);
+  const totalFixed = revenues.filter(r => r.type === 'fixed').reduce((s, r) => s + (r.amount ?? 0), 0);
+  const totalVariable = revenues.filter(r => r.type !== 'fixed').reduce((s, r) => s + (r.amount ?? 0), 0);
+
+  const bySource = revenues.reduce((acc, r) => {
     const src = r.source ?? 'outros';
     acc[src] = (acc[src] ?? 0) + (r.amount ?? 0);
     return acc;
@@ -69,6 +99,16 @@ export default function RevenuesPage() {
     value: v,
     color: sourceColors[k] ?? '#4A5568',
   }));
+
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortField(field); setSortDir("desc"); }
+  };
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return <ArrowUpDown className="w-3 h-3 opacity-40" />;
+    return sortDir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />;
+  };
 
   const handleSubmit = async () => {
     if (!form.source || !form.amount) return;
@@ -99,7 +139,7 @@ export default function RevenuesPage() {
   };
 
   const handleExportCSV = () => {
-    exportCSV(data, ["Fonte", "Descrição", "Tipo", "Valor", "Data", "Mês"], ["source", "description", "type", "amount", "received_at", "reference_month"], `receitas_${month}.csv`);
+    exportCSV(revenues, ["Fonte", "Descrição", "Tipo", "Valor", "Data", "Mês"], ["source", "description", "type", "amount", "received_at", "reference_month"], `receitas_${month}.csv`);
   };
 
   return (
@@ -171,57 +211,186 @@ export default function RevenuesPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {isLoading ? Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-[120px] rounded-2xl" style={{ background: '#0D1318' }} />) : (
               <>
-                <KpiCard label="Total do Mês" value={totalMonth} color="gold" />
+                <KpiCard label="Total do Mês" value={revenues.reduce((s, r) => s + (r.amount ?? 0), 0)} color="gold" />
                 <KpiCard label="Receitas Fixas" value={totalFixed} color="green" />
                 <KpiCard label="Receitas Variáveis" value={totalVariable} color="cyan" />
-                <KpiCard label="Quantidade" value={data.length} color="cyan" formatAs="number" />
+                <KpiCard label="Quantidade" value={revenues.length} color="cyan" formatAs="number" />
               </>
             )}
           </div>
 
+          {/* Filter bar */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid #1A2535' }}>
+              {(["all", "fixed", "variable", "eventual"] as const).map(t => (
+                <button key={t} onClick={() => setFilterType(t)}
+                  className="px-3 py-1.5 text-xs font-medium transition-all"
+                  style={{
+                    background: filterType === t ? "rgba(201,168,76,0.2)" : "#080C10",
+                    color: filterType === t ? "#E8C97A" : "#64748B",
+                  }}>
+                  {t === "all" ? "Todos" : t === "fixed" ? "Fixos" : t === "variable" ? "Variáveis" : "Eventuais"}
+                </button>
+              ))}
+            </div>
+
+            <select value={filterSource} onChange={e => setFilterSource(e.target.value)}
+              className="px-3 py-1.5 text-xs rounded-lg outline-none"
+              style={{ background: "#080C10", border: "1px solid #1A2535", color: filterSource !== "all" ? "#E8C97A" : "#64748B" }}>
+              <option value="all">Todas fontes</option>
+              {sourceOptions.map(s => (
+                <option key={s.value} value={s.value}>{s.label}</option>
+              ))}
+            </select>
+
+            {(filterType !== "all" || filterSource !== "all" || sortField) && (
+              <button onClick={() => { setFilterType("all"); setFilterSource("all"); setSortField(null); }}
+                className="px-3 py-1.5 text-xs rounded-lg"
+                style={{ background: "rgba(244,63,94,0.1)", color: "#F43F5E", border: "1px solid rgba(244,63,94,0.2)" }}>
+                Limpar filtros
+              </button>
+            )}
+
+            <span className="text-xs ml-auto" style={{ color: '#4A5568' }}>
+              {filteredRevenues.length} registros
+            </span>
+          </div>
+
           <PremiumCard>
-            {isLoading ? <Skeleton className="h-[300px] rounded-xl" style={{ background: '#131B22' }} /> : data.length === 0 ? (
+            {isLoading ? <Skeleton className="h-[300px] rounded-xl" style={{ background: '#131B22' }} /> : filteredRevenues.length === 0 ? (
               <div className="text-center py-12" style={{ color: '#4A5568' }}>
                 <p className="text-lg mb-2">💰</p>
-                <p className="text-sm">Nenhuma receita neste mês</p>
+                <p className="text-sm">Nenhuma receita encontrada</p>
               </div>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow style={{ borderColor: '#1A2535' }}>
-                    <TableHead style={{ color: '#94A3B8' }}>Fonte</TableHead>
+                    <TableHead onClick={() => toggleSort("source")} className="cursor-pointer select-none" style={{ color: '#94A3B8' }}>
+                      <div className="flex items-center gap-1">Fonte <SortIcon field="source" /></div>
+                    </TableHead>
                     <TableHead style={{ color: '#94A3B8' }}>Descrição</TableHead>
-                    <TableHead style={{ color: '#94A3B8' }}>Tipo</TableHead>
-                    <TableHead style={{ color: '#94A3B8' }} className="text-right">Valor</TableHead>
-                    <TableHead style={{ color: '#94A3B8' }}>Data</TableHead>
-                    <TableHead style={{ color: '#94A3B8' }} className="w-12"></TableHead>
+                    <TableHead onClick={() => toggleSort("type")} className="cursor-pointer select-none" style={{ color: '#94A3B8' }}>
+                      <div className="flex items-center gap-1">Tipo <SortIcon field="type" /></div>
+                    </TableHead>
+                    <TableHead onClick={() => toggleSort("amount")} className="cursor-pointer select-none text-right" style={{ color: '#94A3B8' }}>
+                      <div className="flex items-center gap-1 justify-end">Valor <SortIcon field="amount" /></div>
+                    </TableHead>
+                    <TableHead onClick={() => toggleSort("date")} className="cursor-pointer select-none" style={{ color: '#94A3B8' }}>
+                      <div className="flex items-center gap-1">Data <SortIcon field="date" /></div>
+                    </TableHead>
+                    <TableHead style={{ color: '#94A3B8' }} className="w-20">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {data.map(r => (
-                    <TableRow key={r.id} style={{ borderColor: '#1A2535' }}>
-                      <TableCell><WtBadge variant={sourceBadgeVariant[r.source ?? ''] ?? 'gray'}>{sourceOptions.find(s => s.value === r.source)?.label ?? r.source}</WtBadge></TableCell>
-                      <TableCell style={{ color: '#F0F4F8' }}>{r.description}</TableCell>
-                      <TableCell style={{ color: '#94A3B8' }} className="text-xs font-mono">{r.type === 'fixed' ? 'Fixo' : r.type === 'variable' ? 'Variável' : 'Eventual'}</TableCell>
-                      <TableCell className="text-right font-mono" style={{ color: '#E8C97A' }}>{formatCurrency(r.amount ?? 0)}</TableCell>
-                      <TableCell className="font-mono text-xs" style={{ color: '#94A3B8' }}>{r.received_at ? formatDate(r.received_at) : '—'}</TableCell>
-                      <TableCell>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild><button className="text-wt-text-muted hover:text-red-400"><Trash2 className="w-4 h-4" /></button></AlertDialogTrigger>
-                          <AlertDialogContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle style={{ color: '#F0F4F8' }}>Excluir receita?</AlertDialogTitle>
-                              <AlertDialogDescription>Esta ação não pode ser desfeita.</AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => handleDelete(r.id)} className="bg-red-600 hover:bg-red-700">Excluir</AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {filteredRevenues.map(revenue => {
+                    const isEditing = editingId === revenue.id;
+                    const srcOpt = sourceOptions.find(s => s.value === revenue.source);
+
+                    return (
+                      <TableRow key={revenue.id} style={{ borderColor: '#1A2535' }}>
+                        <TableCell>
+                          {isEditing ? (
+                            <select value={editForm.source ?? revenue.source ?? ""}
+                              onChange={e => setEditForm(f => ({ ...f, source: e.target.value }))}
+                              className="text-xs px-2 py-1 rounded outline-none w-full"
+                              style={{ background: "#080C10", border: "1px solid #1A2535", color: "#F0F4F8" }}>
+                              {sourceOptions.map(s => (
+                                <option key={s.value} value={s.value}>{s.label}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <WtBadge variant={sourceBadgeVariant[revenue.source ?? ''] ?? 'gray'}>{srcOpt?.label ?? revenue.source}</WtBadge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {isEditing ? (
+                            <input value={editForm.description ?? revenue.description ?? ""}
+                              onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))}
+                              className="text-xs px-2 py-1 rounded outline-none w-full"
+                              style={{ background: "#080C10", border: "1px solid #1A2535", color: "#F0F4F8" }} />
+                          ) : (
+                            <span style={{ color: '#F0F4F8' }}>{revenue.description}</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {isEditing ? (
+                            <select value={editForm.type ?? revenue.type ?? "variable"}
+                              onChange={e => setEditForm(f => ({ ...f, type: e.target.value }))}
+                              className="text-xs px-2 py-1 rounded outline-none"
+                              style={{ background: "#080C10", border: "1px solid #1A2535", color: "#F0F4F8" }}>
+                              <option value="fixed">Fixo</option>
+                              <option value="variable">Variável</option>
+                              <option value="eventual">Eventual</option>
+                            </select>
+                          ) : (
+                            <span className="text-xs font-mono" style={{ color: '#94A3B8' }}>
+                              {revenue.type === 'fixed' ? 'Fixo' : revenue.type === 'variable' ? 'Variável' : 'Eventual'}
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {isEditing ? (
+                            <input type="number" value={editForm.amount ?? revenue.amount ?? 0}
+                              onChange={e => setEditForm(f => ({ ...f, amount: parseFloat(e.target.value) }))}
+                              className="text-xs px-2 py-1 rounded outline-none w-24 text-right"
+                              style={{ background: "#080C10", border: "1px solid #1A2535", color: "#10B981" }} />
+                          ) : (
+                            <span className="font-mono" style={{ color: '#E8C97A' }}>{formatCurrency(revenue.amount ?? 0)}</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="font-mono text-xs" style={{ color: '#94A3B8' }}>
+                          {revenue.received_at ? formatDate(revenue.received_at) : '—'}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            {isEditing ? (
+                              <>
+                                <button onClick={async () => {
+                                  try {
+                                    await updateRevenue.mutateAsync({ id: revenue.id, ...editForm });
+                                    setEditingId(null);
+                                    toast({ title: "Receita atualizada!" });
+                                  } catch {
+                                    toast({ title: "Erro ao atualizar", variant: "destructive" });
+                                  }
+                                }} className="p-1.5 rounded hover:opacity-80" style={{ background: "rgba(16,185,129,0.2)" }}>
+                                  <Check className="w-3.5 h-3.5" style={{ color: '#10B981' }} />
+                                </button>
+                                <button onClick={() => setEditingId(null)} className="p-1.5 rounded hover:opacity-80" style={{ background: "rgba(244,63,94,0.1)" }}>
+                                  <X className="w-3.5 h-3.5" style={{ color: '#F43F5E' }} />
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button onClick={() => { setEditingId(revenue.id); setEditForm({}); }}
+                                  className="p-1.5 rounded hover:opacity-80" style={{ background: "rgba(201,168,76,0.1)" }}>
+                                  <Pencil className="w-3.5 h-3.5" style={{ color: '#C9A84C' }} />
+                                </button>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <button className="p-1.5 rounded hover:opacity-80" style={{ background: "rgba(244,63,94,0.1)" }}>
+                                      <Trash2 className="w-3.5 h-3.5" style={{ color: '#F43F5E' }} />
+                                    </button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle style={{ color: '#F0F4F8' }}>Remover receita?</AlertDialogTitle>
+                                      <AlertDialogDescription>{revenue.description} — {formatCurrency(revenue.amount ?? 0)}</AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                      <AlertDialogAction onClick={() => handleDelete(revenue.id)} style={{ background: "#F43F5E", color: "white" }}>Remover</AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
                 <TableFooter style={{ background: '#080C10' }}>
                   <TableRow style={{ borderColor: '#1A2535' }}>
