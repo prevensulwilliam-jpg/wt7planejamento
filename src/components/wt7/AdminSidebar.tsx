@@ -11,7 +11,7 @@ const navGroups = [
     label: "VISÃO GERAL",
     items: [
       { label: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
-      { label: "Wisely IA", icon: Bot, href: "/wisely" },
+      { label: "Naval", icon: Bot, href: "/naval" },
     ],
   },
   {

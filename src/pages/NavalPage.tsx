@@ -231,8 +231,8 @@ export default function NavalPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="text-2xl">🤖</span>
-          <h1 className="font-display font-bold text-xl text-wt-text-primary">Wisely IA</h1>
-          <WtBadge variant="cyan">powered by AI</WtBadge>
+          <h1 className="font-display font-bold text-xl text-wt-text-primary">Naval</h1>
+          <WtBadge variant="cyan">powered by AI · Naval Ravikant inspired</WtBadge>
         </div>
       </div>
 

@@ -345,7 +345,7 @@ export function NavalChat() {
               </button>
             </div>
             <div className="text-center mt-1.5">
-              <span className="text-[10px]" style={{ color: "rgba(148,163,184,0.4)" }}>Enter para enviar · Wisely lê os dados desta página</span>
+              <span className="text-[10px]" style={{ color: "rgba(148,163,184,0.4)" }}>Enter para enviar · Naval lê os dados desta página</span>
             </div>
           </div>
         </>

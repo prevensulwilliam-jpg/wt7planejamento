@@ -83,7 +83,7 @@ const App = () => (
           {/* Admin routes */}
           <Route element={<AuthGuard><AdminLayout /></AuthGuard>}>
             <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/wisely" element={<WiselyPage />} />
+            <Route path="/naval" element={<NavalPage />} />
             <Route path="/revenues" element={<RevenuesPage />} />
             <Route path="/expenses" element={<ExpensesPage />} />
             <Route path="/banks" element={<BanksPage />} />

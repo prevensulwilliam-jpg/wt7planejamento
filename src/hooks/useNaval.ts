@@ -153,7 +153,7 @@ export function useNavalInsight(topic: string, prompt: string) {
     generated.current = true;
     setLoading(true);
     const fullPrompt = `${prompt}\n\nDados: ${JSON.stringify(context, null, 2)}`;
-    callWisely([{ role: "user", content: fullPrompt }])
+    callNaval([{ role: "user", content: fullPrompt }])
       .then((t) => setText(t))
       .catch(() => setText("Erro ao carregar insight."))
       .finally(() => setLoading(false));
