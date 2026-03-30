@@ -36,8 +36,8 @@ const sourceColors: Record<string, string> = {
 };
 
 const sourceBadgeVariant: Record<string, 'gold' | 'green' | 'cyan' | 'gray'> = {
-  kitnets: 'gold', comissao_prevensul: 'cyan', salario: 'green',
-  solar_energia: 'gold', t7: 'cyan', laudos: 'cyan', casamento_energia: 'green', outros: 'gray',
+  aluguel_kitnets: 'gold', comiss_o_prevensul: 'cyan', sal_rio: 'green',
+  solar_energia: 'gold', t7: 'cyan', laudos_t_cnicos: 'cyan', casamento_energia: 'green', outros_receita: 'gray', "outros__receita_": 'gray',
 };
 
 function navigateMonth(current: string, delta: number): string {
