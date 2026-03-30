@@ -1,32 +1,41 @@
 
 
-# Fix — Remover último dado hardcoded do Dashboard
+# Feature — Fornecedores do Casamento: upload de contrato + controle de pagamentos
 
-## Current State
-The DashboardPage.tsx is **already 100% connected to Supabase** via hooks (`useDashboardKPIs`, `useRevenueExpenseTrend`, `useGoals`, `useKitnets`). There are **no mock arrays** to remove.
+## Summary
+Create `wedding_vendors` and `wedding_vendor_payments` tables, a `wedding-docs` storage bucket, add CRUD hooks, and replace the static suppliers tab in `WeddingPage.tsx` with a fully dynamic vendor management system including contract upload and payment tracking.
 
-The only hardcoded value is on line 207:
-```tsx
-<KpiCard label="Patrimônio Líquido" value={4200000} color="cyan" compact />
-```
+## 1. Database Migration
+- Create `wedding_vendors` table (service, vendor_name, status, estimated_value, contracted_value, contract_file_url/name, notes)
+- Create `wedding_vendor_payments` table (vendor_id FK, description, amount, due_date, paid_at, status, payment_method, receipt_url/name, notes)
+- Enable RLS with admin-only policies on both tables
+- Create `wedding-docs` storage bucket (public) with open access policy
+- Seed 18 known vendors from the existing static array
 
-## Plan
-Replace the hardcoded `4200000` with a computed value from real data by summing:
-- `assets` table (`estimated_value`)
-- `investments` table (`current_amount`)
-- `real_estate_properties` table (`property_value`)
+## 2. Hooks — `src/hooks/useConstructions.ts`
+Add at the end of the file:
+- `useWeddingVendors()` — fetches vendors with nested payments via `select("*, wedding_vendor_payments(*)")`
+- `useCreateWeddingVendor()`, `useUpdateWeddingVendor()`, `useDeleteWeddingVendor()`
+- `useCreateVendorPayment()`, `useUpdateVendorPayment()`, `useDeleteVendorPayment()`
+- `uploadWeddingFile(file, path)` — uploads to `wedding-docs` bucket, returns public URL
 
-### Changes in `src/hooks/useFinances.ts`
-Add a `useNetWorth()` hook that queries `assets`, `investments`, and `real_estate_properties`, then sums their values.
-
-### Changes in `src/pages/DashboardPage.tsx`
-- Import `useNetWorth`
-- Replace `value={4200000}` with `value={netWorth}` from the hook
-- Show skeleton while loading
+## 3. WeddingPage.tsx — Replace Fornecedores tab
+- Remove the static `suppliers` array (lines 20-38) and `statusBadge` object (lines 41-46)
+- Add imports: `Plus`, `Trash2` from lucide, AlertDialog components, Select, Dialog, Input, useQueryClient, and the new hooks
+- Replace `<TabsContent value="fornecedores">` with a `<VendorsTab />` component containing:
+  - **4 KPI cards**: Estimado Total, Contratado, Já Pago, A Pagar
+  - **Vendor cards** with status badge, contract indicator, payment summary, "Gerenciar" button
+  - **New vendor dialog** with service, name, status, values, notes
+- Add `VendorDetailModal` component with:
+  - **Vendor data section**: edit name, status, contracted value, notes
+  - **Contract section**: upload/replace PDF/image, view existing
+  - **Payments section**: list with mark-as-paid, receipt upload, add new payment form
+  - **Delete vendor** (except "incluido_pacote")
 
 ## Files Changed
 | File | Action |
 |------|--------|
-| `src/hooks/useFinances.ts` | Add `useNetWorth()` hook |
-| `src/pages/DashboardPage.tsx` | Replace hardcoded 4200000 with hook data |
+| DB migration | Create 2 tables + RLS + storage bucket + seed data |
+| `src/hooks/useConstructions.ts` | Add 7 hooks + uploadWeddingFile utility |
+| `src/pages/WeddingPage.tsx` | Remove static suppliers, add VendorsTab + VendorDetailModal components |
 
