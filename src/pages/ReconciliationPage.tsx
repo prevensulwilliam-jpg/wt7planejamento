@@ -14,7 +14,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useBankTransactions, useImportTransactions, useMatchTransaction, useIgnoreTransaction, useReconciliationSummary } from "@/hooks/useBankReconciliation";
 import { parseOFX, parseCSV, type ParsedTransaction } from "@/lib/parseOFX";
-import { categorizeTransaction, CATEGORY_LABELS, INTENT_CONFIG } from "@/lib/categorizeTransaction";
+import { categorizeTransaction, CATEGORY_LABELS, INTENT_CONFIG, detectTransactionType } from "@/lib/categorizeTransaction";
 import { getAllPatterns, normalizeDescription, recordClassification } from "@/lib/patternLearning";
 import { useCategories } from "@/hooks/useCategories";
 import { formatCurrency, formatDate, formatMonth, getCurrentMonth } from "@/lib/formatters";
@@ -660,7 +660,7 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
           source: category,
           description,
           amount: tx.amount,
-          type: "variable",
+          type: detectTransactionType(category, "receita"),
           reference_month: tx.date?.slice(0, 7),
           received_at: tx.date,
         }).select("id").single();
@@ -677,7 +677,7 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
           category,
           description,
           amount: tx.amount,
-          type: "variable",
+          type: detectTransactionType(category, "despesa"),
           reference_month: tx.date?.slice(0, 7),
           paid_at: tx.date,
         }).select("id").single();
@@ -714,7 +714,7 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
             source: category,
             description: tx.description,
             amount: tx.amount,
-            type: "variable",
+            type: detectTransactionType(category, "receita"),
             reference_month: tx.date?.slice(0, 7),
             received_at: tx.date,
           }).select("id").single();
@@ -726,7 +726,7 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
             category,
             description: tx.description,
             amount: tx.amount,
-            type: "variable",
+            type: detectTransactionType(category, "despesa"),
             reference_month: tx.date?.slice(0, 7),
             paid_at: tx.date,
           }).select("id").single();

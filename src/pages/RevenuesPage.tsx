@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useRevenues, useCreateRevenue, useDeleteRevenue, useUpdateRevenue, exportCSV } from "@/hooks/useFinances";
 import { useCategories } from "@/hooks/useCategories";
 import { formatCurrency, formatDate, formatMonth, getCurrentMonth } from "@/lib/formatters";
+import { detectTransactionType } from "@/lib/categorizeTransaction";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -166,7 +167,7 @@ export default function RevenuesPage() {
             <div className="space-y-4">
               <div>
                 <Label style={{ color: '#94A3B8' }}>Fonte</Label>
-                <Select value={form.source} onValueChange={v => setForm(f => ({ ...f, source: v }))}>
+                <Select value={form.source} onValueChange={v => { const autoType = detectTransactionType(v, "receita"); setForm(f => ({ ...f, source: v, type: autoType })); }}>
                   <SelectTrigger style={{ background: '#080C10', borderColor: '#1A2535', color: '#F0F4F8' }}><SelectValue placeholder="Selecione" /></SelectTrigger>
                   <SelectContent style={{ background: '#0D1318', borderColor: '#1A2535' }}>
                     {sourceOptions.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}

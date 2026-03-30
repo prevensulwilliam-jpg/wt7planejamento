@@ -159,3 +159,38 @@ export const INTENT_CONFIG = {
   transferencia: { color: "#94A3B8", label: "Transferência", badge: "gray" as const },
   duvida: { color: "#F59E0B", label: "Dúvida", badge: "gold" as const },
 };
+
+// Categorias que são SEMPRE fixas
+const FIXED_CATEGORIES = [
+  "consorcio", "academia", "assinaturas", "internet", "telefonia",
+  "terapia", "maconaria", "guarani", "veiculo",
+];
+
+// Categorias que são SEMPRE variáveis
+const VARIABLE_CATEGORIES = [
+  "alimentacao", "lazer", "viagens", "gasolina", "farmacia",
+  "obras", "terrenos", "outros",
+];
+
+// Fontes de receita fixas
+const FIXED_REVENUE_SOURCES = [
+  "kitnets", "salario",
+];
+
+// Fontes de receita variáveis
+const VARIABLE_REVENUE_SOURCES = [
+  "comissao_prevensul", "laudos", "t7", "solar", "dividendos",
+];
+
+export function detectTransactionType(
+  category: string,
+  intent: "receita" | "despesa" | "transferencia" | "duvida"
+): "fixed" | "variable" {
+  if (intent === "receita") {
+    if (FIXED_REVENUE_SOURCES.includes(category)) return "fixed";
+    return "variable";
+  }
+  if (FIXED_CATEGORIES.includes(category)) return "fixed";
+  if (VARIABLE_CATEGORIES.includes(category)) return "variable";
+  return "variable";
+}
