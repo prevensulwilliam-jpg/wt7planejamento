@@ -7,6 +7,7 @@ interface KpiCardProps {
   change?: number;
   color: 'gold' | 'green' | 'red' | 'cyan' | 'gray';
   compact?: boolean;
+  formatAs?: 'currency' | 'number';
 }
 
 const colorMap = {
