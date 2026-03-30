@@ -10,7 +10,7 @@ export function useBankTransactions(filters?: {
     queryKey: ["bank_transactions", filters],
     queryFn: async () => {
       let q = supabase
-        .from("bank_transactions" as any)
+        .from("bank_transactions")
         .select("*, bank_accounts(bank_name, account_type)")
         .order("date", { ascending: false });
       if (filters?.accountId) q = q.eq("bank_account_id", filters.accountId);
