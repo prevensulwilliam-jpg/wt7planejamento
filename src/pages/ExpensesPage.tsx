@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useExpenses, useCreateExpense, useDeleteExpense, useUpdateExpense, exportCSV } from "@/hooks/useFinances";
 import { useCategories } from "@/hooks/useCategories";
 import { formatCurrency, formatDate, formatMonth, getCurrentMonth } from "@/lib/formatters";
+import { detectTransactionType } from "@/lib/categorizeTransaction";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
