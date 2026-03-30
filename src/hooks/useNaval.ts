@@ -5,7 +5,7 @@ import { useKitnets, useKitnetSummary } from "./useKitnets";
 import { usePrevensulBilling } from "./useBilling";
 import { getCurrentMonth, formatMonth } from "@/lib/formatters";
 
-export function useWiselyContext() {
+export function useNavalContext() {
   const month = getCurrentMonth();
   const kpis = useDashboardKPIs(month);
   const { data: kitnets } = useKitnets();
