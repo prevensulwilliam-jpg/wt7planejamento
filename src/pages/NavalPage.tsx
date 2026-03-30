@@ -66,7 +66,7 @@ function AnalysisCard() {
 }
 
 function ChatSection() {
-  const { messages, loading, send } = useWiselyChat();
+  const { messages, loading, send } = useNavalChat();
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
