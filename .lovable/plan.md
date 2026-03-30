@@ -1,70 +1,44 @@
 
 
-# Rename — Wisely → Naval em todo o sistema
+# Feature — Filtros, ordenação e edição inline em Despesas e Receitas
 
 ## Summary
-Global find-and-replace of "Wisely" → "Naval" across 7 files, plus renaming 3 files. Edge function file stays as `wisely-ai` to preserve the Supabase integration.
+Add `useUpdateExpense` and `useUpdateRevenue` hooks, then enhance both pages with column sorting, type/category filters, and inline editing.
 
 ## Changes
 
-### 1. Rename files
-- `src/components/wt7/WiselyChat.tsx` → `src/components/wt7/NavalChat.tsx`
-- `src/hooks/useWisely.ts` → `src/hooks/useNaval.ts`
-- `src/pages/WiselyPage.tsx` → `src/pages/NavalPage.tsx`
+### 1. `src/hooks/useFinances.ts`
+Add two new mutation hooks:
+- `useUpdateExpense` — updates expense by id (category, type, description, amount)
+- `useUpdateRevenue` — updates revenue by id (source, type, description, amount)
 
-### 2. `src/components/wt7/NavalChat.tsx` (was WiselyChat.tsx)
-- `export function WiselyChat` → `export function NavalChat`
-- All UI strings "Wisely" → "Naval" (FAB label, header, footer hint)
+### 2. `src/pages/ExpensesPage.tsx`
+- Add imports: `useMemo` from React, `useUpdateExpense`, `useCategories`, sort/edit icons from lucide
+- Add state: `sortField`, `sortDir`, `filterType`, `filterCategory`, `editingId`, `editForm`
+- Add `filteredExpenses` memo with type filter, category filter, and multi-column sorting
+- Add `toggleSort` helper and `SortIcon` component
+- Add filter bar above table: type toggle buttons (Todos/Fixos/Variáveis), category dropdown from `useCategories("despesa")`, clear filters button, record count
+- Make table headers clickable (Categoria, Tipo, Valor, Data) with sort icons
+- Replace table body with inline-editable rows: category select, description input, type select, amount input — with confirm/cancel buttons via `useUpdateExpense`
+- Use `filteredExpenses` instead of raw `data` in the table and footer total
 
-### 3. `src/hooks/useNaval.ts` (was useWisely.ts)
-- `useWiselyContext` → `useNavalContext`
-- `useWiselyAnalysis` → `useNavalAnalysis`
-- `useWiselyChat` → `useNavalChat`
-- `useWiselyInsight` → `useNavalInsight`
-- `callWisely` → `callNaval`
-- Console error strings "Wisely" → "Naval"
+### 3. `src/pages/RevenuesPage.tsx`
+Same pattern as ExpensesPage but adapted:
+- `useUpdateRevenue` instead of `useUpdateExpense`
+- `source` field instead of `category`
+- `useCategories("receita")` for filter dropdown
+- `received_at` instead of `paid_at`
+- Gold/green color (#10B981) for values instead of red
+- Type options: fixed/variable/eventual
+- Sort fields: source, type, amount, date
 
-### 4. `src/pages/NavalPage.tsx` (was WiselyPage.tsx)
-- Import path `@/hooks/useWisely` → `@/hooks/useNaval`
-- Hook names: `useWiselyAnalysis/Chat/Insight` → `useNavalAnalysis/Chat/Insight`
-- UI strings: "Wisely IA" → "Naval", "Pergunte ao Wisely" → "Pergunte ao Naval", placeholder text
-- Badge: "powered by AI" → "powered by AI · Naval Ravikant inspired"
-- Export: `WiselyPage` → `NavalPage`
-
-### 5. `src/components/wt7/AdminSidebar.tsx`
-- `label: "Wisely IA"` → `label: "Naval"`
-- `href: "/wisely"` → `href: "/naval"`
-
-### 6. `src/App.tsx`
-- `import WiselyPage` → `import NavalPage from "@/pages/NavalPage"`
-- `path="/wisely"` → `path="/naval"`
-- `element={<WiselyPage />}` → `element={<NavalPage />}`
-
-### 7. `src/pages/DashboardPage.tsx`
-- Import: `useWiselyAnalysis` → `useNavalAnalysis` from `@/hooks/useNaval`
-- `WiselyDashboardCard` → `NavalDashboardCard`
-- "WISELY —" → "NAVAL —"
-- `navigate('/wisely')` → `navigate('/naval')`
-- "Wisely →" → "Naval →"
-
-### 8. `src/layouts/AdminLayout.tsx`
-- Import: `WiselyChat` → `NavalChat` from `@/components/wt7/NavalChat`
-- `<WiselyChat />` → `<NavalChat />`
-
-### 9. `supabase/functions/wisely-ai/index.ts`
-- "Você é o Wisely" → "Você é o Naval"
-- "assistente financeiro pessoal" → "conselheiro financeiro estratégico"
-- Keep filename and function name as `wisely-ai`
+### 4. Forms
+Both pages already have the Tipo (Fixo/Variável) field in the creation dialog — no changes needed there.
 
 ## Files Changed
 | File | Action |
 |------|--------|
-| `src/components/wt7/NavalChat.tsx` | Create (rename from WiselyChat.tsx) |
-| `src/hooks/useNaval.ts` | Create (rename from useWisely.ts) |
-| `src/pages/NavalPage.tsx` | Create (rename from WiselyPage.tsx) |
-| `src/components/wt7/AdminSidebar.tsx` | Edit sidebar link |
-| `src/App.tsx` | Edit route + import |
-| `src/pages/DashboardPage.tsx` | Edit import + strings |
-| `src/layouts/AdminLayout.tsx` | Edit import + component |
-| `supabase/functions/wisely-ai/index.ts` | Edit system prompt only |
+| `src/hooks/useFinances.ts` | Add `useUpdateExpense` + `useUpdateRevenue` |
+| `src/pages/ExpensesPage.tsx` | Add filters, sorting, inline editing |
+| `src/pages/RevenuesPage.tsx` | Add filters, sorting, inline editing |
 
