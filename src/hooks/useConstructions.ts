@@ -209,3 +209,93 @@ export function useCreateGoal() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["goals"] }),
   });
 }
+
+// Wedding Vendors
+export function useWeddingVendors() {
+  return useQuery({
+    queryKey: ["wedding_vendors"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("wedding_vendors" as any)
+        .select("*, wedding_vendor_payments(*)")
+        .order("service");
+      if (error) throw error;
+      return data as any[];
+    },
+  });
+}
+
+export function useCreateWeddingVendor() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (vendor: any) => {
+      const { error } = await supabase.from("wedding_vendors" as any).insert(vendor);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["wedding_vendors"] }),
+  });
+}
+
+export function useUpdateWeddingVendor() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...updates }: any) => {
+      const { error } = await supabase.from("wedding_vendors" as any).update({ ...updates, updated_at: new Date().toISOString() }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["wedding_vendors"] }),
+  });
+}
+
+export function useDeleteWeddingVendor() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("wedding_vendors" as any).delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["wedding_vendors"] }),
+  });
+}
+
+export function useCreateVendorPayment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payment: any) => {
+      const { error } = await supabase.from("wedding_vendor_payments" as any).insert(payment);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["wedding_vendors"] }),
+  });
+}
+
+export function useUpdateVendorPayment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...updates }: any) => {
+      const { error } = await supabase.from("wedding_vendor_payments" as any).update(updates).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["wedding_vendors"] }),
+  });
+}
+
+export function useDeleteVendorPayment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("wedding_vendor_payments" as any).delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["wedding_vendors"] }),
+  });
+}
+
+export async function uploadWeddingFile(file: File, path: string): Promise<string> {
+  const { data, error } = await supabase.storage
+    .from("wedding-docs")
+    .upload(path, file, { upsert: true });
+  if (error) throw error;
+  const { data: urlData } = supabase.storage.from("wedding-docs").getPublicUrl(data.path);
+  return urlData.publicUrl;
+}
