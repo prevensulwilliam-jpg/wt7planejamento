@@ -185,7 +185,7 @@ function InsightCard({
   prompt: string;
   onDetail: (q: string) => void;
 }) {
-  const { text, loading } = useWiselyInsight(title, prompt);
+  const { text, loading } = useNavalInsight(title, prompt);
 
   return (
     <PremiumCard>
