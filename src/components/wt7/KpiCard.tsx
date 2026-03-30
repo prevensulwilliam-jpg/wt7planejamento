@@ -18,9 +18,13 @@ const colorMap = {
   gray: { bg: 'rgba(74,85,104,0.08)', border: 'rgba(74,85,104,0.2)', text: '#94A3B8', badge: 'rgba(74,85,104,0.15)' },
 };
 
-export function KpiCard({ label, value, change, color, compact }: KpiCardProps) {
+export function KpiCard({ label, value, change, color, compact, formatAs = 'currency' }: KpiCardProps) {
   const c = colorMap[color];
   const isPositive = (change ?? 0) >= 0;
+
+  const displayValue = formatAs === 'number'
+    ? value.toLocaleString('pt-BR')
+    : compact ? formatCompactCurrency(value) : formatCurrency(value);
 
   return (
     <div
@@ -35,7 +39,7 @@ export function KpiCard({ label, value, change, color, compact }: KpiCardProps) 
         {label}
       </p>
       <p className="font-mono text-[28px] font-medium mt-1" style={{ color: c.text }}>
-        {compact ? formatCompactCurrency(value) : formatCurrency(value)}
+        {displayValue}
       </p>
       {change !== undefined && (
         <div className="flex items-center gap-1 mt-2">
