@@ -31,8 +31,8 @@ const sourceOptions = [
 ];
 
 const sourceColors: Record<string, string> = {
-  kitnets: '#C9A84C', comissao_prevensul: '#2DD4BF', salario: '#10B981',
-  solar_energia: '#F59E0B', t7: '#8B5CF6', laudos: '#3B82F6', casamento_energia: '#EC4899', outros: '#4A5568',
+  aluguel_kitnets: '#C9A84C', comiss_o_prevensul: '#2DD4BF', sal_rio: '#10B981',
+  solar_energia: '#F59E0B', t7: '#8B5CF6', laudos_t_cnicos: '#3B82F6', casamento_energia: '#EC4899', outros_receita: '#4A5568', "outros__receita_": '#4A5568',
 };
 
 const sourceBadgeVariant: Record<string, 'gold' | 'green' | 'cyan' | 'gray'> = {
