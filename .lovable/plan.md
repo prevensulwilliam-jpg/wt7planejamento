@@ -1,50 +1,41 @@
 
 
-# Fix crítico — 4 bugs na conciliação bancária
+# Fix — Camila como transferência + anti-duplicata no recategorizar
 
-## Resumo
-Corrigir parser OFX para valores com vírgula decimal, adicionar keywords Credifoz/Ailos, prevenir duplicação de receitas/despesas na conciliação, e criar funções SQL para limpar duplicatas existentes.
+## 1. `src/lib/categorizeTransaction.ts` — Adicionar variações do sobrenome Camila
 
-## 1. `src/lib/parseOFX.ts` — Parser de vírgula decimal
+Linha 41: substituir `"camila fuenfstueck adriano"` por 3 entradas:
+```
+"camila fuenfstueck adriano",
+"camila fuenstueck adriano",
+"fuenfstueck",
+```
 
-Linha 23: substituir o parse simples do TRNAMT por lógica que trata ponto de milhar + vírgula decimal (formato BR como `10.050,00`).
+## 2. `src/pages/ReconciliationPage.tsx` — Anti-duplicata no recategorizeMutation
 
-## 2. `src/lib/categorizeTransaction.ts` — Keywords Credifoz/Ailos
+Linhas 537-549: após os blocos de insert existentes (que já checam `!tx.matched_revenue_id` / `!tx.matched_expense_id`), adicionar dois `else if` para atualizar a categoria quando já existe vínculo:
 
-- Adicionar ao `TRANSFER_KEYWORDS`: `db.apl.rdcpos`, `cr.apl.rdcpos`, `db. cotas`, `cr.dep.interc`, `cr.trf.interc`, `db.trf.interc`, `apl.rdcpos`, `rdcpos`, `credito pix - william tavares`, `debito pix - william tavares`, `camila fuenfstueck adriano`
-- Adicionar ao `EXPENSE_RULES`: Internet/Telefonia (claro, tim, vivo, oi), Energia Elétrica (celesc distribuicao), Facebook/Google Ads, Conveniências
-- Adicionar ao `CATEGORY_LABELS`: `internet`, `energia_eletrica`
+```tsx
+else if (isAuto && result.intent === "receita" && tx.matched_revenue_id) {
+  await supabase.from("revenues").update({ source: result.category }).eq("id", tx.matched_revenue_id);
+} else if (isAuto && result.intent === "despesa" && tx.matched_expense_id) {
+  await supabase.from("expenses").update({ category: result.category }).eq("id", tx.matched_expense_id);
+}
+```
 
-## 3. `src/pages/ReconciliationPage.tsx` — Anti-duplicata
+Also: remove the lines that overwrite `matched_revenue_id`/`matched_expense_id` with null when they already exist (lines 548-549 in the update call should only set these if `revenueId`/`expenseId` are non-null).
 
-### 3a. `classifyAs` (linhas 635-687)
-Antes de inserir receita/despesa, verificar `tx.matched_revenue_id` / `tx.matched_expense_id`. Se já existe, apenas atualizar a categoria existente ao invés de criar nova.
+## 3. Database cleanup (via migration)
 
-### 3b. `recategorizeMutation` (linhas 494-566)
-Adicionar check `!tx.matched_revenue_id` / `!tx.matched_expense_id` antes de inserir, linkando o ID de volta à transação.
+Run SQL to:
+- Clean duplicate revenues/expenses
+- Mark Camila transactions as ignored/transferência
+- Delete erroneous Saúde expenses from Camila
 
-### 3c. `confirmAllAuto` (linhas 689-736)
-Mesmo check: verificar se já tem revenue/expense linkado antes de criar.
-
-### 3d. Table action button (linha 945)
-O botão Confirmar na tabela também precisa do check anti-duplicata — atualmente chama `matchMutation.mutate()` direto sem criar receita/despesa. Redirecionar para `classifyAs` para usar o fluxo completo.
-
-## 4. Database — Funções de limpeza de duplicatas
-
-Migration SQL com duas funções `SECURITY DEFINER`:
-- `clean_duplicate_revenues()` — deleta receitas duplicadas (mesma description + reference_month + amount + source), mantém a mais antiga
-- `clean_duplicate_expenses()` — deleta despesas duplicadas (mesma description + reference_month + amount + category), mantém a mais antiga
-
-## 5. `src/pages/UsersPage.tsx` — Botão na zona de perigo
-
-Adicionar botão "Limpar duplicatas" que chama as duas RPCs acima.
-
-## Arquivos alterados
-| Arquivo | Ação |
-|---------|------|
-| `src/lib/parseOFX.ts` | Fix parse vírgula decimal |
-| `src/lib/categorizeTransaction.ts` | Add keywords Credifoz/Ailos + novas categorias |
-| `src/pages/ReconciliationPage.tsx` | Anti-duplicata em classifyAs, recategorize, confirmAllAuto |
-| DB migration | Funções clean_duplicate_revenues/expenses |
-| `src/pages/UsersPage.tsx` | Botão limpar duplicatas na zona de perigo |
+## Files Changed
+| File | Action |
+|------|--------|
+| `src/lib/categorizeTransaction.ts` | Add Camila surname variations |
+| `src/pages/ReconciliationPage.tsx` | Add else-if update branches in recategorizeMutation |
+| DB migration | Cleanup Camila + duplicates |
 
