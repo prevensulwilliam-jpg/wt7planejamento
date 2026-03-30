@@ -773,10 +773,10 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard label="Com Dúvidas" value={summary.doubts} color="gold" compact />
-        <KpiCard label="Auto-categorizado" value={summary.autoCategorized} color="cyan" compact />
-        <KpiCard label="Transferências" value={summary.transfers} color="gray" compact />
-        <KpiCard label="Conciliados" value={summary.matched} color="green" compact />
+        <KpiCard label="Com Dúvidas" value={summary.doubts} color="gold" formatAs="number" />
+        <KpiCard label="Auto-categorizado" value={summary.autoCategorized} color="cyan" formatAs="number" />
+        <KpiCard label="Transferências" value={summary.transfers} color="gray" formatAs="number" />
+        <KpiCard label="Conciliados" value={summary.matched} color="green" formatAs="number" />
       </div>
 
       {/* Filters */}
