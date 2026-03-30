@@ -87,7 +87,7 @@ function ChatSection() {
       <div className="flex items-center gap-2 mb-4">
         <MessageSquare className="w-4 h-4" style={{ color: "#2DD4BF" }} />
         <h3 className="font-display font-bold text-sm" style={{ color: "#F0F4F8" }}>
-          Pergunte ao Wisely
+          Pergunte ao Naval
         </h3>
       </div>
 
