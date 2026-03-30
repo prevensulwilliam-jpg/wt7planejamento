@@ -95,7 +95,7 @@ export function useIgnoreTransaction() {
   return useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase
-        .from("bank_transactions" as any)
+        .from("bank_transactions")
         .update({ status: "ignored" })
         .eq("id", id);
       if (error) throw error;
