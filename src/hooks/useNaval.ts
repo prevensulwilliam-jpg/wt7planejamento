@@ -67,8 +67,8 @@ async function callNaval(
   return data?.text ?? "";
 }
 
-export function useWiselyAnalysis() {
-  const { context, isReady } = useWiselyContext();
+export function useNavalAnalysis() {
+  const { context, isReady } = useNavalContext();
   const [analysis, setAnalysis] = useState("");
   const [loading, setLoading] = useState(false);
   const generated = useRef(false);
