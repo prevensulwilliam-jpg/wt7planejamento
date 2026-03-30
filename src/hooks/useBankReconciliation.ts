@@ -110,7 +110,7 @@ export function useBulkConfirmSuggestions() {
     mutationFn: async (transactions: { id: string; category: string }[]) => {
       for (const tx of transactions) {
         const { error } = await supabase
-          .from("bank_transactions" as any)
+          .from("bank_transactions")
           .update({ category_confirmed: tx.category, status: "matched" })
           .eq("id", tx.id);
         if (error) throw error;

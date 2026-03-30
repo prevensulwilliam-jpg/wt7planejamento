@@ -61,7 +61,7 @@ export function useDeleteCategory() {
   return useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase
-        .from("custom_categories" as any)
+        .from("custom_categories")
         .update({ active: false })
         .eq("id", id);
       if (error) throw error;

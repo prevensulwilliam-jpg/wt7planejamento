@@ -18,6 +18,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Landmark, Plus, TrendingUp, Wallet } from "lucide-react";
 
 export default function AssetsPage() {
+  const [searchParams] = useSearchParams();
+  const defaultTab = searchParams.get("tab") ?? "bens";
   const { data: assets, isLoading: assetsLoading } = useAssets();
   const { data: investments, isLoading: invLoading } = useInvestments();
   const { data: consortiums, isLoading: consLoading } = useConsortiums();
