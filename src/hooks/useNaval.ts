@@ -124,7 +124,7 @@ export function useNavalChat() {
         const text = await callNaval(allMsgs);
         setMessages((prev) => [...prev, { role: "assistant", content: text }]);
       } catch (e) {
-        console.error("Wisely chat error:", e);
+        console.error("Naval chat error:", e);
         setMessages((prev) => [
           ...prev,
           {
