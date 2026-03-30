@@ -70,6 +70,14 @@ const EXPENSE_RULES: { keywords: string[]; category: string; label: string }[] =
   { keywords: ["pagto cartao", "pagamento cartao", "fatura cartao", "cartao credito pgto", "pg cartao"], category: "cartao", label: "Fatura Cartão" },
   { keywords: ["pagto boleto", "pg boleto", "boleto bancario"], category: "outros", label: "Boleto" },
   { keywords: ["ademicon", "consorcio", "carta credito"], category: "consorcio", label: "Consórcio" },
+  // Internet/Telefonia
+  { keywords: ["debito pix - claro", "claro s.a", "tim s.a", "vivo ", "oi s.a"], category: "internet", label: "Internet/Telefonia" },
+  // Energia elétrica
+  { keywords: ["debito pix - celesc", "celesc distribuicao"], category: "energia_eletrica", label: "Energia Elétrica" },
+  // Facebook/Google Ads
+  { keywords: ["facebook servicos", "google ads", "meta ads"], category: "assinaturas", label: "Assinaturas/Ads" },
+  // Conveniência/Alimentação
+  { keywords: ["conveniencias rodoviaria"], category: "alimentacao", label: "Alimentação" },
 ];
 
 export function categorizeTransaction(
