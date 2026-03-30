@@ -148,6 +148,7 @@ export const CATEGORY_LABELS: Record<string, string> = {
   impostos: "Impostos", casamento: "Casamento", obras: "Obras",
   viagens: "Viagens", lazer: "Lazer", cartao: "Fatura Cartão",
   consorcio: "Consórcio", outros: "Outros",
+  internet: "Internet/Telefonia", energia_eletrica: "Energia Elétrica",
 };
 
 export const INTENT_CONFIG = {

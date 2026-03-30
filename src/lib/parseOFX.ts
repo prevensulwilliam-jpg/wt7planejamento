@@ -20,7 +20,12 @@ export function parseOFX(content: string): ParsedTransaction[] {
     };
 
     const dtposted = get("DTPOSTED");
-    const trnamt = parseFloat(get("TRNAMT").replace(",", "."));
+    const trnamtRaw = get("TRNAMT").trim();
+    const trnamt = parseFloat(
+      trnamtRaw.includes(",")
+        ? trnamtRaw.replace(/\./g, "").replace(",", ".")
+        : trnamtRaw
+    );
     const fitid = get("FITID");
     const memo = get("MEMO") || get("NAME");
 

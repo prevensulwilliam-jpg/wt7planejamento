@@ -948,7 +948,7 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
                           {(tx.status === "pending" || tx.status === "auto_categorized") && (
                             <div className="flex gap-1">
                               <button
-                                onClick={() => matchMutation.mutate({ id: tx.id, category: tx.category_suggestion || "outros", intent: tx.category_intent })}
+                                onClick={() => classifyAs(tx.id, (tx.category_intent === "receita" || tx.category_intent === "despesa" || tx.category_intent === "transferencia") ? tx.category_intent : "despesa", tx.category_suggestion || "outros")}
                                 className="p-1 rounded hover:bg-green-500/10"
                                 title="Confirmar"
                               >
