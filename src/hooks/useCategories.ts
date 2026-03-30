@@ -49,7 +49,7 @@ export function useUpdateCategory() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, ...updates }: { id: string; name?: string; emoji?: string; type?: string; color?: string; active?: boolean }) => {
-      const { error } = await supabase.from("custom_categories" as any).update(updates).eq("id", id);
+      const { error } = await supabase.from("custom_categories").update(updates).eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["custom_categories"] }),
