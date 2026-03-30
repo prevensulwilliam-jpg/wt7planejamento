@@ -103,8 +103,8 @@ export function useNavalAnalysis() {
 
 type ChatMsg = { role: "user" | "assistant"; content: string };
 
-export function useWiselyChat() {
-  const { context } = useWiselyContext();
+export function useNavalChat() {
+  const { context } = useNavalContext();
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [loading, setLoading] = useState(false);
 
