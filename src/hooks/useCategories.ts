@@ -6,7 +6,7 @@ export function useCategories(type?: "despesa" | "receita" | "ambos") {
     queryKey: ["custom_categories", type],
     queryFn: async () => {
       let q = supabase
-        .from("custom_categories" as any)
+        .from("custom_categories")
         .select("*")
         .eq("active", true)
         .order("type")
