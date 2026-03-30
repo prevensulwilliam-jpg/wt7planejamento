@@ -36,7 +36,7 @@ export function useImportTransactions() {
 
       const externalIds = transactions.map(t => t.external_id).filter(Boolean);
       const { data: existing } = await supabase
-        .from("bank_transactions" as any)
+        .from("bank_transactions")
         .select("external_id")
         .in("external_id", externalIds);
 
