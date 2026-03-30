@@ -677,7 +677,7 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
           category,
           description,
           amount: tx.amount,
-          type: "variable",
+          type: detectTransactionType(category, "despesa"),
           reference_month: tx.date?.slice(0, 7),
           paid_at: tx.date,
         }).select("id").single();
