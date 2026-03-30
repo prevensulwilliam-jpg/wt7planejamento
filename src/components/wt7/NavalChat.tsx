@@ -119,7 +119,7 @@ function getSuggestions(pathname: string): string[] {
   return SUGGESTIONS["default"];
 }
 
-export function WiselyChat() {
+export function NavalChat() {
   const [open, setOpen] = useState(false);
   const [minimized, setMinimized] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
