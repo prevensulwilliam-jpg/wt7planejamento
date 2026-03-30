@@ -853,23 +853,35 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
             </div>
           )}
 
-          {/* AUTO-CATEGORIZED */}
+          {/* AUTO-CATEGORIZED — cards de revisão */}
           {autoCategorized.length > 0 && (
-            <div className="rounded-xl px-4 py-3 flex items-center justify-between"
-              style={{ background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.2)" }}>
-              <div className="flex items-center gap-3">
-                <span>✅</span>
-                <p className="text-sm" style={{ color: "#94A3B8" }}>
-                  <strong style={{ color: "#10B981" }}>{autoCategorized.length} transações</strong> categorizadas automaticamente com alta confiança.
-                </p>
+            <PremiumCard glowColor="rgba(45,212,191,0.3)">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">✅</span>
+                  <h3 className="font-display font-bold" style={{ color: "#2DD4BF" }}>
+                    {autoCategorized.length} auto-categorizadas — revise e confirme
+                  </h3>
+                </div>
+                <button
+                  onClick={confirmAllAuto}
+                  className="text-xs px-3 py-1.5 rounded-lg font-medium transition-all hover:opacity-90"
+                  style={{ background: "rgba(16,185,129,0.2)", color: "#10B981", border: "1px solid rgba(16,185,129,0.3)" }}>
+                  ✓ Confirmar todas
+                </button>
               </div>
-              <button
-                onClick={confirmAllAuto}
-                className="text-xs px-3 py-1.5 rounded-lg font-medium transition-all hover:opacity-90"
-                style={{ background: "rgba(16,185,129,0.2)", color: "#10B981", border: "1px solid rgba(16,185,129,0.3)" }}>
-                Confirmar todas
-              </button>
-            </div>
+              <div className="space-y-3">
+                {autoCategorized.map((tx: any) => (
+                  <AutoCategorizedCard
+                    key={tx.id}
+                    tx={tx}
+                    classifyAs={classifyAs}
+                    ignoreTransaction={(id) => ignoreMutation.mutate(id)}
+                    confirmAs={(id, category, intent) => matchMutation.mutate({ id, category, intent })}
+                  />
+                ))}
+              </div>
+            </PremiumCard>
           )}
 
           {/* MATCHED / ALL TRANSACTIONS TABLE */}
