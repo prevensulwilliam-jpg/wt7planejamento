@@ -204,7 +204,7 @@ export default function DashboardPage() {
             <KpiCard label="Receita Total" value={kpis.totalRevenue} color="gold" />
             <KpiCard label="Resultado Líquido" value={kpis.netResult} color="green" />
             <KpiCard label="Despesas Totais" value={kpis.totalExpenses} color="red" />
-            <KpiCard label="Patrimônio Líquido" value={4200000} color="cyan" compact />
+            <KpiCard label="Patrimônio Líquido" value={netWorth} color="cyan" compact />
           </>
         )}
       </div>
