@@ -81,7 +81,7 @@ export function useNavalAnalysis() {
         const prompt =
           customPrompt ??
           `Analise os dados financeiros de ${context.month} e me dê:\n1. Os 2 pontos mais positivos do mês\n2. Os 2 alertas ou oportunidades de melhoria\n3. 1 ação prioritária que devo tomar esta semana\n\nDados do mês:\n${JSON.stringify(context, null, 2)}`;
-        const text = await callWisely([{ role: "user", content: prompt }]);
+        const text = await callNaval([{ role: "user", content: prompt }]);
         setAnalysis(text);
         generated.current = true;
       } catch (e) {
