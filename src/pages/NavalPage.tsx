@@ -162,7 +162,7 @@ function ChatSection() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-          placeholder="Pergunte algo ao Wisely..."
+          placeholder="Pergunte algo ao Naval..."
           className="flex-1"
           style={{ background: "#0D1318", borderColor: "#2A3F55", color: "#F0F4F8" }}
         />
