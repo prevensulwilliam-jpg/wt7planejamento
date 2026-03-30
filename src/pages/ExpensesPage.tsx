@@ -1,11 +1,12 @@
-import { useState } from "react";
-import { Plus, Download, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Plus, Download, Trash2, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, Pencil, Check, X } from "lucide-react";
 import { KpiCard } from "@/components/wt7/KpiCard";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
 import { GoldButton } from "@/components/wt7/GoldButton";
 import { WtBadge } from "@/components/wt7/WtBadge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useExpenses, useCreateExpense, useDeleteExpense, exportCSV } from "@/hooks/useFinances";
+import { useExpenses, useCreateExpense, useDeleteExpense, useUpdateExpense, exportCSV } from "@/hooks/useFinances";
+import { useCategories } from "@/hooks/useCategories";
 import { formatCurrency, formatDate, formatMonth, getCurrentMonth } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -45,21 +46,50 @@ function navigateMonth(current: string, delta: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+type SortField = "category" | "type" | "amount" | "date" | null;
+
 export default function ExpensesPage() {
   const [month, setMonth] = useState(getCurrentMonth());
   const [dialogOpen, setDialogOpen] = useState(false);
-  const { data = [], isLoading } = useExpenses(month);
+  const { data: expenses = [], isLoading } = useExpenses(month);
   const createExpense = useCreateExpense();
   const deleteExpense = useDeleteExpense();
+  const updateExpense = useUpdateExpense();
+  const { data: categories = [] } = useCategories("despesa");
   const { toast } = useToast();
 
   const [form, setForm] = useState({ category: "", description: "", amount: "", type: "variable", paid_at: "", reference_month: month });
 
-  const totalMonth = data.reduce((s, e) => s + (e.amount ?? 0), 0);
-  const totalFixed = data.filter(e => e.type === 'fixed').reduce((s, e) => s + (e.amount ?? 0), 0);
-  const totalVariable = data.filter(e => e.type !== 'fixed').reduce((s, e) => s + (e.amount ?? 0), 0);
+  // Sort & filter state
+  const [sortField, setSortField] = useState<SortField>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [filterType, setFilterType] = useState<"all" | "fixed" | "variable">("all");
+  const [filterCategory, setFilterCategory] = useState("all");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<Record<string, any>>({});
 
-  const byCat = data.reduce((acc, e) => {
+  const filteredExpenses = useMemo(() => {
+    let data = [...expenses];
+    if (filterType !== "all") data = data.filter(e => e.type === filterType);
+    if (filterCategory !== "all") data = data.filter(e => e.category === filterCategory);
+    if (sortField) {
+      data.sort((a, b) => {
+        let va: any = sortField === "date" ? (a.paid_at ?? "") : (a as any)[sortField] ?? "";
+        let vb: any = sortField === "date" ? (b.paid_at ?? "") : (b as any)[sortField] ?? "";
+        if (sortField === "amount") { va = Number(va); vb = Number(vb); }
+        if (va < vb) return sortDir === "asc" ? -1 : 1;
+        if (va > vb) return sortDir === "asc" ? 1 : -1;
+        return 0;
+      });
+    }
+    return data;
+  }, [expenses, sortField, sortDir, filterType, filterCategory]);
+
+  const totalMonth = filteredExpenses.reduce((s, e) => s + (e.amount ?? 0), 0);
+  const totalFixed = expenses.filter(e => e.type === 'fixed').reduce((s, e) => s + (e.amount ?? 0), 0);
+  const totalVariable = expenses.filter(e => e.type !== 'fixed').reduce((s, e) => s + (e.amount ?? 0), 0);
+
+  const byCat = expenses.reduce((acc, e) => {
     const cat = e.category ?? 'outros';
     acc[cat] = (acc[cat] ?? 0) + (e.amount ?? 0);
     return acc;
@@ -72,6 +102,16 @@ export default function ExpensesPage() {
     value: v,
     color: catColors[k] ?? '#4A5568',
   }));
+
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortField(field); setSortDir("desc"); }
+  };
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return <ArrowUpDown className="w-3 h-3 opacity-40" />;
+    return sortDir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />;
+  };
 
   const handleSubmit = async () => {
     if (!form.category || !form.amount || !form.description) return;
@@ -102,8 +142,10 @@ export default function ExpensesPage() {
   };
 
   const handleExportCSV = () => {
-    exportCSV(data, ["Categoria", "Descrição", "Tipo", "Valor", "Data", "Mês"], ["category", "description", "type", "amount", "paid_at", "reference_month"], `despesas_${month}.csv`);
+    exportCSV(expenses, ["Categoria", "Descrição", "Tipo", "Valor", "Data", "Mês"], ["category", "description", "type", "amount", "paid_at", "reference_month"], `despesas_${month}.csv`);
   };
+
+  const allCategories = categories.length > 0 ? categories : categoryOptions.map(c => ({ name: c.label.replace(/^.+\s/, ''), emoji: c.label.split(' ')[0], id: c.value }));
 
   return (
     <div className="space-y-6 max-w-[1400px] mx-auto">
@@ -173,7 +215,7 @@ export default function ExpensesPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {isLoading ? Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-[120px] rounded-2xl" style={{ background: '#0D1318' }} />) : (
               <>
-                <KpiCard label="Total do Mês" value={totalMonth} color="red" />
+                <KpiCard label="Total do Mês" value={expenses.reduce((s, e) => s + (e.amount ?? 0), 0)} color="red" />
                 <KpiCard label="Despesas Fixas" value={totalFixed} color="gold" />
                 <KpiCard label="Despesas Variáveis" value={totalVariable} color="cyan" />
                 <KpiCard label="Maior Categoria" value={topCategory?.[1] ?? 0} color="cyan" />
@@ -181,48 +223,173 @@ export default function ExpensesPage() {
             )}
           </div>
 
+          {/* Filter bar */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid #1A2535' }}>
+              {(["all", "fixed", "variable"] as const).map(t => (
+                <button key={t} onClick={() => setFilterType(t)}
+                  className="px-3 py-1.5 text-xs font-medium transition-all"
+                  style={{
+                    background: filterType === t ? "rgba(201,168,76,0.2)" : "#080C10",
+                    color: filterType === t ? "#E8C97A" : "#64748B",
+                  }}>
+                  {t === "all" ? "Todos" : t === "fixed" ? "Fixos" : "Variáveis"}
+                </button>
+              ))}
+            </div>
+
+            <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)}
+              className="px-3 py-1.5 text-xs rounded-lg outline-none"
+              style={{ background: "#080C10", border: "1px solid #1A2535", color: filterCategory !== "all" ? "#E8C97A" : "#64748B" }}>
+              <option value="all">Todas categorias</option>
+              {categoryOptions.map(c => (
+                <option key={c.value} value={c.value}>{c.label}</option>
+              ))}
+            </select>
+
+            {(filterType !== "all" || filterCategory !== "all" || sortField) && (
+              <button onClick={() => { setFilterType("all"); setFilterCategory("all"); setSortField(null); }}
+                className="px-3 py-1.5 text-xs rounded-lg"
+                style={{ background: "rgba(244,63,94,0.1)", color: "#F43F5E", border: "1px solid rgba(244,63,94,0.2)" }}>
+                Limpar filtros
+              </button>
+            )}
+
+            <span className="text-xs ml-auto" style={{ color: '#4A5568' }}>
+              {filteredExpenses.length} registros
+            </span>
+          </div>
+
           <PremiumCard>
-            {isLoading ? <Skeleton className="h-[300px] rounded-xl" style={{ background: '#131B22' }} /> : data.length === 0 ? (
+            {isLoading ? <Skeleton className="h-[300px] rounded-xl" style={{ background: '#131B22' }} /> : filteredExpenses.length === 0 ? (
               <div className="text-center py-12" style={{ color: '#4A5568' }}>
                 <p className="text-lg mb-2">📊</p>
-                <p className="text-sm">Nenhuma despesa neste mês</p>
+                <p className="text-sm">Nenhuma despesa encontrada</p>
               </div>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow style={{ borderColor: '#1A2535' }}>
-                    <TableHead style={{ color: '#94A3B8' }}>Categoria</TableHead>
+                    <TableHead onClick={() => toggleSort("category")} className="cursor-pointer select-none" style={{ color: '#94A3B8' }}>
+                      <div className="flex items-center gap-1">Categoria <SortIcon field="category" /></div>
+                    </TableHead>
                     <TableHead style={{ color: '#94A3B8' }}>Descrição</TableHead>
-                    <TableHead style={{ color: '#94A3B8' }}>Tipo</TableHead>
-                    <TableHead style={{ color: '#94A3B8' }} className="text-right">Valor</TableHead>
-                    <TableHead style={{ color: '#94A3B8' }}>Data</TableHead>
-                    <TableHead style={{ color: '#94A3B8' }} className="w-12"></TableHead>
+                    <TableHead onClick={() => toggleSort("type")} className="cursor-pointer select-none" style={{ color: '#94A3B8' }}>
+                      <div className="flex items-center gap-1">Tipo <SortIcon field="type" /></div>
+                    </TableHead>
+                    <TableHead onClick={() => toggleSort("amount")} className="cursor-pointer select-none text-right" style={{ color: '#94A3B8' }}>
+                      <div className="flex items-center gap-1 justify-end">Valor <SortIcon field="amount" /></div>
+                    </TableHead>
+                    <TableHead onClick={() => toggleSort("date")} className="cursor-pointer select-none" style={{ color: '#94A3B8' }}>
+                      <div className="flex items-center gap-1">Data <SortIcon field="date" /></div>
+                    </TableHead>
+                    <TableHead style={{ color: '#94A3B8' }} className="w-20">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {data.map(e => {
-                    const catOpt = categoryOptions.find(c => c.value === e.category);
+                  {filteredExpenses.map(expense => {
+                    const isEditing = editingId === expense.id;
+                    const catOpt = categoryOptions.find(c => c.value === expense.category);
+
                     return (
-                      <TableRow key={e.id} style={{ borderColor: '#1A2535' }}>
-                        <TableCell><WtBadge variant="gray">{catOpt?.label ?? e.category}</WtBadge></TableCell>
-                        <TableCell style={{ color: '#F0F4F8' }}>{e.description}</TableCell>
-                        <TableCell style={{ color: '#94A3B8' }} className="text-xs font-mono">{e.type === 'fixed' ? 'Fixo' : 'Variável'}</TableCell>
-                        <TableCell className="text-right font-mono" style={{ color: '#F43F5E' }}>{formatCurrency(e.amount ?? 0)}</TableCell>
-                        <TableCell className="font-mono text-xs" style={{ color: '#94A3B8' }}>{e.paid_at ? formatDate(e.paid_at) : '—'}</TableCell>
+                      <TableRow key={expense.id} style={{ borderColor: '#1A2535' }}>
                         <TableCell>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild><button className="text-wt-text-muted hover:text-red-400"><Trash2 className="w-4 h-4" /></button></AlertDialogTrigger>
-                            <AlertDialogContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle style={{ color: '#F0F4F8' }}>Excluir despesa?</AlertDialogTitle>
-                                <AlertDialogDescription>Esta ação não pode ser desfeita.</AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleDelete(e.id)} className="bg-red-600 hover:bg-red-700">Excluir</AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
+                          {isEditing ? (
+                            <select value={editForm.category ?? expense.category ?? ""}
+                              onChange={e => setEditForm(f => ({ ...f, category: e.target.value }))}
+                              className="text-xs px-2 py-1 rounded outline-none w-full"
+                              style={{ background: "#080C10", border: "1px solid #1A2535", color: "#F0F4F8" }}>
+                              {categoryOptions.map(c => (
+                                <option key={c.value} value={c.value}>{c.label}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <WtBadge variant="gray">{catOpt?.label ?? expense.category}</WtBadge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {isEditing ? (
+                            <input value={editForm.description ?? expense.description ?? ""}
+                              onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))}
+                              className="text-xs px-2 py-1 rounded outline-none w-full"
+                              style={{ background: "#080C10", border: "1px solid #1A2535", color: "#F0F4F8" }} />
+                          ) : (
+                            <span style={{ color: '#F0F4F8' }}>{expense.description}</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {isEditing ? (
+                            <select value={editForm.type ?? expense.type ?? "variable"}
+                              onChange={e => setEditForm(f => ({ ...f, type: e.target.value }))}
+                              className="text-xs px-2 py-1 rounded outline-none"
+                              style={{ background: "#080C10", border: "1px solid #1A2535", color: "#F0F4F8" }}>
+                              <option value="fixed">Fixo</option>
+                              <option value="variable">Variável</option>
+                            </select>
+                          ) : (
+                            <span className="text-xs font-mono" style={{ color: '#94A3B8' }}>
+                              {expense.type === 'fixed' ? 'Fixo' : 'Variável'}
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {isEditing ? (
+                            <input type="number" value={editForm.amount ?? expense.amount ?? 0}
+                              onChange={e => setEditForm(f => ({ ...f, amount: parseFloat(e.target.value) }))}
+                              className="text-xs px-2 py-1 rounded outline-none w-24 text-right"
+                              style={{ background: "#080C10", border: "1px solid #1A2535", color: "#F43F5E" }} />
+                          ) : (
+                            <span className="font-mono" style={{ color: '#F43F5E' }}>{formatCurrency(expense.amount ?? 0)}</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="font-mono text-xs" style={{ color: '#94A3B8' }}>
+                          {expense.paid_at ? formatDate(expense.paid_at) : '—'}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            {isEditing ? (
+                              <>
+                                <button onClick={async () => {
+                                  try {
+                                    await updateExpense.mutateAsync({ id: expense.id, ...editForm });
+                                    setEditingId(null);
+                                    toast({ title: "Despesa atualizada!" });
+                                  } catch {
+                                    toast({ title: "Erro ao atualizar", variant: "destructive" });
+                                  }
+                                }} className="p-1.5 rounded hover:opacity-80" style={{ background: "rgba(16,185,129,0.2)" }}>
+                                  <Check className="w-3.5 h-3.5" style={{ color: '#10B981' }} />
+                                </button>
+                                <button onClick={() => setEditingId(null)} className="p-1.5 rounded hover:opacity-80" style={{ background: "rgba(244,63,94,0.1)" }}>
+                                  <X className="w-3.5 h-3.5" style={{ color: '#F43F5E' }} />
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button onClick={() => { setEditingId(expense.id); setEditForm({}); }}
+                                  className="p-1.5 rounded hover:opacity-80" style={{ background: "rgba(201,168,76,0.1)" }}>
+                                  <Pencil className="w-3.5 h-3.5" style={{ color: '#C9A84C' }} />
+                                </button>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <button className="p-1.5 rounded hover:opacity-80" style={{ background: "rgba(244,63,94,0.1)" }}>
+                                      <Trash2 className="w-3.5 h-3.5" style={{ color: '#F43F5E' }} />
+                                    </button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle style={{ color: '#F0F4F8' }}>Remover despesa?</AlertDialogTitle>
+                                      <AlertDialogDescription>{expense.description} — {formatCurrency(expense.amount ?? 0)}</AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                      <AlertDialogAction onClick={() => handleDelete(expense.id)} style={{ background: "#F43F5E", color: "white" }}>Remover</AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     );

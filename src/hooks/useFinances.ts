@@ -74,6 +74,28 @@ export function useDeleteExpense() {
   });
 }
 
+export function useUpdateExpense() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...updates }: { id: string; category?: string; type?: string; description?: string; amount?: number }) => {
+      const { error } = await supabase.from("expenses").update(updates).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["expenses"] }),
+  });
+}
+
+export function useUpdateRevenue() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...updates }: { id: string; source?: string; type?: string; description?: string; amount?: number }) => {
+      const { error } = await supabase.from("revenues").update(updates).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["revenues"] }),
+  });
+}
+
 // ─── KPIs DO DASHBOARD ───
 export function useDashboardKPIs(month: string) {
   const revenues = useRevenues(month);
