@@ -63,6 +63,7 @@ export default function UsersPage() {
   const [confirm3, setConfirm3] = useState(false);
   const [periodStart, setPeriodStart] = useState("");
   const [periodEnd, setPeriodEnd] = useState("");
+  const [cleaningDups, setCleaningDups] = useState(false);
   const { toast } = useToast();
   const qc = useQueryClient();
 
