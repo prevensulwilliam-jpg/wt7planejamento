@@ -299,12 +299,3 @@ export async function uploadWeddingFile(file: File, path: string): Promise<strin
   const { data: urlData } = supabase.storage.from("wedding-docs").getPublicUrl(data.path);
   return urlData.publicUrl;
 }
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (entry: TablesInsert<"goals">) => {
-      const { error } = await supabase.from("goals").insert(entry);
-      if (error) throw error;
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["goals"] }),
-  });
-}
