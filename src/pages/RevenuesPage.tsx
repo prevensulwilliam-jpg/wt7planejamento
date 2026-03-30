@@ -19,14 +19,15 @@ import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, Table
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 
 const sourceOptions = [
-  { value: "kitnets", label: "Kitnets" },
-  { value: "salario", label: "Salário" },
-  { value: "comissao_prevensul", label: "Comissão Prevensul" },
+  { value: "aluguel_kitnets", label: "Kitnets" },
+  { value: "sal_rio", label: "Salário" },
+  { value: "comiss_o_prevensul", label: "Comissão Prevensul" },
   { value: "t7", label: "T7 Sales" },
   { value: "solar_energia", label: "Energia Solar" },
-  { value: "laudos", label: "Laudos" },
+  { value: "laudos_t_cnicos", label: "Laudos Técnicos" },
   { value: "casamento_energia", label: "Casamento Energia" },
-  { value: "outros", label: "Outros" },
+  { value: "outros_receita", label: "Outros (Receita)" },
+  { value: "outros__receita_", label: "Outros" },
 ];
 
 const sourceColors: Record<string, string> = {
