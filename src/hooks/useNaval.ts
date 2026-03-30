@@ -85,7 +85,7 @@ export function useNavalAnalysis() {
         setAnalysis(text);
         generated.current = true;
       } catch (e) {
-        console.error("Wisely error:", e);
+        console.error("Naval error:", e);
         setAnalysis("Erro ao gerar análise. Tente novamente.");
       } finally {
         setLoading(false);
