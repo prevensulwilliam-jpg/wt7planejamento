@@ -7,7 +7,7 @@ import { GoldButton } from "@/components/wt7/GoldButton";
 import { WtBadge } from "@/components/wt7/WtBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency, formatMonth, getCurrentMonth } from "@/lib/formatters";
-import { useDashboardKPIs, useRevenueExpenseTrend, useGoals } from "@/hooks/useFinances";
+import { useDashboardKPIs, useRevenueExpenseTrend, useGoals, useNetWorth } from "@/hooks/useFinances";
 import { useKitnets } from "@/hooks/useKitnets";
 import { useWiselyAnalysis } from "@/hooks/useWisely";
 import ReactMarkdown from "react-markdown";
