@@ -245,9 +245,10 @@ export default function RevenuesPage() {
               className="px-3 py-1.5 text-xs rounded-lg outline-none"
               style={{ background: "#080C10", border: "1px solid #1A2535", color: filterSource !== "all" ? "#E8C97A" : "#64748B" }}>
               <option value="all">Todas fontes</option>
-              {sourceOptions.map(s => (
-                <option key={s.value} value={s.value}>{s.label}</option>
-              ))}
+              {uniqueSources.map(s => {
+                const opt = sourceOptions.find(o => o.value === s);
+                return <option key={s} value={s}>{opt?.label ?? s}</option>;
+              })}
             </select>
 
             {(filterType !== "all" || filterSource !== "all" || sortField) && (
