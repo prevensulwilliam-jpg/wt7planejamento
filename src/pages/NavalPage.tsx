@@ -6,7 +6,7 @@ import { WtBadge } from "@/components/wt7/WtBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { useWiselyAnalysis, useWiselyChat, useWiselyInsight } from "@/hooks/useWisely";
+import { useNavalAnalysis, useNavalChat, useNavalInsight } from "@/hooks/useNaval";
 import ReactMarkdown from "react-markdown";
 
 const SUGGESTIONS = [
