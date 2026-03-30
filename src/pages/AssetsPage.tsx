@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -17,6 +18,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Landmark, Plus, TrendingUp, Wallet } from "lucide-react";
 
 export default function AssetsPage() {
+  const [searchParams] = useSearchParams();
+  const defaultTab = searchParams.get("tab") ?? "bens";
   const { data: assets, isLoading: assetsLoading } = useAssets();
   const { data: investments, isLoading: invLoading } = useInvestments();
   const { data: consortiums, isLoading: consLoading } = useConsortiums();
@@ -71,7 +74,7 @@ export default function AssetsPage() {
 
       <KpiCard label="Patrimônio Líquido Total" value={totalPatrimonio + totalAtualInv} color="gold" />
 
-      <Tabs defaultValue="bens">
+      <Tabs defaultValue={defaultTab}>
         <TabsList style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
           <TabsTrigger value="bens">Bens</TabsTrigger>
           <TabsTrigger value="investimentos">Investimentos</TabsTrigger>

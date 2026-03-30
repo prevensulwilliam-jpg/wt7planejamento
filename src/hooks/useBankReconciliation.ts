@@ -10,7 +10,7 @@ export function useBankTransactions(filters?: {
     queryKey: ["bank_transactions", filters],
     queryFn: async () => {
       let q = supabase
-        .from("bank_transactions" as any)
+        .from("bank_transactions")
         .select("*, bank_accounts(bank_name, account_type)")
         .order("date", { ascending: false });
       if (filters?.accountId) q = q.eq("bank_account_id", filters.accountId);
@@ -36,7 +36,7 @@ export function useImportTransactions() {
 
       const externalIds = transactions.map(t => t.external_id).filter(Boolean);
       const { data: existing } = await supabase
-        .from("bank_transactions" as any)
+        .from("bank_transactions")
         .select("external_id")
         .in("external_id", externalIds);
 
@@ -48,7 +48,7 @@ export function useImportTransactions() {
       }
 
       const { error } = await supabase
-        .from("bank_transactions" as any)
+        .from("bank_transactions")
         .insert(newTxs);
 
       if (error) throw new Error(`Erro ao salvar: ${error.message}`);
@@ -75,7 +75,7 @@ export function useMatchTransaction() {
       expenseId?: string;
     }) => {
       const { error } = await supabase
-        .from("bank_transactions" as any)
+        .from("bank_transactions")
         .update({
           category_confirmed: category,
           category_intent: intent ?? null,
@@ -95,7 +95,7 @@ export function useIgnoreTransaction() {
   return useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase
-        .from("bank_transactions" as any)
+        .from("bank_transactions")
         .update({ status: "ignored" })
         .eq("id", id);
       if (error) throw error;
@@ -110,7 +110,7 @@ export function useBulkConfirmSuggestions() {
     mutationFn: async (transactions: { id: string; category: string }[]) => {
       for (const tx of transactions) {
         const { error } = await supabase
-          .from("bank_transactions" as any)
+          .from("bank_transactions")
           .update({ category_confirmed: tx.category, status: "matched" })
           .eq("id", tx.id);
         if (error) throw error;

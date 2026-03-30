@@ -37,8 +37,8 @@ const navGroups = [
   {
     label: "INVESTIMENTOS",
     items: [
-      { label: "Aplicações", icon: BarChart3, href: "/investments" },
-      { label: "Consórcios", icon: RefreshCw, href: "/consortiums" },
+      { label: "Aplicações", icon: BarChart3, href: "/assets?tab=investimentos" },
+      { label: "Consórcios", icon: RefreshCw, href: "/assets?tab=consorcios" },
       { label: "Casamento 2027", icon: Heart, href: "/wedding" },
     ],
   },
