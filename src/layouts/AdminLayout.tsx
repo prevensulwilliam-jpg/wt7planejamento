@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Outlet } from "react-router-dom";
 import { AdminSidebar } from "@/components/wt7/AdminSidebar";
+import { WiselyChat } from "@/components/wt7/WiselyChat";
 import { Menu, LogOut } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
@@ -47,6 +48,7 @@ export default function AdminLayout() {
           <Outlet />
         </div>
       </main>
+      <WiselyChat />
     </div>
   );
 }

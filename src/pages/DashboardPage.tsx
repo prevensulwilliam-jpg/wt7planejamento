@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Plus, Sparkles, RefreshCw } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, RefreshCw } from "lucide-react";
 import { KpiCard } from "@/components/wt7/KpiCard";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
 import { GoldButton } from "@/components/wt7/GoldButton";
@@ -163,7 +163,7 @@ export default function DashboardPage() {
         </div>
         <div className="flex items-center gap-3">
           <GoldButton variant="outline"><Plus className="w-4 h-4" /> Lançamento</GoldButton>
-          <GoldButton><Sparkles className="w-4 h-4" /> Wisely</GoldButton>
+          
         </div>
       </div>
 
