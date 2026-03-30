@@ -534,20 +534,26 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
             paid_at: tx.date,
           }).select("id").single();
           if (!error && data) { expenseId = data.id; expenses++; }
+        } else if (isAuto && result.intent === "receita" && tx.matched_revenue_id) {
+          await supabase.from("revenues").update({ source: result.category }).eq("id", tx.matched_revenue_id);
+        } else if (isAuto && result.intent === "despesa" && tx.matched_expense_id) {
+          await supabase.from("expenses").update({ category: result.category }).eq("id", tx.matched_expense_id);
         }
+
+        const updatePayload: any = {
+          category_suggestion: result.category,
+          category_intent: result.intent,
+          category_confidence: result.confidence,
+          category_label: result.label,
+          category_confirmed: isAuto ? result.category : null,
+          status: newStatus,
+        };
+        if (revenueId) updatePayload.matched_revenue_id = revenueId;
+        if (expenseId) updatePayload.matched_expense_id = expenseId;
 
         await supabase
           .from("bank_transactions" as any)
-          .update({
-            category_suggestion: result.category,
-            category_intent: result.intent,
-            category_confidence: result.confidence,
-            category_label: result.label,
-            category_confirmed: isAuto ? result.category : null,
-            status: newStatus,
-            matched_revenue_id: revenueId,
-            matched_expense_id: expenseId,
-          })
+          .update(updatePayload)
           .eq("id", tx.id);
         updated++;
       }
