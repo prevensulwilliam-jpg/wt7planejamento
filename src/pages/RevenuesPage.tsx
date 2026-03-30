@@ -68,6 +68,12 @@ export default function RevenuesPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Record<string, any>>({});
 
+  // Build unique source list from actual data
+  const uniqueSources = useMemo(() => {
+    const srcs = new Set(revenues.map(r => r.source).filter(Boolean));
+    return Array.from(srcs).sort();
+  }, [revenues]);
+
   const filteredRevenues = useMemo(() => {
     let data = [...revenues];
     if (filterType !== "all") data = data.filter(r => r.type === filterType);
