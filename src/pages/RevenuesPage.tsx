@@ -19,24 +19,25 @@ import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, Table
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 
 const sourceOptions = [
-  { value: "kitnets", label: "Kitnets" },
-  { value: "salario", label: "Salário" },
-  { value: "comissao_prevensul", label: "Comissão Prevensul" },
+  { value: "aluguel_kitnets", label: "Kitnets" },
+  { value: "sal_rio", label: "Salário" },
+  { value: "comiss_o_prevensul", label: "Comissão Prevensul" },
   { value: "t7", label: "T7 Sales" },
   { value: "solar_energia", label: "Energia Solar" },
-  { value: "laudos", label: "Laudos" },
+  { value: "laudos_t_cnicos", label: "Laudos Técnicos" },
   { value: "casamento_energia", label: "Casamento Energia" },
-  { value: "outros", label: "Outros" },
+  { value: "outros_receita", label: "Outros (Receita)" },
+  { value: "outros__receita_", label: "Outros" },
 ];
 
 const sourceColors: Record<string, string> = {
-  kitnets: '#C9A84C', comissao_prevensul: '#2DD4BF', salario: '#10B981',
-  solar_energia: '#F59E0B', t7: '#8B5CF6', laudos: '#3B82F6', casamento_energia: '#EC4899', outros: '#4A5568',
+  aluguel_kitnets: '#C9A84C', comiss_o_prevensul: '#2DD4BF', sal_rio: '#10B981',
+  solar_energia: '#F59E0B', t7: '#8B5CF6', laudos_t_cnicos: '#3B82F6', casamento_energia: '#EC4899', outros_receita: '#4A5568', "outros__receita_": '#4A5568',
 };
 
 const sourceBadgeVariant: Record<string, 'gold' | 'green' | 'cyan' | 'gray'> = {
-  kitnets: 'gold', comissao_prevensul: 'cyan', salario: 'green',
-  solar_energia: 'gold', t7: 'cyan', laudos: 'cyan', casamento_energia: 'green', outros: 'gray',
+  aluguel_kitnets: 'gold', comiss_o_prevensul: 'cyan', sal_rio: 'green',
+  solar_energia: 'gold', t7: 'cyan', laudos_t_cnicos: 'cyan', casamento_energia: 'green', outros_receita: 'gray', "outros__receita_": 'gray',
 };
 
 function navigateMonth(current: string, delta: number): string {
@@ -66,6 +67,12 @@ export default function RevenuesPage() {
   const [filterSource, setFilterSource] = useState("all");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Record<string, any>>({});
+
+  // Build unique source list from actual data
+  const uniqueSources = useMemo(() => {
+    const srcs = new Set(revenues.map(r => r.source).filter(Boolean));
+    return Array.from(srcs).sort();
+  }, [revenues]);
 
   const filteredRevenues = useMemo(() => {
     let data = [...revenues];
@@ -238,9 +245,10 @@ export default function RevenuesPage() {
               className="px-3 py-1.5 text-xs rounded-lg outline-none"
               style={{ background: "#080C10", border: "1px solid #1A2535", color: filterSource !== "all" ? "#E8C97A" : "#64748B" }}>
               <option value="all">Todas fontes</option>
-              {sourceOptions.map(s => (
-                <option key={s.value} value={s.value}>{s.label}</option>
-              ))}
+              {uniqueSources.map(s => {
+                const opt = sourceOptions.find(o => o.value === s);
+                return <option key={s} value={s}>{opt?.label ?? s}</option>;
+              })}
             </select>
 
             {(filterType !== "all" || filterSource !== "all" || sortField) && (

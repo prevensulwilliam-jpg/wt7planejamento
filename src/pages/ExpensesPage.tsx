@@ -68,6 +68,12 @@ export default function ExpensesPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Record<string, any>>({});
 
+  // Build unique category list from actual data
+  const uniqueCategories = useMemo(() => {
+    const cats = new Set(expenses.map(e => e.category).filter(Boolean));
+    return Array.from(cats).sort();
+  }, [expenses]);
+
   const filteredExpenses = useMemo(() => {
     let data = [...expenses];
     if (filterType !== "all") data = data.filter(e => e.type === filterType);
@@ -242,9 +248,10 @@ export default function ExpensesPage() {
               className="px-3 py-1.5 text-xs rounded-lg outline-none"
               style={{ background: "#080C10", border: "1px solid #1A2535", color: filterCategory !== "all" ? "#E8C97A" : "#64748B" }}>
               <option value="all">Todas categorias</option>
-              {categoryOptions.map(c => (
-                <option key={c.value} value={c.value}>{c.label}</option>
-              ))}
+              {uniqueCategories.map(c => {
+                const cat = categories.find(ct => ct.name.toLowerCase().replace(/\s+/g, "_") === c || ct.name === c);
+                return <option key={c} value={c}>{cat ? `${cat.emoji} ${cat.name}` : c}</option>;
+              })}
             </select>
 
             {(filterType !== "all" || filterCategory !== "all" || sortField) && (
