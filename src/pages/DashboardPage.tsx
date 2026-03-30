@@ -93,11 +93,11 @@ function NavalDashboardCard() {
             Atualizar
           </button>
           <button
-            onClick={() => navigate('/wisely')}
+            onClick={() => navigate('/naval')}
             className="text-xs flex items-center gap-1 hover:text-wt-text-primary transition-colors"
             style={{ color: '#2DD4BF' }}
           >
-            Wisely →
+            Naval →
           </button>
         </div>
       </div>
