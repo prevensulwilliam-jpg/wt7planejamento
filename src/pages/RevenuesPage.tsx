@@ -174,7 +174,7 @@ export default function RevenuesPage() {
                 <KpiCard label="Total do Mês" value={totalMonth} color="gold" />
                 <KpiCard label="Receitas Fixas" value={totalFixed} color="green" />
                 <KpiCard label="Receitas Variáveis" value={totalVariable} color="cyan" />
-                <KpiCard label="Quantidade" value={data.length} color="cyan" />
+                <KpiCard label="Quantidade" value={data.length} color="cyan" formatAs="number" />
               </>
             )}
           </div>
