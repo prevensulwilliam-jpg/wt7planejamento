@@ -68,6 +68,12 @@ export default function ExpensesPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Record<string, any>>({});
 
+  // Build unique category list from actual data
+  const uniqueCategories = useMemo(() => {
+    const cats = new Set(expenses.map(e => e.category).filter(Boolean));
+    return Array.from(cats).sort();
+  }, [expenses]);
+
   const filteredExpenses = useMemo(() => {
     let data = [...expenses];
     if (filterType !== "all") data = data.filter(e => e.type === filterType);
