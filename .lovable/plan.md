@@ -1,32 +1,37 @@
 
 
-# Feature — Botão "Limpar lançamentos do período" na UsersPage
+# Fix — Rotas /investments e /consortiums + tipos Supabase
 
-## Summary
-Add a second danger zone card in `src/pages/UsersPage.tsx` with period-based cleanup: two month pickers, preview of what will be deleted, double confirmation, then deletes revenues/expenses/bank_transactions within the selected date range.
+## Changes
 
-## Changes in `src/pages/UsersPage.tsx`
+### 1. `src/App.tsx` — Add redirect routes
+Add two `<Route>` entries inside the admin layout block:
+```tsx
+<Route path="/investments" element={<Navigate to="/assets?tab=investimentos" replace />} />
+<Route path="/consortiums" element={<Navigate to="/assets?tab=consorcios" replace />} />
+```
 
-### 1. Add state variables
-Add `periodOpen`, `cleaningPeriod`, `confirm3`, `periodStart`, `periodEnd` states.
+### 2. `src/components/wt7/AdminSidebar.tsx` — Update hrefs
+Change:
+- `"/investments"` → `"/assets?tab=investimentos"`
+- `"/consortiums"` → `"/assets?tab=consorcios"`
 
-### 2. Add `cleanPeriodData` function
-- Validates period selection
-- Deletes revenues where `reference_month` is within range
-- Deletes expenses where `reference_month` is within range
-- Deletes bank_transactions where `date` is within the computed date range
-- Invalidates relevant query caches
-- Shows toast with counts
+### 3. `src/pages/AssetsPage.tsx` — Read tab from URL
+- Add `useSearchParams` import
+- Read `searchParams.get("tab")` and use as `defaultValue` on `<Tabs>`
 
-### 3. Add second danger card in JSX
-Place after the existing "Limpar dados de demonstração" card, inside the same `PremiumCard` with red glow. Contains:
-- Period selector (two `<input type="month">`)
-- Preview showing what will be deleted
-- Double confirmation flow (confirm → final confirm)
-- Cancel buttons at each stage
+### 4. `src/hooks/useBankReconciliation.ts` — Remove `as any` casts
+Replace all `from("bank_transactions" as any)` with `from("bank_transactions")` — table exists in types.ts.
+
+### 5. `src/hooks/useCategories.ts` — Remove `as any` casts
+Replace all `from("custom_categories" as any)` with `from("custom_categories")` — table exists in types.ts.
 
 ## Files Changed
 | File | Action |
 |------|--------|
-| `src/pages/UsersPage.tsx` | Add period cleanup states, function, and UI card |
+| `src/App.tsx` | Add 2 redirect routes |
+| `src/components/wt7/AdminSidebar.tsx` | Update 2 hrefs |
+| `src/pages/AssetsPage.tsx` | Add useSearchParams, dynamic default tab |
+| `src/hooks/useBankReconciliation.ts` | Remove `as any` casts |
+| `src/hooks/useCategories.ts` | Remove `as any` casts |
 
