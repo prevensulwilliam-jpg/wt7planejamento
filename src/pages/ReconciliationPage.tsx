@@ -703,7 +703,7 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
         let revenueId: string | undefined;
         let expenseId: string | undefined;
 
-        if (intent === "receita") {
+        if (intent === "receita" && !tx.matched_revenue_id) {
           const { data, error } = await supabase.from("revenues").insert({
             source: category,
             description: tx.description,
@@ -715,7 +715,7 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
           if (error) throw error;
           revenueId = data?.id;
           revenues++;
-        } else if (intent === "despesa") {
+        } else if (intent === "despesa" && !tx.matched_expense_id) {
           const { data, error } = await supabase.from("expenses").insert({
             category,
             description: tx.description,
