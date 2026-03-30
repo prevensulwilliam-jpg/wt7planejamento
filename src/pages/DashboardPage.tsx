@@ -79,7 +79,7 @@ function NavalDashboardCard() {
         <div className="flex items-center gap-2">
           <span className="text-lg">🤖</span>
           <h3 className="font-display font-bold" style={{ color: '#2DD4BF' }}>
-            WISELY — Análise de {context?.month ?? '...'}
+            NAVAL — Análise de {context?.month ?? '...'}
           </h3>
         </div>
         <div className="flex items-center gap-3">
