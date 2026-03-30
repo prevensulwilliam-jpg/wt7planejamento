@@ -514,7 +514,7 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
         let revenueId: string | null = null;
         let expenseId: string | null = null;
 
-        if (isAuto && result.intent === "receita") {
+        if (isAuto && result.intent === "receita" && !tx.matched_revenue_id) {
           const { data, error } = await supabase.from("revenues").insert({
             source: result.category,
             description: tx.description,
@@ -524,7 +524,7 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
             received_at: tx.date,
           }).select("id").single();
           if (!error && data) { revenueId = data.id; revenues++; }
-        } else if (isAuto && result.intent === "despesa") {
+        } else if (isAuto && result.intent === "despesa" && !tx.matched_expense_id) {
           const { data, error } = await supabase.from("expenses").insert({
             category: result.category,
             description: tx.description,
@@ -646,10 +646,10 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
       }
 
       const label = ALL_CATEGORY_LABELS[category] || category;
-      let revenueId: string | undefined;
-      let expenseId: string | undefined;
+      let revenueId: string | undefined = tx.matched_revenue_id ?? undefined;
+      let expenseId: string | undefined = tx.matched_expense_id ?? undefined;
 
-      if (intent === "receita") {
+      if (intent === "receita" && !tx.matched_revenue_id) {
         const { data, error } = await supabase.from("revenues").insert({
           source: category,
           description,
@@ -661,9 +661,12 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
         if (error) throw error;
         revenueId = data?.id;
         toast.success(`Receita criada: ${formatCurrency(tx.amount)} em ${label}`);
+      } else if (intent === "receita" && tx.matched_revenue_id) {
+        await supabase.from("revenues").update({ source: category }).eq("id", tx.matched_revenue_id);
+        toast.success("Categoria da receita atualizada.");
       }
 
-      if (intent === "despesa") {
+      if (intent === "despesa" && !tx.matched_expense_id) {
         const { data, error } = await supabase.from("expenses").insert({
           category,
           description,
@@ -675,6 +678,9 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
         if (error) throw error;
         expenseId = data?.id;
         toast.success(`Despesa criada: ${formatCurrency(tx.amount)} em ${label}`);
+      } else if (intent === "despesa" && tx.matched_expense_id) {
+        await supabase.from("expenses").update({ category }).eq("id", tx.matched_expense_id);
+        toast.success("Categoria da despesa atualizada.");
       }
 
       await matchMutation.mutateAsync({ id, category, intent, revenueId, expenseId });
@@ -697,7 +703,7 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
         let revenueId: string | undefined;
         let expenseId: string | undefined;
 
-        if (intent === "receita") {
+        if (intent === "receita" && !tx.matched_revenue_id) {
           const { data, error } = await supabase.from("revenues").insert({
             source: category,
             description: tx.description,
@@ -709,7 +715,7 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
           if (error) throw error;
           revenueId = data?.id;
           revenues++;
-        } else if (intent === "despesa") {
+        } else if (intent === "despesa" && !tx.matched_expense_id) {
           const { data, error } = await supabase.from("expenses").insert({
             category,
             description: tx.description,
@@ -942,7 +948,7 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
                           {(tx.status === "pending" || tx.status === "auto_categorized") && (
                             <div className="flex gap-1">
                               <button
-                                onClick={() => matchMutation.mutate({ id: tx.id, category: tx.category_suggestion || "outros", intent: tx.category_intent })}
+                                onClick={() => classifyAs(tx.id, (tx.category_intent === "receita" || tx.category_intent === "despesa" || tx.category_intent === "transferencia") ? tx.category_intent : "despesa", tx.category_suggestion || "outros")}
                                 className="p-1 rounded hover:bg-green-500/10"
                                 title="Confirmar"
                               >

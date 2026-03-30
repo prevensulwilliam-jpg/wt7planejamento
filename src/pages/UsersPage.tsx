@@ -63,6 +63,7 @@ export default function UsersPage() {
   const [confirm3, setConfirm3] = useState(false);
   const [periodStart, setPeriodStart] = useState("");
   const [periodEnd, setPeriodEnd] = useState("");
+  const [cleaningDups, setCleaningDups] = useState(false);
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -400,6 +401,39 @@ export default function UsersPage() {
               )}
             </div>
           )}
+        </div>
+
+        {/* TERCEIRO CARD — limpar duplicatas */}
+        <div className="rounded-xl p-4 mt-4" style={{ background: '#080C10', border: '1px solid rgba(244,63,94,0.2)' }}>
+          <h4 className="font-display font-bold text-sm mb-1" style={{ color: '#F0F4F8' }}>
+            <Trash2 className="w-4 h-4 inline mr-1.5" style={{ color: '#F59E0B' }} />
+            Limpar duplicatas de receitas/despesas
+          </h4>
+          <p className="text-xs mb-3" style={{ color: '#94A3B8' }}>
+            Remove registros duplicados (mesma descrição, mês, valor e categoria), mantendo o mais antigo.
+            Útil após re-importações ou recategorizações que geraram duplicatas.
+          </p>
+          <button
+            onClick={async () => {
+              setCleaningDups(true);
+              try {
+                await supabase.rpc("clean_duplicate_revenues" as any);
+                await supabase.rpc("clean_duplicate_expenses" as any);
+                qc.invalidateQueries({ queryKey: ["revenues"] });
+                qc.invalidateQueries({ queryKey: ["expenses"] });
+                toast({ title: "Duplicatas removidas!", description: "Receitas e despesas duplicadas foram limpas." });
+              } catch (err: any) {
+                toast({ title: "Erro", description: err.message, variant: "destructive" });
+              } finally {
+                setCleaningDups(false);
+              }
+            }}
+            disabled={cleaningDups}
+            className="px-4 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-50"
+            style={{ background: 'rgba(245,158,11,0.15)', color: '#F59E0B', border: '1px solid rgba(245,158,11,0.3)' }}
+          >
+            {cleaningDups ? "Limpando..." : "🧹 Limpar duplicatas"}
+          </button>
         </div>
       </PremiumCard>
     </div>

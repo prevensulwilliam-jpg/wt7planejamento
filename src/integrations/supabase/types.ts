@@ -1226,6 +1226,8 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      clean_duplicate_expenses: { Args: never; Returns: undefined }
+      clean_duplicate_revenues: { Args: never; Returns: undefined }
       get_user_role: {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]
