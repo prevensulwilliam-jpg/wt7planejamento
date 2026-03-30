@@ -48,6 +48,7 @@ export default function AdminLayout() {
           <Outlet />
         </div>
       </main>
+      <WiselyChat />
     </div>
   );
 }

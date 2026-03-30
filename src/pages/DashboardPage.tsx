@@ -163,7 +163,7 @@ export default function DashboardPage() {
         </div>
         <div className="flex items-center gap-3">
           <GoldButton variant="outline"><Plus className="w-4 h-4" /> Lançamento</GoldButton>
-          <GoldButton><Sparkles className="w-4 h-4" /> Wisely</GoldButton>
+          
         </div>
       </div>
 
