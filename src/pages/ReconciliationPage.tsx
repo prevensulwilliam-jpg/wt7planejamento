@@ -646,10 +646,10 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
       }
 
       const label = ALL_CATEGORY_LABELS[category] || category;
-      let revenueId: string | undefined;
-      let expenseId: string | undefined;
+      let revenueId: string | undefined = tx.matched_revenue_id ?? undefined;
+      let expenseId: string | undefined = tx.matched_expense_id ?? undefined;
 
-      if (intent === "receita") {
+      if (intent === "receita" && !tx.matched_revenue_id) {
         const { data, error } = await supabase.from("revenues").insert({
           source: category,
           description,
@@ -661,9 +661,12 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
         if (error) throw error;
         revenueId = data?.id;
         toast.success(`Receita criada: ${formatCurrency(tx.amount)} em ${label}`);
+      } else if (intent === "receita" && tx.matched_revenue_id) {
+        await supabase.from("revenues").update({ source: category }).eq("id", tx.matched_revenue_id);
+        toast.success("Categoria da receita atualizada.");
       }
 
-      if (intent === "despesa") {
+      if (intent === "despesa" && !tx.matched_expense_id) {
         const { data, error } = await supabase.from("expenses").insert({
           category,
           description,
@@ -675,6 +678,9 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
         if (error) throw error;
         expenseId = data?.id;
         toast.success(`Despesa criada: ${formatCurrency(tx.amount)} em ${label}`);
+      } else if (intent === "despesa" && tx.matched_expense_id) {
+        await supabase.from("expenses").update({ category }).eq("id", tx.matched_expense_id);
+        toast.success("Categoria da despesa atualizada.");
       }
 
       await matchMutation.mutateAsync({ id, category, intent, revenueId, expenseId });
