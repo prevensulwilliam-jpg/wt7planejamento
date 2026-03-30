@@ -24,7 +24,7 @@ export function useAllCategories() {
     queryKey: ["custom_categories", "all"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("custom_categories" as any)
+        .from("custom_categories")
         .select("*")
         .order("type")
         .order("name");
