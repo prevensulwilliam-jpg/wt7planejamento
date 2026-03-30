@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency, formatMonth, getCurrentMonth } from "@/lib/formatters";
 import { useDashboardKPIs, useRevenueExpenseTrend, useGoals, useNetWorth } from "@/hooks/useFinances";
 import { useKitnets } from "@/hooks/useKitnets";
-import { useWiselyAnalysis } from "@/hooks/useWisely";
+import { useNavalAnalysis } from "@/hooks/useNaval";
 import ReactMarkdown from "react-markdown";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -69,8 +69,8 @@ function navigateMonth(current: string, delta: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function WiselyDashboardCard() {
-  const { analysis, loading, generate, context } = useWiselyAnalysis();
+function NavalDashboardCard() {
+  const { analysis, loading, generate, context } = useNavalAnalysis();
   const navigate = useNavigate();
 
   return (
@@ -79,7 +79,7 @@ function WiselyDashboardCard() {
         <div className="flex items-center gap-2">
           <span className="text-lg">🤖</span>
           <h3 className="font-display font-bold" style={{ color: '#2DD4BF' }}>
-            WISELY — Análise de {context?.month ?? '...'}
+            NAVAL — Análise de {context?.month ?? '...'}
           </h3>
         </div>
         <div className="flex items-center gap-3">
@@ -93,11 +93,11 @@ function WiselyDashboardCard() {
             Atualizar
           </button>
           <button
-            onClick={() => navigate('/wisely')}
+            onClick={() => navigate('/naval')}
             className="text-xs flex items-center gap-1 hover:text-wt-text-primary transition-colors"
             style={{ color: '#2DD4BF' }}
           >
-            Wisely →
+            Naval →
           </button>
         </div>
       </div>
@@ -192,7 +192,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Wisely Card */}
-      <WiselyDashboardCard />
+      <NavalDashboardCard />
 
       {/* KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

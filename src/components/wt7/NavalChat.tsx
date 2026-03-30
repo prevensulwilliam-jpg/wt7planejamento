@@ -119,7 +119,7 @@ function getSuggestions(pathname: string): string[] {
   return SUGGESTIONS["default"];
 }
 
-export function WiselyChat() {
+export function NavalChat() {
   const [open, setOpen] = useState(false);
   const [minimized, setMinimized] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -225,7 +225,7 @@ export function WiselyChat() {
         }}
       >
         <Sparkles className="w-5 h-5" />
-        <span className="font-display font-bold text-sm">Wisely</span>
+        <span className="font-display font-bold text-sm">Naval</span>
       </button>
     );
   }
@@ -250,7 +250,7 @@ export function WiselyChat() {
         <div className="flex items-center gap-2.5">
           <Sparkles className="w-4 h-4" style={{ color: "#C9A84C" }} />
           <div>
-            <span className="font-display font-bold text-sm" style={{ color: "#E8C97A" }}>Wisely</span>
+            <span className="font-display font-bold text-sm" style={{ color: "#E8C97A" }}>Naval</span>
             {context && !minimized && (
               <span className="ml-2 text-xs" style={{ color: "rgba(201,168,76,0.6)" }}>{context.label}</span>
             )}
@@ -345,7 +345,7 @@ export function WiselyChat() {
               </button>
             </div>
             <div className="text-center mt-1.5">
-              <span className="text-[10px]" style={{ color: "rgba(148,163,184,0.4)" }}>Enter para enviar · Wisely lê os dados desta página</span>
+              <span className="text-[10px]" style={{ color: "rgba(148,163,184,0.4)" }}>Enter para enviar · Naval lê os dados desta página</span>
             </div>
           </div>
         </>

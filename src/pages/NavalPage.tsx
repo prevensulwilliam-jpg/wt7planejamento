@@ -6,7 +6,7 @@ import { WtBadge } from "@/components/wt7/WtBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { useWiselyAnalysis, useWiselyChat, useWiselyInsight } from "@/hooks/useWisely";
+import { useNavalAnalysis, useNavalChat, useNavalInsight } from "@/hooks/useNaval";
 import ReactMarkdown from "react-markdown";
 
 const SUGGESTIONS = [
@@ -18,7 +18,7 @@ const SUGGESTIONS = [
 ];
 
 function AnalysisCard() {
-  const { analysis, loading, generate, context } = useWiselyAnalysis();
+  const { analysis, loading, generate, context } = useNavalAnalysis();
 
   return (
     <PremiumCard glowColor="rgba(45,212,191,0.3)">
@@ -66,7 +66,7 @@ function AnalysisCard() {
 }
 
 function ChatSection() {
-  const { messages, loading, send } = useWiselyChat();
+  const { messages, loading, send } = useNavalChat();
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
@@ -87,7 +87,7 @@ function ChatSection() {
       <div className="flex items-center gap-2 mb-4">
         <MessageSquare className="w-4 h-4" style={{ color: "#2DD4BF" }} />
         <h3 className="font-display font-bold text-sm" style={{ color: "#F0F4F8" }}>
-          Pergunte ao Wisely
+          Pergunte ao Naval
         </h3>
       </div>
 
@@ -162,7 +162,7 @@ function ChatSection() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-          placeholder="Pergunte algo ao Wisely..."
+          placeholder="Pergunte algo ao Naval..."
           className="flex-1"
           style={{ background: "#0D1318", borderColor: "#2A3F55", color: "#F0F4F8" }}
         />
@@ -185,7 +185,7 @@ function InsightCard({
   prompt: string;
   onDetail: (q: string) => void;
 }) {
-  const { text, loading } = useWiselyInsight(title, prompt);
+  const { text, loading } = useNavalInsight(title, prompt);
 
   return (
     <PremiumCard>
@@ -222,7 +222,7 @@ function InsightCard({
   );
 }
 
-export default function WiselyPage() {
+export default function NavalPage() {
   const chatRef = useRef<{ send: (msg: string) => void }>(null);
 
   return (
@@ -231,8 +231,8 @@ export default function WiselyPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="text-2xl">🤖</span>
-          <h1 className="font-display font-bold text-xl text-wt-text-primary">Wisely IA</h1>
-          <WtBadge variant="cyan">powered by AI</WtBadge>
+          <h1 className="font-display font-bold text-xl text-wt-text-primary">Naval</h1>
+          <WtBadge variant="cyan">powered by AI · Naval Ravikant inspired</WtBadge>
         </div>
       </div>
 

@@ -26,7 +26,7 @@ import AssetsPage from "@/pages/AssetsPage";
 import ProjectionsPage from "@/pages/ProjectionsPage";
 import KitnetsReportPage from "@/pages/KitnetsReportPage";
 import TaxesPage from "@/pages/TaxesPage";
-import WiselyPage from "@/pages/WiselyPage";
+import NavalPage from "@/pages/NavalPage";
 import ReconciliationPage from "@/pages/ReconciliationPage";
 import PatternsPage from "@/pages/PatternsPage";
 import CategoriesPage from "@/pages/CategoriesPage";
@@ -83,7 +83,7 @@ const App = () => (
           {/* Admin routes */}
           <Route element={<AuthGuard><AdminLayout /></AuthGuard>}>
             <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/wisely" element={<WiselyPage />} />
+            <Route path="/naval" element={<NavalPage />} />
             <Route path="/revenues" element={<RevenuesPage />} />
             <Route path="/expenses" element={<ExpensesPage />} />
             <Route path="/banks" element={<BanksPage />} />

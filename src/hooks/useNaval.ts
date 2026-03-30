@@ -5,7 +5,7 @@ import { useKitnets, useKitnetSummary } from "./useKitnets";
 import { usePrevensulBilling } from "./useBilling";
 import { getCurrentMonth, formatMonth } from "@/lib/formatters";
 
-export function useWiselyContext() {
+export function useNavalContext() {
   const month = getCurrentMonth();
   const kpis = useDashboardKPIs(month);
   const { data: kitnets } = useKitnets();
@@ -56,7 +56,7 @@ export function useWiselyContext() {
   return { context, isReady };
 }
 
-async function callWisely(
+async function callNaval(
   messages: { role: string; content: string }[]
 ): Promise<string> {
   const { data, error } = await supabase.functions.invoke("wisely-ai", {
@@ -67,8 +67,8 @@ async function callWisely(
   return data?.text ?? "";
 }
 
-export function useWiselyAnalysis() {
-  const { context, isReady } = useWiselyContext();
+export function useNavalAnalysis() {
+  const { context, isReady } = useNavalContext();
   const [analysis, setAnalysis] = useState("");
   const [loading, setLoading] = useState(false);
   const generated = useRef(false);
@@ -81,11 +81,11 @@ export function useWiselyAnalysis() {
         const prompt =
           customPrompt ??
           `Analise os dados financeiros de ${context.month} e me dê:\n1. Os 2 pontos mais positivos do mês\n2. Os 2 alertas ou oportunidades de melhoria\n3. 1 ação prioritária que devo tomar esta semana\n\nDados do mês:\n${JSON.stringify(context, null, 2)}`;
-        const text = await callWisely([{ role: "user", content: prompt }]);
+        const text = await callNaval([{ role: "user", content: prompt }]);
         setAnalysis(text);
         generated.current = true;
       } catch (e) {
-        console.error("Wisely error:", e);
+        console.error("Naval error:", e);
         setAnalysis("Erro ao gerar análise. Tente novamente.");
       } finally {
         setLoading(false);
@@ -103,8 +103,8 @@ export function useWiselyAnalysis() {
 
 type ChatMsg = { role: "user" | "assistant"; content: string };
 
-export function useWiselyChat() {
-  const { context } = useWiselyContext();
+export function useNavalChat() {
+  const { context } = useNavalContext();
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -121,10 +121,10 @@ export function useWiselyChat() {
           ...messages,
           userMsg,
         ];
-        const text = await callWisely(allMsgs);
+        const text = await callNaval(allMsgs);
         setMessages((prev) => [...prev, { role: "assistant", content: text }]);
       } catch (e) {
-        console.error("Wisely chat error:", e);
+        console.error("Naval chat error:", e);
         setMessages((prev) => [
           ...prev,
           {
@@ -142,8 +142,8 @@ export function useWiselyChat() {
   return { messages, loading, send };
 }
 
-export function useWiselyInsight(topic: string, prompt: string) {
-  const { context, isReady } = useWiselyContext();
+export function useNavalInsight(topic: string, prompt: string) {
+  const { context, isReady } = useNavalContext();
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
   const generated = useRef(false);
@@ -153,7 +153,7 @@ export function useWiselyInsight(topic: string, prompt: string) {
     generated.current = true;
     setLoading(true);
     const fullPrompt = `${prompt}\n\nDados: ${JSON.stringify(context, null, 2)}`;
-    callWisely([{ role: "user", content: fullPrompt }])
+    callNaval([{ role: "user", content: fullPrompt }])
       .then((t) => setText(t))
       .catch(() => setText("Erro ao carregar insight."))
       .finally(() => setLoading(false));
