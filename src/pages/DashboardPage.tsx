@@ -7,7 +7,7 @@ import { GoldButton } from "@/components/wt7/GoldButton";
 import { WtBadge } from "@/components/wt7/WtBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency, formatMonth, getCurrentMonth } from "@/lib/formatters";
-import { useDashboardKPIs, useRevenueExpenseTrend, useGoals } from "@/hooks/useFinances";
+import { useDashboardKPIs, useRevenueExpenseTrend, useGoals, useNetWorth } from "@/hooks/useFinances";
 import { useKitnets } from "@/hooks/useKitnets";
 import { useWiselyAnalysis } from "@/hooks/useWisely";
 import ReactMarkdown from "react-markdown";
@@ -128,6 +128,7 @@ export default function DashboardPage() {
   const [currentMonth, setCurrentMonth] = useState(getCurrentMonth());
   const kpis = useDashboardKPIs(currentMonth);
   const trend = useRevenueExpenseTrend();
+  const { netWorth } = useNetWorth();
   const goalsQuery = useGoals();
   const kitnetsQuery = useKitnets();
 
@@ -204,7 +205,7 @@ export default function DashboardPage() {
             <KpiCard label="Receita Total" value={kpis.totalRevenue} color="gold" />
             <KpiCard label="Resultado Líquido" value={kpis.netResult} color="green" />
             <KpiCard label="Despesas Totais" value={kpis.totalExpenses} color="red" />
-            <KpiCard label="Patrimônio Líquido" value={4200000} color="cyan" compact />
+            <KpiCard label="Patrimônio Líquido" value={netWorth} color="cyan" compact />
           </>
         )}
       </div>

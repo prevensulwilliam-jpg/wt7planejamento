@@ -214,6 +214,37 @@ export function useDeleteBankAccount() {
   });
 }
 
+// ─── PATRIMÔNIO LÍQUIDO ───
+export function useNetWorth() {
+  const assets = useAssets();
+  const investments = useQuery({
+    queryKey: ["investments"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("investments").select("current_amount");
+      if (error) throw error;
+      return data;
+    },
+  });
+  const properties = useQuery({
+    queryKey: ["real_estate_properties"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("real_estate_properties").select("property_value");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const total =
+    (assets.data ?? []).reduce((s, a) => s + (a.estimated_value ?? 0), 0) +
+    (investments.data ?? []).reduce((s, i) => s + (i.current_amount ?? 0), 0) +
+    (properties.data ?? []).reduce((s, p) => s + (p.property_value ?? 0), 0);
+
+  return {
+    netWorth: total,
+    isLoading: assets.isLoading || investments.isLoading || properties.isLoading,
+  };
+}
+
 // ─── CSV EXPORT ───
 export function exportCSV(data: Record<string, any>[], headers: string[], keys: string[], filename: string) {
   const rows = data.map(r => keys.map(k => r[k] ?? ""));
