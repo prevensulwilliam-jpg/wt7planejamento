@@ -128,6 +128,7 @@ export default function DashboardPage() {
   const [currentMonth, setCurrentMonth] = useState(getCurrentMonth());
   const kpis = useDashboardKPIs(currentMonth);
   const trend = useRevenueExpenseTrend();
+  const { netWorth } = useNetWorth();
   const goalsQuery = useGoals();
   const kitnetsQuery = useKitnets();
 
