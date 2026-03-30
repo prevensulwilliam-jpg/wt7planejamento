@@ -75,7 +75,7 @@ export function useMatchTransaction() {
       expenseId?: string;
     }) => {
       const { error } = await supabase
-        .from("bank_transactions" as any)
+        .from("bank_transactions")
         .update({
           category_confirmed: category,
           category_intent: intent ?? null,
