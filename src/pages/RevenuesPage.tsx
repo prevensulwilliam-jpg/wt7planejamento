@@ -62,39 +62,30 @@ export default function RevenuesPage() {
     return counts;
   }, [revenues]);
 
-  // All source options from DB + hardcoded + data, sorted by usage
-  const toSlug = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[\s/]+/g, "_").replace(/[^a-z0-9_]/g, "");
+  // All source options from map + any in data not in map, sorted by usage
   const allSourceOptions = useMemo(() => {
-    const dbCats = categories.map(c => ({
-      value: toSlug(c.name),
-      label: `${c.emoji || '💰'} ${c.name}`,
-      emoji: c.emoji || '💰',
-      name: c.name,
-      color: c.color || DEFAULT_SRC_COLOR,
-    }));
-    const allValues = new Set(dbCats.map(c => c.value));
+    const seen = new Set<string>();
+    const options: { value: string; label: string; emoji: string; name: string; color: string }[] = [];
+    const namesSeen = new Set<string>();
+    Object.entries(REVENUE_SOURCE_MAP).forEach(([value, src]) => {
+      if (namesSeen.has(src.name)) return;
+      namesSeen.add(src.name);
+      options.push({ value, label: `${src.emoji} ${src.name}`, emoji: src.emoji, name: src.name, color: src.color });
+      seen.add(value);
+    });
     revenues.forEach(r => {
-      if (r.source && !allValues.has(r.source)) {
-        dbCats.push({ value: r.source, label: `💰 ${r.source}`, emoji: '💰', name: r.source, color: DEFAULT_SRC_COLOR });
-        allValues.add(r.source);
+      if (r.source && !seen.has(r.source)) {
+        const display = getRevenueDisplay(r.source);
+        options.push({ value: r.source, label: `${display.emoji} ${display.name}`, emoji: display.emoji, name: display.name, color: display.color });
+        seen.add(r.source);
       }
     });
-    return dbCats.sort((a, b) => (sourceCounts[b.value] ?? 0) - (sourceCounts[a.value] ?? 0) || a.name.localeCompare(b.name));
-  }, [categories, revenues, sourceCounts]);
+    return options.sort((a, b) => (sourceCounts[b.value] ?? 0) - (sourceCounts[a.value] ?? 0) || a.name.localeCompare(b.name));
+  }, [revenues, sourceCounts]);
 
   const getSourceDisplay = (srcValue: string | null) => {
-    if (!srcValue) return { emoji: '💰', name: 'Outros', label: '💰 Outros', color: DEFAULT_SRC_COLOR };
-    const normalize = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
-    const nv = normalize(srcValue);
-    const src = allSourceOptions.find(c =>
-      c.name === srcValue ||
-      normalize(c.name) === nv ||
-      normalize(c.name).includes(nv) ||
-      nv.includes(normalize(c.name).slice(0, 5))
-    );
-    if (src) return { emoji: src.emoji, name: src.name, label: src.label, color: src.color };
-    const readable = srcValue.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
-    return { emoji: '💰', name: readable, label: `💰 ${readable}`, color: DEFAULT_SRC_COLOR };
+    const display = getRevenueDisplay(srcValue);
+    return { ...display, label: `${display.emoji} ${display.name}` };
   };
 
   // Close filter dropdown on click outside
