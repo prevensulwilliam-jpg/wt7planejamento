@@ -283,15 +283,45 @@ export default function RevenuesPage() {
               ))}
             </div>
 
-            <select value={filterSource} onChange={e => setFilterSource(e.target.value)}
-              className="px-3 py-1.5 text-xs rounded-lg outline-none"
-              style={{ background: "#080C10", border: "1px solid #1A2535", color: filterSource !== "all" ? "#E8C97A" : "#64748B" }}>
-              <option value="all">Todas fontes</option>
-              {uniqueSources.map(s => {
-                const opt = sourceOptions.find(o => o.value === s);
-                return <option key={s} value={s}>{opt?.label ?? s}</option>;
-              })}
-            </select>
+            <div className="relative" ref={filterSrcRef}>
+              <button onClick={() => setFilterSrcSearchOpen(o => !o)}
+                className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg outline-none"
+                style={{ background: "#080C10", border: "1px solid #1A2535", color: filterSource !== "all" ? "#E8C97A" : "#64748B" }}>
+                {filterSource !== "all" ? (allSourceOptions.find(c => c.value === filterSource)?.label ?? filterSource) : "Todas fontes"}
+                <ChevronDown className="w-3 h-3" />
+              </button>
+              {filterSrcSearchOpen && (
+                <div className="absolute z-50 mt-1 w-64 rounded-lg shadow-xl overflow-hidden" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+                  <div className="p-2" style={{ borderBottom: '1px solid #1A2535' }}>
+                    <div className="flex items-center gap-2 px-2 py-1 rounded" style={{ background: '#080C10' }}>
+                      <Search className="w-3 h-3" style={{ color: '#4A5568' }} />
+                      <input value={filterSrcSearch} onChange={e => setFilterSrcSearch(e.target.value)}
+                        placeholder="Buscar fonte..."
+                        autoFocus
+                        className="bg-transparent text-xs outline-none w-full"
+                        style={{ color: '#F0F4F8' }} />
+                    </div>
+                  </div>
+                  <div className="max-h-60 overflow-y-auto">
+                    <button onClick={() => { setFilterSource("all"); setFilterSrcSearchOpen(false); setFilterSrcSearch(""); }}
+                      className="w-full text-left px-3 py-2 text-xs hover:bg-[#131B22] transition-colors"
+                      style={{ color: filterSource === "all" ? "#E8C97A" : "#94A3B8" }}>
+                      Todas fontes
+                    </button>
+                    {allSourceOptions
+                      .filter(c => !filterSrcSearch || c.name.toLowerCase().includes(filterSrcSearch.toLowerCase()))
+                      .map(c => (
+                        <button key={c.value} onClick={() => { setFilterSource(c.value); setFilterSrcSearchOpen(false); setFilterSrcSearch(""); }}
+                          className="w-full text-left px-3 py-2 text-xs hover:bg-[#131B22] transition-colors flex items-center justify-between"
+                          style={{ color: filterSource === c.value ? "#E8C97A" : "#CBD5E1" }}>
+                          <span>{c.label}</span>
+                          {sourceCounts[c.value] ? <span className="text-[10px]" style={{ color: '#4A5568' }}>{sourceCounts[c.value]}x</span> : null}
+                        </button>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </div>
 
             {(filterType !== "all" || filterSource !== "all" || sortField) && (
               <button onClick={() => { setFilterType("all"); setFilterSource("all"); setSortField(null); }}
