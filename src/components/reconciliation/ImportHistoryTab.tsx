@@ -216,12 +216,12 @@ export function ImportHistoryTab({ accounts }: { accounts: any[] }) {
                         </span>
                       </div>
                       {item.duplicate_transactions > 0 && (
-                        <WtBadge variant="warning">
+                        <WtBadge variant="gold">
                           {item.duplicate_transactions} duplicadas
                         </WtBadge>
                       )}
                       {item.auto_categorized > 0 && (
-                        <WtBadge variant="success">
+                        <WtBadge variant="green">
                           {item.auto_categorized} auto-categorizadas
                         </WtBadge>
                       )}
