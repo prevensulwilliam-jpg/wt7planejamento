@@ -105,7 +105,14 @@ export default function ExpensesPage() {
   const filteredExpenses = useMemo(() => {
     let data = [...expenses];
     if (filterType !== "all") data = data.filter(e => e.type === filterType);
-    if (filterCategory !== "all") data = data.filter(e => e.category === filterCategory);
+    if (filterCategory !== "all") {
+      const selectedCat = allCategoryOptions.find(c => c.value === filterCategory);
+      if (selectedCat) {
+        data = data.filter(e => e.category === filterCategory || e.category === selectedCat.name || e.category?.toLowerCase() === selectedCat.name.toLowerCase());
+      } else {
+        data = data.filter(e => e.category === filterCategory);
+      }
+    }
     if (sortField) {
       data.sort((a, b) => {
         let va: any = sortField === "date" ? (a.paid_at ?? "") : (a as any)[sortField] ?? "";
