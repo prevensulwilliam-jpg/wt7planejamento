@@ -9,6 +9,7 @@ import { useExpenses, useCreateExpense, useDeleteExpense, useUpdateExpense, expo
 import { useCategories } from "@/hooks/useCategories";
 import { formatCurrency, formatDate, formatMonth, getCurrentMonth } from "@/lib/formatters";
 import { detectTransactionType } from "@/lib/categorizeTransaction";
+import { EXPENSE_CATEGORY_MAP, getExpenseDisplay } from "@/lib/categoryMap";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -62,41 +63,32 @@ export default function ExpensesPage() {
     return counts;
   }, [expenses]);
 
-  const toSlug = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[\s/]+/g, "_").replace(/[^a-z0-9_]/g, "");
-
-  // All categories from DB + any in data not in DB, sorted by usage
+  // All categories from map + any in data not in map, sorted by usage
   const allCategoryOptions = useMemo(() => {
-    const dbCats = categories.map(c => ({
-      value: toSlug(c.name),
-      label: `${c.emoji || '📦'} ${c.name}`,
-      emoji: c.emoji || '📦',
-      name: c.name,
-      color: c.color || DEFAULT_CAT_COLOR,
-    }));
-    // Add any from data not in DB
-    const allValues = new Set(dbCats.map(c => c.value));
+    const seen = new Set<string>();
+    const options: { value: string; label: string; emoji: string; name: string; color: string }[] = [];
+    // From static map (dedupe by name to avoid alias duplicates like cartao/cartao_credito)
+    const namesSeen = new Set<string>();
+    Object.entries(EXPENSE_CATEGORY_MAP).forEach(([value, cat]) => {
+      if (namesSeen.has(cat.name)) return;
+      namesSeen.add(cat.name);
+      options.push({ value, label: `${cat.emoji} ${cat.name}`, emoji: cat.emoji, name: cat.name, color: cat.color });
+      seen.add(value);
+    });
+    // Add any from data not in map
     expenses.forEach(e => {
-      if (e.category && !allValues.has(e.category)) {
-        dbCats.push({ value: e.category, label: `📦 ${e.category}`, emoji: '📦', name: e.category, color: DEFAULT_CAT_COLOR });
-        allValues.add(e.category);
+      if (e.category && !seen.has(e.category)) {
+        const display = getExpenseDisplay(e.category);
+        options.push({ value: e.category, label: `${display.emoji} ${display.name}`, emoji: display.emoji, name: display.name, color: display.color });
+        seen.add(e.category);
       }
     });
-    return dbCats.sort((a, b) => (categoryCounts[b.value] ?? 0) - (categoryCounts[a.value] ?? 0) || a.name.localeCompare(b.name));
-  }, [categories, expenses, categoryCounts]);
+    return options.sort((a, b) => (categoryCounts[b.value] ?? 0) - (categoryCounts[a.value] ?? 0) || a.name.localeCompare(b.name));
+  }, [expenses, categoryCounts]);
 
   const getCategoryDisplay = (catValue: string | null) => {
-    if (!catValue) return { emoji: '📦', name: 'Outros', label: '📦 Outros', color: DEFAULT_CAT_COLOR };
-    const normalize = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
-    const nv = normalize(catValue);
-    const cat = allCategoryOptions.find(c =>
-      c.name === catValue ||
-      normalize(c.name) === nv ||
-      normalize(c.name).includes(nv) ||
-      nv.includes(normalize(c.name).slice(0, 5))
-    );
-    if (cat) return { emoji: cat.emoji, name: cat.name, label: cat.label, color: cat.color };
-    const readable = catValue.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
-    return { emoji: '📦', name: readable, label: `📦 ${readable}`, color: DEFAULT_CAT_COLOR };
+    const display = getExpenseDisplay(catValue);
+    return { ...display, label: `${display.emoji} ${display.name}` };
   };
 
   // Close filter dropdown on click outside
@@ -115,17 +107,7 @@ export default function ExpensesPage() {
     let data = [...expenses];
     if (filterType !== "all") data = data.filter(e => e.type === filterType);
     if (filterCategory !== "all") {
-      const selectedCat = allCategoryOptions.find(c => c.value === filterCategory);
-      if (selectedCat) {
-        const normalize = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
-        const catNorm = normalize(selectedCat.name);
-        data = data.filter(e => {
-          const eNorm = normalize(e.category ?? "");
-          return eNorm === catNorm || e.category === selectedCat.name || eNorm.includes(catNorm.slice(0, 6)) || catNorm.includes(eNorm.slice(0, 6));
-        });
-      } else {
-        data = data.filter(e => e.category === filterCategory);
-      }
+      data = data.filter(e => e.category === filterCategory);
     }
     if (sortField) {
       data.sort((a, b) => {
