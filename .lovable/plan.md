@@ -1,54 +1,22 @@
 
 
-# Add robust error handling to Storage upload block
+# Update upload logging format in doImport
 
-## Change in `src/pages/ReconciliationPage.tsx` (lines 319-341)
+The upload block already has try-catch and logging from the previous change. This plan updates the log format to match your exact requested style (emoji prefixes instead of `[Upload]` prefix) for easier identification in the console.
 
-Replace the current upload block with:
+## Change in `src/pages/ReconciliationPage.tsx` (lines 319-361)
 
-1. **Add console.log before upload** — log file name, size, accountId, and importStats
-2. **Wrap in its own try-catch** — separate from the main import try-catch
-3. **On failure** — show `toast.warning` with the specific error message (import still succeeds)
-4. **Check file existence** — log if `fileRef.current?.files?.[0]` is falsy
+Replace the existing logging with your exact format:
 
-```typescript
-// Line 319-341 becomes:
-const fileExists = !!fileRef.current?.files?.[0];
-console.log("[Upload] fileRef check:", { fileExists, filesLength: fileRef.current?.files?.length });
-
-if (fileExists) {
-  const originalFile = fileRef.current!.files![0];
-  const periodDates = rows.map(r => r.date).filter(Boolean).sort();
-  
-  const importStats = { /* same as current */ };
-
-  console.log("[Upload] Preparing upload:", {
-    fileName: originalFile.name,
-    fileSize: originalFile.size,
-    accountId: selectedAccount,
-    importStats
-  });
-
-  try {
-    await uploadStatementMutation.mutateAsync({
-      file: originalFile,
-      accountId: selectedAccount,
-      importStats
-    });
-    console.log("[Upload] Success!");
-  } catch (uploadErr: any) {
-    console.error("[Upload] Failed:", uploadErr);
-    toast.warning(`⚠️ Importação OK, mas falha ao salvar arquivo: ${uploadErr.message}`);
-  }
-} else {
-  console.warn("[Upload] Nenhum arquivo encontrado no fileRef");
-}
-```
-
-Also update the toast.success message to conditionally show "📁 Extrato salvo" only when upload succeeded (use a boolean flag).
+- **Line 321**: Change `console.log("[Upload] fileRef check:", ...)` → `console.log('🔍 Verificando upload...', { temArquivo, nomeArquivo, contaSelecionada, totalLinhas })`
+- **Line 340-345**: Change `console.log("[Upload] Preparing upload:", ...)` → `console.log('📁 Iniciando upload para Storage...')`
+- **Line 354**: Change `console.log("[Upload] Success!")` → `console.log('✅ Upload concluído!')`
+- **Line 356**: Change `console.error("[Upload] Failed:", ...)` → `console.error('❌ Erro no upload:', uploadErr)`
+- **Line 357**: Update toast message to `'Transações importadas, mas falha ao salvar extrato no histórico: ' + uploadErr.message`
+- **Line 360**: Change `console.warn("[Upload] Nenhum arquivo...")` → `console.warn('⚠️ Arquivo não encontrado no fileRef')`
 
 ## Files Changed
 | File | Action |
 |------|--------|
-| `src/pages/ReconciliationPage.tsx` | Wrap upload in separate try-catch with logs and warning toast |
+| `src/pages/ReconciliationPage.tsx` | Update log format in upload block |
 
