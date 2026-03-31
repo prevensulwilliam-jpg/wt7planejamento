@@ -103,7 +103,14 @@ export default function RevenuesPage() {
   const filteredRevenues = useMemo(() => {
     let data = [...revenues];
     if (filterType !== "all") data = data.filter(r => r.type === filterType);
-    if (filterSource !== "all") data = data.filter(r => r.source === filterSource);
+    if (filterSource !== "all") {
+      const selectedSrc = allSourceOptions.find(c => c.value === filterSource);
+      if (selectedSrc) {
+        data = data.filter(r => r.source === filterSource || r.source === selectedSrc.name || r.source?.toLowerCase() === selectedSrc.name.toLowerCase());
+      } else {
+        data = data.filter(r => r.source === filterSource);
+      }
+    }
     if (sortField) {
       data.sort((a, b) => {
         let va: any = sortField === "date" ? (a.received_at ?? "") : (a as any)[sortField] ?? "";
