@@ -318,7 +318,12 @@ function ImportTab({ accounts }: { accounts: any[] }) {
 
       let uploadOk = false;
       const fileExists = !!fileRef.current?.files?.[0];
-      console.log("[Upload] fileRef check:", { fileExists, filesLength: fileRef.current?.files?.length });
+      console.log('🔍 Verificando upload...', {
+        temArquivo: fileExists,
+        nomeArquivo: fileRef.current?.files?.[0]?.name,
+        contaSelecionada: selectedAccount,
+        totalLinhas: rows.length
+      });
 
       if (fileExists) {
         const originalFile = fileRef.current!.files![0];
