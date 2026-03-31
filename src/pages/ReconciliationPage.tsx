@@ -157,6 +157,7 @@ function ImportTab({ accounts }: { accounts: any[] }) {
   const [fileName, setFileName] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const importMutation = useImportTransactions();
+  const uploadStatementMutation = useBankStatementUpload();
 
   const handleFile = useCallback(async (file: File) => {
     setFileName(file.name);
