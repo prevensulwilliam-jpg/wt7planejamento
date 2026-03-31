@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { Plus, Download, Trash2, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, Pencil, Check, X } from "lucide-react";
+import { useState, useMemo, useRef, useEffect } from "react";
+import { Plus, Download, Trash2, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, Pencil, Check, X, Search, ChevronDown } from "lucide-react";
 import { KpiCard } from "@/components/wt7/KpiCard";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
 import { GoldButton } from "@/components/wt7/GoldButton";
@@ -69,11 +69,55 @@ export default function ExpensesPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Record<string, any>>({});
 
-  // Build unique category list from actual data
-  const uniqueCategories = useMemo(() => {
-    const cats = new Set(expenses.map(e => e.category).filter(Boolean));
-    return Array.from(cats).sort();
+  const [catSearchOpen, setCatSearchOpen] = useState(false);
+  const [catSearch, setCatSearch] = useState("");
+  const [filterCatSearchOpen, setFilterCatSearchOpen] = useState(false);
+  const [filterCatSearch, setFilterCatSearch] = useState("");
+  const filterCatRef = useRef<HTMLDivElement>(null);
+
+  // Count usage per category from current expenses
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    expenses.forEach(e => { if (e.category) counts[e.category] = (counts[e.category] ?? 0) + 1; });
+    return counts;
   }, [expenses]);
+
+  // All categories from DB + any in data not in DB, sorted by usage
+  const allCategoryOptions = useMemo(() => {
+    const dbCats = categories.map(c => ({
+      value: c.name.toLowerCase().replace(/[\s/]+/g, "_"),
+      label: `${c.emoji || '📦'} ${c.name}`,
+      emoji: c.emoji || '📦',
+      name: c.name,
+    }));
+    // Add hardcoded ones not in DB
+    const dbValues = new Set(dbCats.map(c => c.value));
+    categoryOptions.forEach(co => {
+      if (!dbValues.has(co.value)) dbCats.push({ value: co.value, label: co.label, emoji: co.label.split(' ')[0], name: co.label.replace(/^.+?\s/, '') });
+    });
+    // Add any from data not in either
+    const allValues = new Set(dbCats.map(c => c.value));
+    expenses.forEach(e => {
+      if (e.category && !allValues.has(e.category)) {
+        dbCats.push({ value: e.category, label: `📦 ${e.category}`, emoji: '📦', name: e.category });
+        allValues.add(e.category);
+      }
+    });
+    // Sort by usage count desc, then alphabetically
+    return dbCats.sort((a, b) => (categoryCounts[b.value] ?? 0) - (categoryCounts[a.value] ?? 0) || a.name.localeCompare(b.name));
+  }, [categories, expenses, categoryCounts]);
+
+  // Close filter dropdown on click outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (filterCatRef.current && !filterCatRef.current.contains(e.target as Node)) {
+        setFilterCatSearchOpen(false);
+        setFilterCatSearch("");
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   const filteredExpenses = useMemo(() => {
     let data = [...expenses];
@@ -171,12 +215,46 @@ export default function ExpensesPage() {
             <div className="space-y-4">
               <div>
                 <Label style={{ color: '#94A3B8' }}>Categoria</Label>
-                <Select value={form.category} onValueChange={v => { const autoType = detectTransactionType(v, "despesa"); setForm(f => ({ ...f, category: v, type: autoType })); }}>
-                  <SelectTrigger style={{ background: '#080C10', borderColor: '#1A2535', color: '#F0F4F8' }}><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent style={{ background: '#0D1318', borderColor: '#1A2535' }}>
-                    {categoryOptions.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <div className="relative">
+                  <button type="button" onClick={() => setCatSearchOpen(o => !o)}
+                    className="flex h-10 w-full items-center justify-between rounded-md border px-3 py-2 text-sm"
+                    style={{ background: '#080C10', borderColor: '#1A2535', color: '#F0F4F8' }}>
+                    <span>{form.category ? (allCategoryOptions.find(c => c.value === form.category)?.label ?? form.category) : "Selecione"}</span>
+                    <ChevronDown className="h-4 w-4 opacity-50" />
+                  </button>
+                  {catSearchOpen && (
+                    <div className="absolute z-50 mt-1 w-full rounded-lg shadow-xl overflow-hidden" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+                      <div className="p-2" style={{ borderBottom: '1px solid #1A2535' }}>
+                        <div className="flex items-center gap-2 px-2 py-1 rounded" style={{ background: '#080C10' }}>
+                          <Search className="w-3 h-3" style={{ color: '#4A5568' }} />
+                          <input value={catSearch} onChange={e => setCatSearch(e.target.value)}
+                            placeholder="Buscar categoria..."
+                            autoFocus
+                            className="bg-transparent text-xs outline-none w-full"
+                            style={{ color: '#F0F4F8' }} />
+                        </div>
+                      </div>
+                      <div className="max-h-60 overflow-y-auto">
+                        {allCategoryOptions
+                          .filter(c => !catSearch || c.name.toLowerCase().includes(catSearch.toLowerCase()))
+                          .map(c => (
+                            <button key={c.value} type="button"
+                              onClick={() => {
+                                const autoType = detectTransactionType(c.value, "despesa");
+                                setForm(f => ({ ...f, category: c.value, type: autoType }));
+                                setCatSearchOpen(false);
+                                setCatSearch("");
+                              }}
+                              className="w-full text-left px-3 py-2 text-xs hover:bg-[#131B22] transition-colors flex items-center justify-between"
+                              style={{ color: form.category === c.value ? "#E8C97A" : "#CBD5E1" }}>
+                              <span>{c.label}</span>
+                              {categoryCounts[c.value] ? <span className="text-[10px]" style={{ color: '#4A5568' }}>{categoryCounts[c.value]}x</span> : null}
+                            </button>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
               <div>
                 <Label style={{ color: '#94A3B8' }}>Descrição</Label>
@@ -245,15 +323,45 @@ export default function ExpensesPage() {
               ))}
             </div>
 
-            <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)}
-              className="px-3 py-1.5 text-xs rounded-lg outline-none"
-              style={{ background: "#080C10", border: "1px solid #1A2535", color: filterCategory !== "all" ? "#E8C97A" : "#64748B" }}>
-              <option value="all">Todas categorias</option>
-              {uniqueCategories.map(c => {
-                const cat = categories.find(ct => ct.name.toLowerCase().replace(/\s+/g, "_") === c || ct.name === c);
-                return <option key={c} value={c}>{cat ? `${cat.emoji} ${cat.name}` : c}</option>;
-              })}
-            </select>
+            <div className="relative" ref={filterCatRef}>
+              <button onClick={() => setFilterCatSearchOpen(o => !o)}
+                className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg outline-none"
+                style={{ background: "#080C10", border: "1px solid #1A2535", color: filterCategory !== "all" ? "#E8C97A" : "#64748B" }}>
+                {filterCategory !== "all" ? (allCategoryOptions.find(c => c.value === filterCategory)?.label ?? filterCategory) : "Todas categorias"}
+                <ChevronDown className="w-3 h-3" />
+              </button>
+              {filterCatSearchOpen && (
+                <div className="absolute z-50 mt-1 w-64 rounded-lg shadow-xl overflow-hidden" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+                  <div className="p-2" style={{ borderBottom: '1px solid #1A2535' }}>
+                    <div className="flex items-center gap-2 px-2 py-1 rounded" style={{ background: '#080C10' }}>
+                      <Search className="w-3 h-3" style={{ color: '#4A5568' }} />
+                      <input value={filterCatSearch} onChange={e => setFilterCatSearch(e.target.value)}
+                        placeholder="Buscar categoria..."
+                        autoFocus
+                        className="bg-transparent text-xs outline-none w-full"
+                        style={{ color: '#F0F4F8' }} />
+                    </div>
+                  </div>
+                  <div className="max-h-60 overflow-y-auto">
+                    <button onClick={() => { setFilterCategory("all"); setFilterCatSearchOpen(false); setFilterCatSearch(""); }}
+                      className="w-full text-left px-3 py-2 text-xs hover:bg-[#131B22] transition-colors"
+                      style={{ color: filterCategory === "all" ? "#E8C97A" : "#94A3B8" }}>
+                      Todas categorias
+                    </button>
+                    {allCategoryOptions
+                      .filter(c => !filterCatSearch || c.name.toLowerCase().includes(filterCatSearch.toLowerCase()))
+                      .map(c => (
+                        <button key={c.value} onClick={() => { setFilterCategory(c.value); setFilterCatSearchOpen(false); setFilterCatSearch(""); }}
+                          className="w-full text-left px-3 py-2 text-xs hover:bg-[#131B22] transition-colors flex items-center justify-between"
+                          style={{ color: filterCategory === c.value ? "#E8C97A" : "#CBD5E1" }}>
+                          <span>{c.label}</span>
+                          {categoryCounts[c.value] ? <span className="text-[10px]" style={{ color: '#4A5568' }}>{categoryCounts[c.value]}x</span> : null}
+                        </button>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </div>
 
             {(filterType !== "all" || filterCategory !== "all" || sortField) && (
               <button onClick={() => { setFilterType("all"); setFilterCategory("all"); setSortField(null); }}

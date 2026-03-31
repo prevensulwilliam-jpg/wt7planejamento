@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { Plus, Download, Trash2, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, Pencil, Check, X } from "lucide-react";
+import { useState, useMemo, useRef, useEffect } from "react";
+import { Plus, Download, Trash2, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, Pencil, Check, X, Search, ChevronDown } from "lucide-react";
 import { KpiCard } from "@/components/wt7/KpiCard";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
 import { GoldButton } from "@/components/wt7/GoldButton";
@@ -69,11 +69,52 @@ export default function RevenuesPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Record<string, any>>({});
 
-  // Build unique source list from actual data
-  const uniqueSources = useMemo(() => {
-    const srcs = new Set(revenues.map(r => r.source).filter(Boolean));
-    return Array.from(srcs).sort();
+  const [srcSearchOpen, setSrcSearchOpen] = useState(false);
+  const [srcSearch, setSrcSearch] = useState("");
+  const [filterSrcSearchOpen, setFilterSrcSearchOpen] = useState(false);
+  const [filterSrcSearch, setFilterSrcSearch] = useState("");
+  const filterSrcRef = useRef<HTMLDivElement>(null);
+
+  // Count usage per source
+  const sourceCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    revenues.forEach(r => { if (r.source) counts[r.source] = (counts[r.source] ?? 0) + 1; });
+    return counts;
   }, [revenues]);
+
+  // All source options from DB + hardcoded + data, sorted by usage
+  const allSourceOptions = useMemo(() => {
+    const dbCats = categories.map(c => ({
+      value: c.name.toLowerCase().replace(/[\s/]+/g, "_"),
+      label: `${c.emoji || '💰'} ${c.name}`,
+      emoji: c.emoji || '💰',
+      name: c.name,
+    }));
+    const dbValues = new Set(dbCats.map(c => c.value));
+    sourceOptions.forEach(so => {
+      if (!dbValues.has(so.value)) dbCats.push({ value: so.value, label: so.label, emoji: '💰', name: so.label });
+    });
+    const allValues = new Set(dbCats.map(c => c.value));
+    revenues.forEach(r => {
+      if (r.source && !allValues.has(r.source)) {
+        dbCats.push({ value: r.source, label: `💰 ${r.source}`, emoji: '💰', name: r.source });
+        allValues.add(r.source);
+      }
+    });
+    return dbCats.sort((a, b) => (sourceCounts[b.value] ?? 0) - (sourceCounts[a.value] ?? 0) || a.name.localeCompare(b.name));
+  }, [categories, revenues, sourceCounts]);
+
+  // Close filter dropdown on click outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (filterSrcRef.current && !filterSrcRef.current.contains(e.target as Node)) {
+        setFilterSrcSearchOpen(false);
+        setFilterSrcSearch("");
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   const filteredRevenues = useMemo(() => {
     let data = [...revenues];
@@ -167,12 +208,46 @@ export default function RevenuesPage() {
             <div className="space-y-4">
               <div>
                 <Label style={{ color: '#94A3B8' }}>Fonte</Label>
-                <Select value={form.source} onValueChange={v => { const autoType = detectTransactionType(v, "receita"); setForm(f => ({ ...f, source: v, type: autoType })); }}>
-                  <SelectTrigger style={{ background: '#080C10', borderColor: '#1A2535', color: '#F0F4F8' }}><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent style={{ background: '#0D1318', borderColor: '#1A2535' }}>
-                    {sourceOptions.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <div className="relative">
+                  <button type="button" onClick={() => setSrcSearchOpen(o => !o)}
+                    className="flex h-10 w-full items-center justify-between rounded-md border px-3 py-2 text-sm"
+                    style={{ background: '#080C10', borderColor: '#1A2535', color: '#F0F4F8' }}>
+                    <span>{form.source ? (allSourceOptions.find(c => c.value === form.source)?.label ?? form.source) : "Selecione"}</span>
+                    <ChevronDown className="h-4 w-4 opacity-50" />
+                  </button>
+                  {srcSearchOpen && (
+                    <div className="absolute z-50 mt-1 w-full rounded-lg shadow-xl overflow-hidden" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+                      <div className="p-2" style={{ borderBottom: '1px solid #1A2535' }}>
+                        <div className="flex items-center gap-2 px-2 py-1 rounded" style={{ background: '#080C10' }}>
+                          <Search className="w-3 h-3" style={{ color: '#4A5568' }} />
+                          <input value={srcSearch} onChange={e => setSrcSearch(e.target.value)}
+                            placeholder="Buscar fonte..."
+                            autoFocus
+                            className="bg-transparent text-xs outline-none w-full"
+                            style={{ color: '#F0F4F8' }} />
+                        </div>
+                      </div>
+                      <div className="max-h-60 overflow-y-auto">
+                        {allSourceOptions
+                          .filter(c => !srcSearch || c.name.toLowerCase().includes(srcSearch.toLowerCase()))
+                          .map(c => (
+                            <button key={c.value} type="button"
+                              onClick={() => {
+                                const autoType = detectTransactionType(c.value, "receita");
+                                setForm(f => ({ ...f, source: c.value, type: autoType }));
+                                setSrcSearchOpen(false);
+                                setSrcSearch("");
+                              }}
+                              className="w-full text-left px-3 py-2 text-xs hover:bg-[#131B22] transition-colors flex items-center justify-between"
+                              style={{ color: form.source === c.value ? "#E8C97A" : "#CBD5E1" }}>
+                              <span>{c.label}</span>
+                              {sourceCounts[c.value] ? <span className="text-[10px]" style={{ color: '#4A5568' }}>{sourceCounts[c.value]}x</span> : null}
+                            </button>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
               <div>
                 <Label style={{ color: '#94A3B8' }}>Descrição</Label>
@@ -242,15 +317,45 @@ export default function RevenuesPage() {
               ))}
             </div>
 
-            <select value={filterSource} onChange={e => setFilterSource(e.target.value)}
-              className="px-3 py-1.5 text-xs rounded-lg outline-none"
-              style={{ background: "#080C10", border: "1px solid #1A2535", color: filterSource !== "all" ? "#E8C97A" : "#64748B" }}>
-              <option value="all">Todas fontes</option>
-              {uniqueSources.map(s => {
-                const opt = sourceOptions.find(o => o.value === s);
-                return <option key={s} value={s}>{opt?.label ?? s}</option>;
-              })}
-            </select>
+            <div className="relative" ref={filterSrcRef}>
+              <button onClick={() => setFilterSrcSearchOpen(o => !o)}
+                className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg outline-none"
+                style={{ background: "#080C10", border: "1px solid #1A2535", color: filterSource !== "all" ? "#E8C97A" : "#64748B" }}>
+                {filterSource !== "all" ? (allSourceOptions.find(c => c.value === filterSource)?.label ?? filterSource) : "Todas fontes"}
+                <ChevronDown className="w-3 h-3" />
+              </button>
+              {filterSrcSearchOpen && (
+                <div className="absolute z-50 mt-1 w-64 rounded-lg shadow-xl overflow-hidden" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+                  <div className="p-2" style={{ borderBottom: '1px solid #1A2535' }}>
+                    <div className="flex items-center gap-2 px-2 py-1 rounded" style={{ background: '#080C10' }}>
+                      <Search className="w-3 h-3" style={{ color: '#4A5568' }} />
+                      <input value={filterSrcSearch} onChange={e => setFilterSrcSearch(e.target.value)}
+                        placeholder="Buscar fonte..."
+                        autoFocus
+                        className="bg-transparent text-xs outline-none w-full"
+                        style={{ color: '#F0F4F8' }} />
+                    </div>
+                  </div>
+                  <div className="max-h-60 overflow-y-auto">
+                    <button onClick={() => { setFilterSource("all"); setFilterSrcSearchOpen(false); setFilterSrcSearch(""); }}
+                      className="w-full text-left px-3 py-2 text-xs hover:bg-[#131B22] transition-colors"
+                      style={{ color: filterSource === "all" ? "#E8C97A" : "#94A3B8" }}>
+                      Todas fontes
+                    </button>
+                    {allSourceOptions
+                      .filter(c => !filterSrcSearch || c.name.toLowerCase().includes(filterSrcSearch.toLowerCase()))
+                      .map(c => (
+                        <button key={c.value} onClick={() => { setFilterSource(c.value); setFilterSrcSearchOpen(false); setFilterSrcSearch(""); }}
+                          className="w-full text-left px-3 py-2 text-xs hover:bg-[#131B22] transition-colors flex items-center justify-between"
+                          style={{ color: filterSource === c.value ? "#E8C97A" : "#CBD5E1" }}>
+                          <span>{c.label}</span>
+                          {sourceCounts[c.value] ? <span className="text-[10px]" style={{ color: '#4A5568' }}>{sourceCounts[c.value]}x</span> : null}
+                        </button>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </div>
 
             {(filterType !== "all" || filterSource !== "all" || sortField) && (
               <button onClick={() => { setFilterType("all"); setFilterSource("all"); setSortField(null); }}
