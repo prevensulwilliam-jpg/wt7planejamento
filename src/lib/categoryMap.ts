@@ -65,3 +65,21 @@ export function getExpenseDisplay(category: string | null) {
   const readable = category.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
   return { emoji: "📦", name: readable, color: "#94A3B8" };
 }
+
+// Extrair nome do banco da descrição
+// Ex: "DEPOSITO [CREDIFOZ]" → "CREDIFOZ"
+export function extractBank(description: string | null): string | null {
+  if (!description) return null;
+  const match = description.match(/\[([^\]]+)\]$/);
+  return match ? match[1].trim() : null;
+}
+
+// Listar bancos únicos de uma lista de registros
+export function getUniqueBanks(records: { description?: string | null }[]): string[] {
+  const banks = new Set<string>();
+  records.forEach(r => {
+    const bank = extractBank(r.description ?? "");
+    if (bank) banks.add(bank);
+  });
+  return Array.from(banks).sort();
+}

@@ -9,7 +9,7 @@ import { useRevenues, useCreateRevenue, useDeleteRevenue, useUpdateRevenue, expo
 import { useCategories } from "@/hooks/useCategories";
 import { formatCurrency, formatDate, formatMonth, getCurrentMonth } from "@/lib/formatters";
 import { detectTransactionType } from "@/lib/categorizeTransaction";
-import { REVENUE_SOURCE_MAP, getRevenueDisplay } from "@/lib/categoryMap";
+import { REVENUE_SOURCE_MAP, getRevenueDisplay, extractBank, getUniqueBanks } from "@/lib/categoryMap";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
