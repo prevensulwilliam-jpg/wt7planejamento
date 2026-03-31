@@ -1,44 +1,64 @@
 
 
-# Feature — Classificação automática Fixo/Variável por recorrência
+# Fix — Filtro de categorias usando custom_categories do banco
 
-## Summary
-Add `detectTransactionType()` to `categorizeTransaction.ts`, then use it in ReconciliationPage (classifyAs + confirmAllAuto), ExpensesPage and RevenuesPage modals. Also run a migration to fix existing records.
+## Problem
+Both ExpensesPage and RevenuesPage have hardcoded `categoryOptions`/`sourceOptions` arrays used in:
+1. Filter dropdown comparison (line 127/123: compares `expense.category` against slug values that may not match DB records)
+2. Table display (line 410/403: uses hardcoded `categoryOptions.find()` to show badge, missing DB categories)
+3. Inline edit dropdown (line 420/413: iterates over hardcoded list)
+
+The `allCategoryOptions`/`allSourceOptions` (built from DB) exist but aren't used everywhere.
 
 ## Changes
 
-### 1. `src/lib/categorizeTransaction.ts`
-Add at the end of file:
-- `FIXED_CATEGORIES`, `VARIABLE_CATEGORIES`, `FIXED_REVENUE_SOURCES`, `VARIABLE_REVENUE_SOURCES` arrays
-- `detectTransactionType(category, intent)` → returns `"fixed" | "variable"`
+### 1. `src/pages/ExpensesPage.tsx`
 
-### 2. `src/pages/ReconciliationPage.tsx`
-- Import `detectTransactionType`
-- In `classifyAs` (lines 663, 680): replace `type: "variable"` with `type: detectTransactionType(category, intent)`
-- In `confirmAllAuto` (lines 717, 729): same replacement using `detectTransactionType(category, intent as any)`
-
-### 3. `src/pages/ExpensesPage.tsx`
-- Import `detectTransactionType`
-- Line 173: change category `onValueChange` to also auto-set type: `onValueChange={v => { const autoType = detectTransactionType(v, "despesa"); setForm(f => ({ ...f, category: v, type: autoType })); }}`
-
-### 4. `src/pages/RevenuesPage.tsx`
-- Import `detectTransactionType`
-- Line 169: change source `onValueChange` to also auto-set type: `onValueChange={v => { const autoType = detectTransactionType(v, "receita"); setForm(f => ({ ...f, source: v, type: autoType })); }}`
-
-### 5. DB Migration — fix existing records
-```sql
-UPDATE revenues SET type = 'fixed' WHERE source IN ('kitnets', 'salario');
-UPDATE revenues SET type = 'variable' WHERE source IN ('comissao_prevensul', 'laudos', 't7', 'solar', 'dividendos', 'outros_receita');
-UPDATE expenses SET type = 'fixed' WHERE category IN ('consorcio', 'academia', 'assinaturas', 'internet', 'telefonia', 'terapia', 'maconaria', 'guarani');
-UPDATE expenses SET type = 'variable' WHERE category IN ('alimentacao', 'lazer', 'viagens', 'gasolina', 'farmacia', 'obras', 'terrenos', 'outros', 'cartao_credito');
+**Add `getCategoryDisplay` helper** that finds category by matching slug, name, or lowercase name against `allCategoryOptions`:
+```ts
+const getCategoryDisplay = (catValue: string) => {
+  const cat = allCategoryOptions.find(c => c.value === catValue || c.name.toLowerCase() === catValue?.toLowerCase() || c.name === catValue);
+  return { emoji: cat?.emoji ?? "📦", name: cat?.name ?? catValue, label: cat?.label ?? catValue };
+};
 ```
+
+**Fix filter logic** (line 127): when `filterCategory !== "all"`, find the selected option from `allCategoryOptions` and compare using both slug and name variations:
+```ts
+if (filterCategory !== "all") {
+  const selectedCat = allCategoryOptions.find(c => c.value === filterCategory);
+  if (selectedCat) {
+    data = data.filter(e => e.category === filterCategory || e.category === selectedCat.name || e.category?.toLowerCase() === selectedCat.name.toLowerCase());
+  } else {
+    data = data.filter(e => e.category === filterCategory);
+  }
+}
+```
+
+**Fix table badge display** (line 410/425): replace `categoryOptions.find()` with `getCategoryDisplay()`:
+```tsx
+const { emoji, name, label } = getCategoryDisplay(expense.category);
+// Badge: <WtBadge>{label}</WtBadge>
+```
+
+**Fix inline edit dropdown** (line 420): use `allCategoryOptions` instead of `categoryOptions`
+
+**Remove** the hardcoded `categoryOptions` array (lines 22-36) and `catColors` (lines 38-42) — derive colors from DB `custom_categories.color` field.
+
+### 2. `src/pages/RevenuesPage.tsx`
+
+Same pattern:
+- Add `getSourceDisplay` helper using `allSourceOptions`
+- Fix filter logic (line 123) with slug+name matching
+- Fix table badge (line 403/418): use `allSourceOptions` lookup instead of hardcoded `sourceOptions`
+- Fix inline edit dropdown (line 413): use `allSourceOptions`
+- Remove hardcoded `sourceOptions` array (lines 22-32)
+
+### 3. Chart colors
+For the PieChart/BarChart in both pages, derive colors from `custom_categories.color` field instead of hardcoded `catColors`/`sourceColors`.
 
 ## Files Changed
 | File | Action |
 |------|--------|
-| `src/lib/categorizeTransaction.ts` | Add `detectTransactionType` function |
-| `src/pages/ReconciliationPage.tsx` | Use auto-detect in classifyAs + confirmAllAuto |
-| `src/pages/ExpensesPage.tsx` | Auto-set type on category select |
-| `src/pages/RevenuesPage.tsx` | Auto-set type on source select |
-| DB migration | Fix existing records' type field |
+| `src/pages/ExpensesPage.tsx` | Remove hardcoded arrays, use DB categories everywhere |
+| `src/pages/RevenuesPage.tsx` | Remove hardcoded arrays, use DB categories everywhere |
 
