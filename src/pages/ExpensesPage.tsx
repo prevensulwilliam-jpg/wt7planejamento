@@ -138,11 +138,10 @@ export default function ExpensesPage() {
 
   const topCategory = Object.entries(byCat).sort((a, b) => b[1] - a[1])[0];
 
-  const pieData = Object.entries(byCat).map(([k, v]) => ({
-    name: categoryOptions.find(c => c.value === k)?.label?.replace(/^.+\s/, '') ?? k,
-    value: v,
-    color: catColors[k] ?? '#4A5568',
-  }));
+  const pieData = Object.entries(byCat).map(([k, v]) => {
+    const display = getCategoryDisplay(k);
+    return { name: display.name, value: v, color: display.color };
+  });
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc");
