@@ -1,35 +1,41 @@
 
 
-# Fix definitivo — Mapeamento slug→categoria via `categoryMap.ts`
+# Feature — Filtro por banco em Receitas e Despesas
 
-## Problem
-`custom_categories` has names like "Aluguel/Kitnets" which slugify to `aluguel_kitnets`, but `revenues.source` stores `kitnets`. The normalize-based matching fails because these are fundamentally different strings.
+## Summary
+Add bank filter extracted from transaction descriptions (pattern `[BANK NAME]`) to both pages, plus helper functions in `categoryMap.ts`.
 
 ## Changes
 
-### 1. New file: `src/lib/categoryMap.ts`
-Create with all the maps and helpers as specified:
-- `REVENUE_SOURCE_MAP` — maps DB slugs (kitnets, salario, sal_rio, etc.) to `{emoji, name, color}`
-- `EXPENSE_CATEGORY_MAP` — maps DB slugs (cartao_credito, alimentacao, etc.) to `{emoji, name, color}`
-- `getRevenueDisplay(source)` — lookup with readable fallback
-- `getExpenseDisplay(category)` — lookup with readable fallback
+### 1. `src/lib/categoryMap.ts`
+Add two functions at the end:
+- `extractBank(description)` — regex `\[([^\]]+)\]$` to extract bank name
+- `getUniqueBanks(records)` — returns sorted unique bank names from records' descriptions
 
-### 2. `src/pages/ExpensesPage.tsx`
-- Import `EXPENSE_CATEGORY_MAP, getExpenseDisplay` from `categoryMap`
-- Replace `getCategoryDisplay` (lines 87-100) with a wrapper around `getExpenseDisplay`
-- Replace `allCategoryOptions` (lines 68-85) to build from `EXPENSE_CATEGORY_MAP` entries + any unknown values from data, sorted by usage
-- Filter logic (lines 117-128) stays similar but now matches by the map key directly (since options use the raw DB value)
+### 2. `src/pages/RevenuesPage.tsx`
+- Import `extractBank, getUniqueBanks`
+- Add state: `filterBank` ("all"), `bankFilterOpen` (false)
+- Add `availableBanks` memo from `getUniqueBanks(revenues)`
+- Add bank filter in `filteredRevenues` useMemo: `if (filterBank !== "all") data = data.filter(r => extractBank(r.description) === filterBank)`
+- Add bank filter dropdown button after the source filter dropdown (teal color scheme, 🏦 icon)
+- Add bank dropdown panel (same style as source filter dropdown)
+- Update "Limpar filtros" condition and onClick to include `filterBank`
+- Add ref for click-outside closing of bank dropdown
 
-### 3. `src/pages/RevenuesPage.tsx`
-- Import `REVENUE_SOURCE_MAP, getRevenueDisplay` from `categoryMap`
-- Replace `getSourceDisplay` (lines 85-98) with a wrapper around `getRevenueDisplay`
-- Replace `allSourceOptions` (lines 67-83) to build from `REVENUE_SOURCE_MAP` entries + unknown values from data
-- Filter logic (lines 115-126) same pattern
+### 3. `src/pages/ExpensesPage.tsx`
+- Same changes as RevenuesPage: import helpers, add `filterBank`/`bankFilterOpen` state, `availableBanks` memo
+- Add bank filter in `filteredExpenses` useMemo
+- Add bank filter dropdown after category filter dropdown
+- Update "Limpar filtros" to include `filterBank`
+- Add ref for click-outside
+
+### 4. KPI subtitle
+In both pages, when `filterBank !== "all"`, show a small `🏦 {filterBank}` text below the first KPI card value (inside the KPI grid area, as a subtitle span).
 
 ## Files Changed
 | File | Action |
 |------|--------|
-| `src/lib/categoryMap.ts` | Create — static maps + helper functions |
-| `src/pages/ExpensesPage.tsx` | Use map-based display + options |
-| `src/pages/RevenuesPage.tsx` | Use map-based display + options |
+| `src/lib/categoryMap.ts` | Add `extractBank` + `getUniqueBanks` |
+| `src/pages/RevenuesPage.tsx` | Add bank filter state, dropdown, filter logic |
+| `src/pages/ExpensesPage.tsx` | Add bank filter state, dropdown, filter logic |
 
