@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useBankImportHistory, useDownloadStatement, useDeleteStatement, useBankImportStats } from "@/hooks/useBankStatementUpload";
 import { formatCurrency, formatDate, formatMonth } from "@/lib/formatters";
-import { Download, Trash2, FileText, Calendar, TrendingUp, TrendingDown, Database, HardDrive } from "lucide-react";
+import { Download, Trash2, FileText, TrendingUp, TrendingDown } from "lucide-react";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
 import { KpiCard } from "@/components/wt7/KpiCard";
 import { WtBadge } from "@/components/wt7/WtBadge";

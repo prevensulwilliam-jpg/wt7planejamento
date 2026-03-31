@@ -316,10 +316,35 @@ function ImportTab({ accounts }: { accounts: any[] }) {
       const transfers = rows.filter(r => r.status === "ignored").length;
       const doubts = rows.filter(r => r.status === "pending").length;
 
+      if (fileRef.current?.files?.[0]) {
+        const originalFile = fileRef.current.files[0];
+        const periodDates = rows.map(r => r.date).filter(Boolean).sort();
+        
+        const importStats = {
+          totalTransactions: rows.length,
+          newTransactions: revenues + expenses,
+          duplicateTransactions: 0,
+          autoCategorized: rows.filter(r => r.status === "matched").length,
+          pendingReview: doubts,
+          totalCredits: rows.filter(r => r.type === "credit").reduce((s, r) => s + r.amount, 0),
+          totalDebits: rows.filter(r => r.type === "debit").reduce((s, r) => s + r.amount, 0),
+          periodStart: periodDates[0] || new Date().toISOString().split('T')[0],
+          periodEnd: periodDates[periodDates.length - 1] || new Date().toISOString().split('T')[0],
+          referenceMonth: periodDates[0]?.slice(0, 7) || month
+        };
+        
+        await uploadStatementMutation.mutateAsync({
+          file: originalFile,
+          accountId: selectedAccount,
+          importStats
+        });
+      }
+
       toast.success(
         `✅ ${revenues} receitas e ${expenses} despesas criadas automaticamente · ` +
         `${transfers} transferências ignoradas · ` +
-        `${doubts > 0 ? `${doubts} aguardam sua classificação` : "nenhuma dúvida"}`
+        `${doubts > 0 ? `${doubts} aguardam sua classificação` : "nenhuma dúvida"} · ` +
+        `📁 Extrato salvo no histórico`
       );
       setPreview([]);
       setFileName("");
