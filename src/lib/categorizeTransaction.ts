@@ -163,7 +163,7 @@ export const INTENT_CONFIG = {
 // Categorias que são SEMPRE fixas
 const FIXED_CATEGORIES = [
   "consorcio", "academia", "assinaturas", "internet", "telefonia",
-  "terapia", "maconaria", "guarani", "veiculo",
+  "terapia", "maconaria", "guarani", "veiculo", "gas", "aluguel",
 ];
 
 // Categorias que são SEMPRE variáveis
