@@ -290,7 +290,7 @@ function ImportTab({ accounts }: { accounts: any[] }) {
               .update({ matched_revenue_id: data.id }).eq("id", btId);
             revenues++;
           }
-        } else if (tx.category_intent === "despesa") {
+        } else if (tx.category_intent === "despesa" && !(btRow as any)?.matched_expense_id) {
           const { data, error } = await supabase.from("expenses").insert({
             category: tx.category_suggestion,
             description: tx.description,
