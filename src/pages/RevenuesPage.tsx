@@ -92,12 +92,17 @@ export default function RevenuesPage() {
     return { ...display, label: `${display.emoji} ${display.name}` };
   };
 
-  // Close filter dropdown on click outside
+  const availableBanks = useMemo(() => getUniqueBanks(revenues), [revenues]);
+
+  // Close filter dropdowns on click outside
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (filterSrcRef.current && !filterSrcRef.current.contains(e.target as Node)) {
         setFilterSrcSearchOpen(false);
         setFilterSrcSearch("");
+      }
+      if (bankFilterRef.current && !bankFilterRef.current.contains(e.target as Node)) {
+        setBankFilterOpen(false);
       }
     };
     document.addEventListener("mousedown", handler);

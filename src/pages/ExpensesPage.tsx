@@ -94,12 +94,17 @@ export default function ExpensesPage() {
     return { ...display, label: `${display.emoji} ${display.name}` };
   };
 
-  // Close filter dropdown on click outside
+  const availableBanks = useMemo(() => getUniqueBanks(expenses), [expenses]);
+
+  // Close filter dropdowns on click outside
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (filterCatRef.current && !filterCatRef.current.contains(e.target as Node)) {
         setFilterCatSearchOpen(false);
         setFilterCatSearch("");
+      }
+      if (bankFilterRef.current && !bankFilterRef.current.contains(e.target as Node)) {
+        setBankFilterOpen(false);
       }
     };
     document.addEventListener("mousedown", handler);
