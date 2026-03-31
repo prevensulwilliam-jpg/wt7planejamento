@@ -357,7 +357,7 @@ function ImportTab({ accounts }: { accounts: any[] }) {
           toast.warning('Transações importadas, mas falha ao salvar extrato no histórico: ' + uploadErr.message);
         }
       } else {
-        console.warn("[Upload] Nenhum arquivo encontrado no fileRef");
+        console.warn('⚠️ Arquivo não encontrado no fileRef');
       }
 
       toast.success(
