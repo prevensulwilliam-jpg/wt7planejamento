@@ -107,6 +107,18 @@ export default function ExpensesPage() {
     return dbCats.sort((a, b) => (categoryCounts[b.value] ?? 0) - (categoryCounts[a.value] ?? 0) || a.name.localeCompare(b.name));
   }, [categories, expenses, categoryCounts]);
 
+  // Close filter dropdown on click outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (filterCatRef.current && !filterCatRef.current.contains(e.target as Node)) {
+        setFilterCatSearchOpen(false);
+        setFilterCatSearch("");
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
   const filteredExpenses = useMemo(() => {
     let data = [...expenses];
     if (filterType !== "all") data = data.filter(e => e.type === filterType);
