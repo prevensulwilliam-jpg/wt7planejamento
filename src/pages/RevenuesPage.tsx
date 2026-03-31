@@ -19,27 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 
-const sourceOptions = [
-  { value: "aluguel_kitnets", label: "Kitnets" },
-  { value: "sal_rio", label: "Salário" },
-  { value: "comiss_o_prevensul", label: "Comissão Prevensul" },
-  { value: "t7", label: "T7 Sales" },
-  { value: "solar_energia", label: "Energia Solar" },
-  { value: "laudos_t_cnicos", label: "Laudos Técnicos" },
-  { value: "casamento_energia", label: "Casamento Energia" },
-  { value: "outros_receita", label: "Outros (Receita)" },
-  { value: "outros__receita_", label: "Outros" },
-];
-
-const sourceColors: Record<string, string> = {
-  aluguel_kitnets: '#C9A84C', comiss_o_prevensul: '#2DD4BF', sal_rio: '#10B981',
-  solar_energia: '#F59E0B', t7: '#8B5CF6', laudos_t_cnicos: '#3B82F6', casamento_energia: '#EC4899', outros_receita: '#4A5568', "outros__receita_": '#4A5568',
-};
-
-const sourceBadgeVariant: Record<string, 'gold' | 'green' | 'cyan' | 'gray'> = {
-  aluguel_kitnets: 'gold', comiss_o_prevensul: 'cyan', sal_rio: 'green',
-  solar_energia: 'gold', t7: 'cyan', laudos_t_cnicos: 'cyan', casamento_energia: 'green', outros_receita: 'gray', "outros__receita_": 'gray',
-};
+const DEFAULT_SRC_COLOR = '#4A5568';
 
 function navigateMonth(current: string, delta: number): string {
   const [y, m] = current.split("-").map(Number);
