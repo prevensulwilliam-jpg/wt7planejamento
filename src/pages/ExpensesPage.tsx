@@ -106,17 +106,7 @@ export default function ExpensesPage() {
     let data = [...expenses];
     if (filterType !== "all") data = data.filter(e => e.type === filterType);
     if (filterCategory !== "all") {
-      const selectedCat = allCategoryOptions.find(c => c.value === filterCategory);
-      if (selectedCat) {
-        const normalize = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
-        const catNorm = normalize(selectedCat.name);
-        data = data.filter(e => {
-          const eNorm = normalize(e.category ?? "");
-          return eNorm === catNorm || e.category === selectedCat.name || eNorm.includes(catNorm.slice(0, 6)) || catNorm.includes(eNorm.slice(0, 6));
-        });
-      } else {
-        data = data.filter(e => e.category === filterCategory);
-      }
+      data = data.filter(e => e.category === filterCategory);
     }
     if (sortField) {
       data.sort((a, b) => {

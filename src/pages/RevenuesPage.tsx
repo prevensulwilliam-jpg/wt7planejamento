@@ -104,17 +104,7 @@ export default function RevenuesPage() {
     let data = [...revenues];
     if (filterType !== "all") data = data.filter(r => r.type === filterType);
     if (filterSource !== "all") {
-      const selectedSrc = allSourceOptions.find(c => c.value === filterSource);
-      if (selectedSrc) {
-        const normalize = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
-        const srcNorm = normalize(selectedSrc.name);
-        data = data.filter(r => {
-          const rNorm = normalize(r.source ?? "");
-          return rNorm === srcNorm || r.source === selectedSrc.name || rNorm.includes(srcNorm.slice(0, 6)) || srcNorm.includes(rNorm.slice(0, 6));
-        });
-      } else {
-        data = data.filter(r => r.source === filterSource);
-      }
+      data = data.filter(r => r.source === filterSource);
     }
     if (sortField) {
       data.sort((a, b) => {
