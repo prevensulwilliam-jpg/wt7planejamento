@@ -185,7 +185,7 @@ export default function ExpensesPage() {
     exportCSV(expenses, ["Categoria", "Descrição", "Tipo", "Valor", "Data", "Mês"], ["category", "description", "type", "amount", "paid_at", "reference_month"], `despesas_${month}.csv`);
   };
 
-  const allCategories = categories.length > 0 ? categories : categoryOptions.map(c => ({ name: c.label.replace(/^.+\s/, ''), emoji: c.label.split(' ')[0], id: c.value }));
+  
 
   return (
     <div className="space-y-6 max-w-[1400px] mx-auto">
