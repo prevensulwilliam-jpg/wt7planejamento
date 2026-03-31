@@ -277,15 +277,45 @@ export default function ExpensesPage() {
               ))}
             </div>
 
-            <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)}
-              className="px-3 py-1.5 text-xs rounded-lg outline-none"
-              style={{ background: "#080C10", border: "1px solid #1A2535", color: filterCategory !== "all" ? "#E8C97A" : "#64748B" }}>
-              <option value="all">Todas categorias</option>
-              {uniqueCategories.map(c => {
-                const cat = categories.find(ct => ct.name.toLowerCase().replace(/\s+/g, "_") === c || ct.name === c);
-                return <option key={c} value={c}>{cat ? `${cat.emoji} ${cat.name}` : c}</option>;
-              })}
-            </select>
+            <div className="relative" ref={filterCatRef}>
+              <button onClick={() => setFilterCatSearchOpen(o => !o)}
+                className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg outline-none"
+                style={{ background: "#080C10", border: "1px solid #1A2535", color: filterCategory !== "all" ? "#E8C97A" : "#64748B" }}>
+                {filterCategory !== "all" ? (allCategoryOptions.find(c => c.value === filterCategory)?.label ?? filterCategory) : "Todas categorias"}
+                <ChevronDown className="w-3 h-3" />
+              </button>
+              {filterCatSearchOpen && (
+                <div className="absolute z-50 mt-1 w-64 rounded-lg shadow-xl overflow-hidden" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+                  <div className="p-2" style={{ borderBottom: '1px solid #1A2535' }}>
+                    <div className="flex items-center gap-2 px-2 py-1 rounded" style={{ background: '#080C10' }}>
+                      <Search className="w-3 h-3" style={{ color: '#4A5568' }} />
+                      <input value={filterCatSearch} onChange={e => setFilterCatSearch(e.target.value)}
+                        placeholder="Buscar categoria..."
+                        autoFocus
+                        className="bg-transparent text-xs outline-none w-full"
+                        style={{ color: '#F0F4F8' }} />
+                    </div>
+                  </div>
+                  <div className="max-h-60 overflow-y-auto">
+                    <button onClick={() => { setFilterCategory("all"); setFilterCatSearchOpen(false); setFilterCatSearch(""); }}
+                      className="w-full text-left px-3 py-2 text-xs hover:bg-[#131B22] transition-colors"
+                      style={{ color: filterCategory === "all" ? "#E8C97A" : "#94A3B8" }}>
+                      Todas categorias
+                    </button>
+                    {allCategoryOptions
+                      .filter(c => !filterCatSearch || c.name.toLowerCase().includes(filterCatSearch.toLowerCase()))
+                      .map(c => (
+                        <button key={c.value} onClick={() => { setFilterCategory(c.value); setFilterCatSearchOpen(false); setFilterCatSearch(""); }}
+                          className="w-full text-left px-3 py-2 text-xs hover:bg-[#131B22] transition-colors flex items-center justify-between"
+                          style={{ color: filterCategory === c.value ? "#E8C97A" : "#CBD5E1" }}>
+                          <span>{c.label}</span>
+                          {categoryCounts[c.value] ? <span className="text-[10px]" style={{ color: '#4A5568' }}>{categoryCounts[c.value]}x</span> : null}
+                        </button>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </div>
 
             {(filterType !== "all" || filterCategory !== "all" || sortField) && (
               <button onClick={() => { setFilterType("all"); setFilterCategory("all"); setSortField(null); }}
