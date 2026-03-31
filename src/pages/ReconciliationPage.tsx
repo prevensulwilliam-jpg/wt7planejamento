@@ -351,7 +351,7 @@ function ImportTab({ accounts }: { accounts: any[] }) {
             importStats
           });
           uploadOk = true;
-          console.log("[Upload] Success!");
+          console.log('✅ Upload concluído!');
         } catch (uploadErr: any) {
           console.error("[Upload] Failed:", uploadErr);
           toast.warning(`⚠️ Importação OK, mas falha ao salvar arquivo: ${uploadErr.message}`);
