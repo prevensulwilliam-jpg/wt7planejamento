@@ -72,6 +72,8 @@ const EXPENSE_RULES: { keywords: string[]; category: string; label: string }[] =
   { keywords: ["pagto cartao", "pagamento cartao", "fatura cartao", "cartao credito pgto", "pg cartao"], category: "cartao", label: "Fatura Cartão" },
   { keywords: ["pagto boleto", "pg boleto", "boleto bancario"], category: "outros", label: "Boleto" },
   { keywords: ["ademicon", "consorcio", "carta credito"], category: "consorcio", label: "Consórcio" },
+  { keywords: ["supergasbras", "gas encanado", "comgas"], category: "gas", label: "Gás" },
+  { keywords: ["pjbank", "pj bank"], category: "aluguel", label: "Aluguel" },
   // Internet/Telefonia
   { keywords: ["debito pix - claro", "claro s.a", "tim s.a", "vivo ", "oi s.a"], category: "internet", label: "Internet/Telefonia" },
   // Energia elétrica
@@ -163,7 +165,7 @@ export const INTENT_CONFIG = {
 // Categorias que são SEMPRE fixas
 const FIXED_CATEGORIES = [
   "consorcio", "academia", "assinaturas", "internet", "telefonia",
-  "terapia", "maconaria", "guarani", "veiculo",
+  "terapia", "maconaria", "guarani", "veiculo", "gas", "aluguel",
 ];
 
 // Categorias que são SEMPRE variáveis
