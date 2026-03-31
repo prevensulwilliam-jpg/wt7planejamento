@@ -203,12 +203,46 @@ export default function ExpensesPage() {
             <div className="space-y-4">
               <div>
                 <Label style={{ color: '#94A3B8' }}>Categoria</Label>
-                <Select value={form.category} onValueChange={v => { const autoType = detectTransactionType(v, "despesa"); setForm(f => ({ ...f, category: v, type: autoType })); }}>
-                  <SelectTrigger style={{ background: '#080C10', borderColor: '#1A2535', color: '#F0F4F8' }}><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent style={{ background: '#0D1318', borderColor: '#1A2535' }}>
-                    {categoryOptions.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <div className="relative">
+                  <button type="button" onClick={() => setCatSearchOpen(o => !o)}
+                    className="flex h-10 w-full items-center justify-between rounded-md border px-3 py-2 text-sm"
+                    style={{ background: '#080C10', borderColor: '#1A2535', color: '#F0F4F8' }}>
+                    <span>{form.category ? (allCategoryOptions.find(c => c.value === form.category)?.label ?? form.category) : "Selecione"}</span>
+                    <ChevronDown className="h-4 w-4 opacity-50" />
+                  </button>
+                  {catSearchOpen && (
+                    <div className="absolute z-50 mt-1 w-full rounded-lg shadow-xl overflow-hidden" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+                      <div className="p-2" style={{ borderBottom: '1px solid #1A2535' }}>
+                        <div className="flex items-center gap-2 px-2 py-1 rounded" style={{ background: '#080C10' }}>
+                          <Search className="w-3 h-3" style={{ color: '#4A5568' }} />
+                          <input value={catSearch} onChange={e => setCatSearch(e.target.value)}
+                            placeholder="Buscar categoria..."
+                            autoFocus
+                            className="bg-transparent text-xs outline-none w-full"
+                            style={{ color: '#F0F4F8' }} />
+                        </div>
+                      </div>
+                      <div className="max-h-60 overflow-y-auto">
+                        {allCategoryOptions
+                          .filter(c => !catSearch || c.name.toLowerCase().includes(catSearch.toLowerCase()))
+                          .map(c => (
+                            <button key={c.value} type="button"
+                              onClick={() => {
+                                const autoType = detectTransactionType(c.value, "despesa");
+                                setForm(f => ({ ...f, category: c.value, type: autoType }));
+                                setCatSearchOpen(false);
+                                setCatSearch("");
+                              }}
+                              className="w-full text-left px-3 py-2 text-xs hover:bg-[#131B22] transition-colors flex items-center justify-between"
+                              style={{ color: form.category === c.value ? "#E8C97A" : "#CBD5E1" }}>
+                              <span>{c.label}</span>
+                              {categoryCounts[c.value] ? <span className="text-[10px]" style={{ color: '#4A5568' }}>{categoryCounts[c.value]}x</span> : null}
+                            </button>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
               <div>
                 <Label style={{ color: '#94A3B8' }}>Descrição</Label>
