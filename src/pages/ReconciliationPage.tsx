@@ -318,7 +318,12 @@ function ImportTab({ accounts }: { accounts: any[] }) {
 
       let uploadOk = false;
       const fileExists = !!fileRef.current?.files?.[0];
-      console.log("[Upload] fileRef check:", { fileExists, filesLength: fileRef.current?.files?.length });
+      console.log('🔍 Verificando upload...', {
+        temArquivo: fileExists,
+        nomeArquivo: fileRef.current?.files?.[0]?.name,
+        contaSelecionada: selectedAccount,
+        totalLinhas: rows.length
+      });
 
       if (fileExists) {
         const originalFile = fileRef.current!.files![0];
@@ -337,12 +342,7 @@ function ImportTab({ accounts }: { accounts: any[] }) {
           referenceMonth: periodDates[0]?.slice(0, 7) || getCurrentMonth()
         };
 
-        console.log("[Upload] Preparing upload:", {
-          fileName: originalFile.name,
-          fileSize: originalFile.size,
-          accountId: selectedAccount,
-          importStats
-        });
+        console.log('📁 Iniciando upload para Storage...');
 
         try {
           await uploadStatementMutation.mutateAsync({
@@ -351,13 +351,13 @@ function ImportTab({ accounts }: { accounts: any[] }) {
             importStats
           });
           uploadOk = true;
-          console.log("[Upload] Success!");
+          console.log('✅ Upload concluído!');
         } catch (uploadErr: any) {
-          console.error("[Upload] Failed:", uploadErr);
-          toast.warning(`⚠️ Importação OK, mas falha ao salvar arquivo: ${uploadErr.message}`);
+          console.error('❌ Erro no upload:', uploadErr);
+          toast.warning('Transações importadas, mas falha ao salvar extrato no histórico: ' + uploadErr.message);
         }
       } else {
-        console.warn("[Upload] Nenhum arquivo encontrado no fileRef");
+        console.warn('⚠️ Arquivo não encontrado no fileRef');
       }
 
       toast.success(
