@@ -9,7 +9,7 @@ import { useRevenues, useCreateRevenue, useDeleteRevenue, useUpdateRevenue, expo
 import { useCategories } from "@/hooks/useCategories";
 import { formatCurrency, formatDate, formatMonth, getCurrentMonth } from "@/lib/formatters";
 import { detectTransactionType } from "@/lib/categorizeTransaction";
-import { REVENUE_SOURCE_MAP, getRevenueDisplay } from "@/lib/categoryMap";
+import { REVENUE_SOURCE_MAP, getRevenueDisplay, extractBank, getUniqueBanks } from "@/lib/categoryMap";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -55,6 +55,9 @@ export default function RevenuesPage() {
   const [filterSrcSearchOpen, setFilterSrcSearchOpen] = useState(false);
   const [filterSrcSearch, setFilterSrcSearch] = useState("");
   const filterSrcRef = useRef<HTMLDivElement>(null);
+  const [filterBank, setFilterBank] = useState("all");
+  const [bankFilterOpen, setBankFilterOpen] = useState(false);
+  const bankFilterRef = useRef<HTMLDivElement>(null);
 
   // Count usage per source
   const sourceCounts = useMemo(() => {
@@ -89,12 +92,17 @@ export default function RevenuesPage() {
     return { ...display, label: `${display.emoji} ${display.name}` };
   };
 
-  // Close filter dropdown on click outside
+  const availableBanks = useMemo(() => getUniqueBanks(revenues), [revenues]);
+
+  // Close filter dropdowns on click outside
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (filterSrcRef.current && !filterSrcRef.current.contains(e.target as Node)) {
         setFilterSrcSearchOpen(false);
         setFilterSrcSearch("");
+      }
+      if (bankFilterRef.current && !bankFilterRef.current.contains(e.target as Node)) {
+        setBankFilterOpen(false);
       }
     };
     document.addEventListener("mousedown", handler);
@@ -107,6 +115,9 @@ export default function RevenuesPage() {
     if (filterSource !== "all") {
       data = data.filter(r => r.source === filterSource);
     }
+    if (filterBank !== "all") {
+      data = data.filter(r => extractBank(r.description ?? "") === filterBank);
+    }
     if (sortField) {
       data.sort((a, b) => {
         let va: any = sortField === "date" ? (a.received_at ?? "") : (a as any)[sortField] ?? "";
@@ -118,7 +129,7 @@ export default function RevenuesPage() {
       });
     }
     return data;
-  }, [revenues, sortField, sortDir, filterType, filterSource]);
+  }, [revenues, sortField, sortDir, filterType, filterSource, filterBank]);
 
   const totalMonth = filteredRevenues.reduce((s, r) => s + (r.amount ?? 0), 0);
   const totalFixed = revenues.filter(r => r.type === 'fixed').reduce((s, r) => s + (r.amount ?? 0), 0);
@@ -343,8 +354,41 @@ export default function RevenuesPage() {
               )}
             </div>
 
-            {(filterType !== "all" || filterSource !== "all" || sortField) && (
-              <button onClick={() => { setFilterType("all"); setFilterSource("all"); setSortField(null); }}
+            {availableBanks.length > 0 && (
+              <div className="relative" ref={bankFilterRef}>
+                <button onClick={() => setBankFilterOpen(o => !o)}
+                  className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg outline-none"
+                  style={{
+                    background: filterBank !== "all" ? "rgba(45,212,191,0.15)" : "#080C10",
+                    border: `1px solid ${filterBank !== "all" ? "rgba(45,212,191,0.4)" : "#1A2535"}`,
+                    color: filterBank !== "all" ? "#2DD4BF" : "#64748B",
+                  }}>
+                  🏦 {filterBank !== "all" ? filterBank : "Todos os bancos"}
+                  <ChevronDown className="w-3 h-3" />
+                </button>
+                {bankFilterOpen && (
+                  <div className="absolute z-50 mt-1 w-64 rounded-lg shadow-xl overflow-hidden" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+                    <div className="max-h-60 overflow-y-auto">
+                      <button onClick={() => { setFilterBank("all"); setBankFilterOpen(false); }}
+                        className="w-full text-left px-3 py-2 text-xs hover:bg-[#131B22] transition-colors"
+                        style={{ color: filterBank === "all" ? "#E8C97A" : "#94A3B8" }}>
+                        Todos os bancos
+                      </button>
+                      {availableBanks.map(bank => (
+                        <button key={bank} onClick={() => { setFilterBank(bank); setBankFilterOpen(false); }}
+                          className="w-full text-left px-3 py-2 text-xs hover:bg-[#131B22] transition-colors flex items-center gap-2"
+                          style={{ color: filterBank === bank ? "#2DD4BF" : "#CBD5E1" }}>
+                          🏦 {bank}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {(filterType !== "all" || filterSource !== "all" || filterBank !== "all" || sortField) && (
+              <button onClick={() => { setFilterType("all"); setFilterSource("all"); setFilterBank("all"); setSortField(null); }}
                 className="px-3 py-1.5 text-xs rounded-lg"
                 style={{ background: "rgba(244,63,94,0.1)", color: "#F43F5E", border: "1px solid rgba(244,63,94,0.2)" }}>
                 Limpar filtros

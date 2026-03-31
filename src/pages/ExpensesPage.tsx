@@ -9,7 +9,7 @@ import { useExpenses, useCreateExpense, useDeleteExpense, useUpdateExpense, expo
 import { useCategories } from "@/hooks/useCategories";
 import { formatCurrency, formatDate, formatMonth, getCurrentMonth } from "@/lib/formatters";
 import { detectTransactionType } from "@/lib/categorizeTransaction";
-import { EXPENSE_CATEGORY_MAP, getExpenseDisplay } from "@/lib/categoryMap";
+import { EXPENSE_CATEGORY_MAP, getExpenseDisplay, extractBank, getUniqueBanks } from "@/lib/categoryMap";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -55,6 +55,9 @@ export default function ExpensesPage() {
   const [filterCatSearchOpen, setFilterCatSearchOpen] = useState(false);
   const [filterCatSearch, setFilterCatSearch] = useState("");
   const filterCatRef = useRef<HTMLDivElement>(null);
+  const [filterBank, setFilterBank] = useState("all");
+  const [bankFilterOpen, setBankFilterOpen] = useState(false);
+  const bankFilterRef = useRef<HTMLDivElement>(null);
 
   // Count usage per category from current expenses
   const categoryCounts = useMemo(() => {
@@ -91,12 +94,17 @@ export default function ExpensesPage() {
     return { ...display, label: `${display.emoji} ${display.name}` };
   };
 
-  // Close filter dropdown on click outside
+  const availableBanks = useMemo(() => getUniqueBanks(expenses), [expenses]);
+
+  // Close filter dropdowns on click outside
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (filterCatRef.current && !filterCatRef.current.contains(e.target as Node)) {
         setFilterCatSearchOpen(false);
         setFilterCatSearch("");
+      }
+      if (bankFilterRef.current && !bankFilterRef.current.contains(e.target as Node)) {
+        setBankFilterOpen(false);
       }
     };
     document.addEventListener("mousedown", handler);
@@ -109,6 +117,9 @@ export default function ExpensesPage() {
     if (filterCategory !== "all") {
       data = data.filter(e => e.category === filterCategory);
     }
+    if (filterBank !== "all") {
+      data = data.filter(e => extractBank(e.description ?? "") === filterBank);
+    }
     if (sortField) {
       data.sort((a, b) => {
         let va: any = sortField === "date" ? (a.paid_at ?? "") : (a as any)[sortField] ?? "";
@@ -120,7 +131,7 @@ export default function ExpensesPage() {
       });
     }
     return data;
-  }, [expenses, sortField, sortDir, filterType, filterCategory]);
+  }, [expenses, sortField, sortDir, filterType, filterCategory, filterBank]);
 
   const totalMonth = filteredExpenses.reduce((s, e) => s + (e.amount ?? 0), 0);
   const totalFixed = expenses.filter(e => e.type === 'fixed').reduce((s, e) => s + (e.amount ?? 0), 0);
@@ -348,8 +359,41 @@ export default function ExpensesPage() {
               )}
             </div>
 
-            {(filterType !== "all" || filterCategory !== "all" || sortField) && (
-              <button onClick={() => { setFilterType("all"); setFilterCategory("all"); setSortField(null); }}
+            {availableBanks.length > 0 && (
+              <div className="relative" ref={bankFilterRef}>
+                <button onClick={() => setBankFilterOpen(o => !o)}
+                  className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg outline-none"
+                  style={{
+                    background: filterBank !== "all" ? "rgba(45,212,191,0.15)" : "#080C10",
+                    border: `1px solid ${filterBank !== "all" ? "rgba(45,212,191,0.4)" : "#1A2535"}`,
+                    color: filterBank !== "all" ? "#2DD4BF" : "#64748B",
+                  }}>
+                  🏦 {filterBank !== "all" ? filterBank : "Todos os bancos"}
+                  <ChevronDown className="w-3 h-3" />
+                </button>
+                {bankFilterOpen && (
+                  <div className="absolute z-50 mt-1 w-64 rounded-lg shadow-xl overflow-hidden" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+                    <div className="max-h-60 overflow-y-auto">
+                      <button onClick={() => { setFilterBank("all"); setBankFilterOpen(false); }}
+                        className="w-full text-left px-3 py-2 text-xs hover:bg-[#131B22] transition-colors"
+                        style={{ color: filterBank === "all" ? "#E8C97A" : "#94A3B8" }}>
+                        Todos os bancos
+                      </button>
+                      {availableBanks.map(bank => (
+                        <button key={bank} onClick={() => { setFilterBank(bank); setBankFilterOpen(false); }}
+                          className="w-full text-left px-3 py-2 text-xs hover:bg-[#131B22] transition-colors flex items-center gap-2"
+                          style={{ color: filterBank === bank ? "#2DD4BF" : "#CBD5E1" }}>
+                          🏦 {bank}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {(filterType !== "all" || filterCategory !== "all" || filterBank !== "all" || sortField) && (
+              <button onClick={() => { setFilterType("all"); setFilterCategory("all"); setFilterBank("all"); setSortField(null); }}
                 className="px-3 py-1.5 text-xs rounded-lg"
                 style={{ background: "rgba(244,63,94,0.1)", color: "#F43F5E", border: "1px solid rgba(244,63,94,0.2)" }}>
                 Limpar filtros
