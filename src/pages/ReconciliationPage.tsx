@@ -330,7 +330,7 @@ function ImportTab({ accounts }: { accounts: any[] }) {
           totalDebits: rows.filter(r => r.type === "debit").reduce((s, r) => s + r.amount, 0),
           periodStart: periodDates[0] || new Date().toISOString().split('T')[0],
           periodEnd: periodDates[periodDates.length - 1] || new Date().toISOString().split('T')[0],
-          referenceMonth: periodDates[0]?.slice(0, 7) || month
+          referenceMonth: periodDates[0]?.slice(0, 7) || getCurrentMonth()
         };
         
         await uploadStatementMutation.mutateAsync({
