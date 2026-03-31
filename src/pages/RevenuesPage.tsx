@@ -134,11 +134,10 @@ export default function RevenuesPage() {
     return acc;
   }, {} as Record<string, number>);
 
-  const pieData = Object.entries(bySource).map(([k, v]) => ({
-    name: sourceOptions.find(s => s.value === k)?.label ?? k,
-    value: v,
-    color: sourceColors[k] ?? '#4A5568',
-  }));
+  const pieData = Object.entries(bySource).map(([k, v]) => {
+    const display = getSourceDisplay(k);
+    return { name: display.name, value: v, color: display.color };
+  });
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc");
