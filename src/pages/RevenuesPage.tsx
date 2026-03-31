@@ -55,6 +55,9 @@ export default function RevenuesPage() {
   const [filterSrcSearchOpen, setFilterSrcSearchOpen] = useState(false);
   const [filterSrcSearch, setFilterSrcSearch] = useState("");
   const filterSrcRef = useRef<HTMLDivElement>(null);
+  const [filterBank, setFilterBank] = useState("all");
+  const [bankFilterOpen, setBankFilterOpen] = useState(false);
+  const bankFilterRef = useRef<HTMLDivElement>(null);
 
   // Count usage per source
   const sourceCounts = useMemo(() => {

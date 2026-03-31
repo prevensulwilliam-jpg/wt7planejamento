@@ -55,6 +55,9 @@ export default function ExpensesPage() {
   const [filterCatSearchOpen, setFilterCatSearchOpen] = useState(false);
   const [filterCatSearch, setFilterCatSearch] = useState("");
   const filterCatRef = useRef<HTMLDivElement>(null);
+  const [filterBank, setFilterBank] = useState("all");
+  const [bankFilterOpen, setBankFilterOpen] = useState(false);
+  const bankFilterRef = useRef<HTMLDivElement>(null);
 
   // Count usage per category from current expenses
   const categoryCounts = useMemo(() => {
