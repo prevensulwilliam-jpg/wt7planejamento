@@ -21,6 +21,8 @@ import { formatCurrency, formatDate, formatMonth, getCurrentMonth } from "@/lib/
 import { Upload, CheckCircle2, XCircle, ArrowLeftRight, FileText, Wifi, Download } from "lucide-react";
 import { toast } from "sonner";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { useBankStatementUpload } from "@/hooks/useBankStatementUpload";
+import { ImportHistoryTab } from "@/components/reconciliation/ImportHistoryTab";
 
 const DESPESA_OPTIONS = [
   { value: "cartao_credito", label: "💳 Cartão de Crédito" },
@@ -141,7 +143,7 @@ export default function ReconciliationPage() {
           <ReconcileTab month={month} accounts={accounts} statusFilter={statusFilter} setStatusFilter={setStatusFilter} accountFilter={accountFilter} setAccountFilter={setAccountFilter} />
         </TabsContent>
         <TabsContent value="history">
-          <HistoryTab month={month} accounts={accounts} />
+          <ImportHistoryTab accounts={accounts} />
         </TabsContent>
       </Tabs>
     </div>
@@ -155,6 +157,7 @@ function ImportTab({ accounts }: { accounts: any[] }) {
   const [fileName, setFileName] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const importMutation = useImportTransactions();
+  const uploadStatementMutation = useBankStatementUpload();
 
   const handleFile = useCallback(async (file: File) => {
     setFileName(file.name);
@@ -313,10 +316,35 @@ function ImportTab({ accounts }: { accounts: any[] }) {
       const transfers = rows.filter(r => r.status === "ignored").length;
       const doubts = rows.filter(r => r.status === "pending").length;
 
+      if (fileRef.current?.files?.[0]) {
+        const originalFile = fileRef.current.files[0];
+        const periodDates = rows.map(r => r.date).filter(Boolean).sort();
+        
+        const importStats = {
+          totalTransactions: rows.length,
+          newTransactions: revenues + expenses,
+          duplicateTransactions: 0,
+          autoCategorized: rows.filter(r => r.status === "matched").length,
+          pendingReview: doubts,
+          totalCredits: rows.filter(r => r.type === "credit").reduce((s, r) => s + r.amount, 0),
+          totalDebits: rows.filter(r => r.type === "debit").reduce((s, r) => s + r.amount, 0),
+          periodStart: periodDates[0] || new Date().toISOString().split('T')[0],
+          periodEnd: periodDates[periodDates.length - 1] || new Date().toISOString().split('T')[0],
+          referenceMonth: periodDates[0]?.slice(0, 7) || getCurrentMonth()
+        };
+        
+        await uploadStatementMutation.mutateAsync({
+          file: originalFile,
+          accountId: selectedAccount,
+          importStats
+        });
+      }
+
       toast.success(
         `✅ ${revenues} receitas e ${expenses} despesas criadas automaticamente · ` +
         `${transfers} transferências ignoradas · ` +
-        `${doubts > 0 ? `${doubts} aguardam sua classificação` : "nenhuma dúvida"}`
+        `${doubts > 0 ? `${doubts} aguardam sua classificação` : "nenhuma dúvida"} · ` +
+        `📁 Extrato salvo no histórico`
       );
       setPreview([]);
       setFileName("");
