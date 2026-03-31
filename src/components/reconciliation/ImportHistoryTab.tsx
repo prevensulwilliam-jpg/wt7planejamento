@@ -57,27 +57,27 @@ export function ImportHistoryTab({ accounts }: { accounts: any[] }) {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard
           label="Total de Uploads"
-          value={stats.totalUploads.toString()}
-          icon={<FileText className="w-5 h-5" />}
-          color="#C9A84C"
+          value={stats.totalUploads}
+          formatAs="number"
+          color="gold"
         />
         <KpiCard
           label="Transações Importadas"
-          value={stats.totalTransactions.toLocaleString('pt-BR')}
-          icon={<Database className="w-5 h-5" />}
-          color="#2DD4BF"
+          value={stats.totalTransactions}
+          formatAs="number"
+          color="cyan"
         />
         <KpiCard
           label="Taxa de Duplicidade"
-          value={`${stats.duplicateRate.toFixed(1)}%`}
-          icon={<Calendar className="w-5 h-5" />}
-          color={stats.duplicateRate > 20 ? "#F59E0B" : "#10B981"}
+          value={stats.duplicateRate}
+          formatAs="number"
+          color={stats.duplicateRate > 20 ? "gold" : "green"}
         />
         <KpiCard
           label="Espaço Utilizado"
-          value={formatFileSize(stats.totalSize)}
-          icon={<HardDrive className="w-5 h-5" />}
-          color="#8B5CF6"
+          value={stats.totalSize}
+          formatAs="number"
+          color="gray"
         />
       </div>
 
