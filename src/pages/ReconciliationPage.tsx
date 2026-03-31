@@ -231,6 +231,7 @@ function ImportTab({ accounts }: { accounts: any[] }) {
   }, [handleFile]);
 
   const doImport = async () => {
+    alert('🚀 doImport foi chamada! Versão NOVA');
     if (!selectedAccount) { toast.error("Selecione uma conta bancária."); return; }
     if (!preview.length) { toast.error("Selecione um arquivo primeiro."); return; }
 
