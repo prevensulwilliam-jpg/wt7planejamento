@@ -104,6 +104,80 @@ export type Database = {
         }
         Relationships: []
       }
+      bank_import_history: {
+        Row: {
+          auto_categorized: number | null
+          bank_account_id: string | null
+          duplicate_transactions: number | null
+          file_name: string
+          file_path: string
+          file_size_bytes: number | null
+          file_type: string | null
+          id: string
+          imported_at: string | null
+          imported_by: string | null
+          metadata: Json | null
+          new_transactions: number | null
+          pending_review: number | null
+          period_end: string | null
+          period_start: string | null
+          reference_month: string | null
+          total_credits: number | null
+          total_debits: number | null
+          total_transactions: number | null
+        }
+        Insert: {
+          auto_categorized?: number | null
+          bank_account_id?: string | null
+          duplicate_transactions?: number | null
+          file_name: string
+          file_path: string
+          file_size_bytes?: number | null
+          file_type?: string | null
+          id?: string
+          imported_at?: string | null
+          imported_by?: string | null
+          metadata?: Json | null
+          new_transactions?: number | null
+          pending_review?: number | null
+          period_end?: string | null
+          period_start?: string | null
+          reference_month?: string | null
+          total_credits?: number | null
+          total_debits?: number | null
+          total_transactions?: number | null
+        }
+        Update: {
+          auto_categorized?: number | null
+          bank_account_id?: string | null
+          duplicate_transactions?: number | null
+          file_name?: string
+          file_path?: string
+          file_size_bytes?: number | null
+          file_type?: string | null
+          id?: string
+          imported_at?: string | null
+          imported_by?: string | null
+          metadata?: Json | null
+          new_transactions?: number | null
+          pending_review?: number | null
+          period_end?: string | null
+          period_start?: string | null
+          reference_month?: string | null
+          total_credits?: number | null
+          total_debits?: number | null
+          total_transactions?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bank_import_history_bank_account_id_fkey"
+            columns: ["bank_account_id"]
+            isOneToOne: false
+            referencedRelation: "bank_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bank_transactions: {
         Row: {
           amount: number
@@ -123,6 +197,7 @@ export type Database = {
           raw_data: Json | null
           source: string | null
           status: string | null
+          transaction_hash: string | null
           type: string | null
         }
         Insert: {
@@ -143,6 +218,7 @@ export type Database = {
           raw_data?: Json | null
           source?: string | null
           status?: string | null
+          transaction_hash?: string | null
           type?: string | null
         }
         Update: {
@@ -163,6 +239,7 @@ export type Database = {
           raw_data?: Json | null
           source?: string | null
           status?: string | null
+          transaction_hash?: string | null
           type?: string | null
         }
         Relationships: [
@@ -1226,6 +1303,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      calculate_transaction_hash: {
+        Args: {
+          p_account_id: string
+          p_amount: number
+          p_date: string
+          p_description: string
+          p_memo: string
+        }
+        Returns: string
+      }
       clean_duplicate_expenses: { Args: never; Returns: undefined }
       clean_duplicate_revenues: { Args: never; Returns: undefined }
       get_user_role: {
