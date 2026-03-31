@@ -70,20 +70,23 @@ export default function RevenuesPage() {
       label: `${c.emoji || '💰'} ${c.name}`,
       emoji: c.emoji || '💰',
       name: c.name,
+      color: c.color || DEFAULT_SRC_COLOR,
     }));
-    const dbValues = new Set(dbCats.map(c => c.value));
-    sourceOptions.forEach(so => {
-      if (!dbValues.has(so.value)) dbCats.push({ value: so.value, label: so.label, emoji: '💰', name: so.label });
-    });
     const allValues = new Set(dbCats.map(c => c.value));
     revenues.forEach(r => {
       if (r.source && !allValues.has(r.source)) {
-        dbCats.push({ value: r.source, label: `💰 ${r.source}`, emoji: '💰', name: r.source });
+        dbCats.push({ value: r.source, label: `💰 ${r.source}`, emoji: '💰', name: r.source, color: DEFAULT_SRC_COLOR });
         allValues.add(r.source);
       }
     });
     return dbCats.sort((a, b) => (sourceCounts[b.value] ?? 0) - (sourceCounts[a.value] ?? 0) || a.name.localeCompare(b.name));
   }, [categories, revenues, sourceCounts]);
+
+  const getSourceDisplay = (srcValue: string | null) => {
+    if (!srcValue) return { emoji: '💰', name: 'outros', label: '💰 outros', color: DEFAULT_SRC_COLOR };
+    const src = allSourceOptions.find(c => c.value === srcValue || c.name.toLowerCase() === srcValue.toLowerCase() || toSlug(c.name) === srcValue);
+    return { emoji: src?.emoji ?? '💰', name: src?.name ?? srcValue, label: src?.label ?? srcValue, color: src?.color ?? DEFAULT_SRC_COLOR };
+  };
 
   // Close filter dropdown on click outside
   useEffect(() => {
