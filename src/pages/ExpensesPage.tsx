@@ -85,9 +85,18 @@ export default function ExpensesPage() {
   }, [categories, expenses, categoryCounts]);
 
   const getCategoryDisplay = (catValue: string | null) => {
-    if (!catValue) return { emoji: '📦', name: 'outros', label: '📦 outros', color: DEFAULT_CAT_COLOR };
-    const cat = allCategoryOptions.find(c => c.value === catValue || c.name.toLowerCase() === catValue.toLowerCase() || toSlug(c.name) === catValue);
-    return { emoji: cat?.emoji ?? '📦', name: cat?.name ?? catValue, label: cat?.label ?? catValue, color: cat?.color ?? DEFAULT_CAT_COLOR };
+    if (!catValue) return { emoji: '📦', name: 'Outros', label: '📦 Outros', color: DEFAULT_CAT_COLOR };
+    const normalize = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
+    const nv = normalize(catValue);
+    const cat = allCategoryOptions.find(c =>
+      c.name === catValue ||
+      normalize(c.name) === nv ||
+      normalize(c.name).includes(nv) ||
+      nv.includes(normalize(c.name).slice(0, 5))
+    );
+    if (cat) return { emoji: cat.emoji, name: cat.name, label: cat.label, color: cat.color };
+    const readable = catValue.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
+    return { emoji: '📦', name: readable, label: `📦 ${readable}`, color: DEFAULT_CAT_COLOR };
   };
 
   // Close filter dropdown on click outside
@@ -108,7 +117,12 @@ export default function ExpensesPage() {
     if (filterCategory !== "all") {
       const selectedCat = allCategoryOptions.find(c => c.value === filterCategory);
       if (selectedCat) {
-        data = data.filter(e => e.category === filterCategory || e.category === selectedCat.name || e.category?.toLowerCase() === selectedCat.name.toLowerCase());
+        const normalize = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
+        const catNorm = normalize(selectedCat.name);
+        data = data.filter(e => {
+          const eNorm = normalize(e.category ?? "");
+          return eNorm === catNorm || e.category === selectedCat.name || eNorm.includes(catNorm.slice(0, 6)) || catNorm.includes(eNorm.slice(0, 6));
+        });
       } else {
         data = data.filter(e => e.category === filterCategory);
       }
