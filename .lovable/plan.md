@@ -1,64 +1,35 @@
 
 
-# Fix — Filtro de categorias usando custom_categories do banco
+# Fix definitivo — Mapeamento slug→categoria via `categoryMap.ts`
 
 ## Problem
-Both ExpensesPage and RevenuesPage have hardcoded `categoryOptions`/`sourceOptions` arrays used in:
-1. Filter dropdown comparison (line 127/123: compares `expense.category` against slug values that may not match DB records)
-2. Table display (line 410/403: uses hardcoded `categoryOptions.find()` to show badge, missing DB categories)
-3. Inline edit dropdown (line 420/413: iterates over hardcoded list)
-
-The `allCategoryOptions`/`allSourceOptions` (built from DB) exist but aren't used everywhere.
+`custom_categories` has names like "Aluguel/Kitnets" which slugify to `aluguel_kitnets`, but `revenues.source` stores `kitnets`. The normalize-based matching fails because these are fundamentally different strings.
 
 ## Changes
 
-### 1. `src/pages/ExpensesPage.tsx`
+### 1. New file: `src/lib/categoryMap.ts`
+Create with all the maps and helpers as specified:
+- `REVENUE_SOURCE_MAP` — maps DB slugs (kitnets, salario, sal_rio, etc.) to `{emoji, name, color}`
+- `EXPENSE_CATEGORY_MAP` — maps DB slugs (cartao_credito, alimentacao, etc.) to `{emoji, name, color}`
+- `getRevenueDisplay(source)` — lookup with readable fallback
+- `getExpenseDisplay(category)` — lookup with readable fallback
 
-**Add `getCategoryDisplay` helper** that finds category by matching slug, name, or lowercase name against `allCategoryOptions`:
-```ts
-const getCategoryDisplay = (catValue: string) => {
-  const cat = allCategoryOptions.find(c => c.value === catValue || c.name.toLowerCase() === catValue?.toLowerCase() || c.name === catValue);
-  return { emoji: cat?.emoji ?? "📦", name: cat?.name ?? catValue, label: cat?.label ?? catValue };
-};
-```
+### 2. `src/pages/ExpensesPage.tsx`
+- Import `EXPENSE_CATEGORY_MAP, getExpenseDisplay` from `categoryMap`
+- Replace `getCategoryDisplay` (lines 87-100) with a wrapper around `getExpenseDisplay`
+- Replace `allCategoryOptions` (lines 68-85) to build from `EXPENSE_CATEGORY_MAP` entries + any unknown values from data, sorted by usage
+- Filter logic (lines 117-128) stays similar but now matches by the map key directly (since options use the raw DB value)
 
-**Fix filter logic** (line 127): when `filterCategory !== "all"`, find the selected option from `allCategoryOptions` and compare using both slug and name variations:
-```ts
-if (filterCategory !== "all") {
-  const selectedCat = allCategoryOptions.find(c => c.value === filterCategory);
-  if (selectedCat) {
-    data = data.filter(e => e.category === filterCategory || e.category === selectedCat.name || e.category?.toLowerCase() === selectedCat.name.toLowerCase());
-  } else {
-    data = data.filter(e => e.category === filterCategory);
-  }
-}
-```
-
-**Fix table badge display** (line 410/425): replace `categoryOptions.find()` with `getCategoryDisplay()`:
-```tsx
-const { emoji, name, label } = getCategoryDisplay(expense.category);
-// Badge: <WtBadge>{label}</WtBadge>
-```
-
-**Fix inline edit dropdown** (line 420): use `allCategoryOptions` instead of `categoryOptions`
-
-**Remove** the hardcoded `categoryOptions` array (lines 22-36) and `catColors` (lines 38-42) — derive colors from DB `custom_categories.color` field.
-
-### 2. `src/pages/RevenuesPage.tsx`
-
-Same pattern:
-- Add `getSourceDisplay` helper using `allSourceOptions`
-- Fix filter logic (line 123) with slug+name matching
-- Fix table badge (line 403/418): use `allSourceOptions` lookup instead of hardcoded `sourceOptions`
-- Fix inline edit dropdown (line 413): use `allSourceOptions`
-- Remove hardcoded `sourceOptions` array (lines 22-32)
-
-### 3. Chart colors
-For the PieChart/BarChart in both pages, derive colors from `custom_categories.color` field instead of hardcoded `catColors`/`sourceColors`.
+### 3. `src/pages/RevenuesPage.tsx`
+- Import `REVENUE_SOURCE_MAP, getRevenueDisplay` from `categoryMap`
+- Replace `getSourceDisplay` (lines 85-98) with a wrapper around `getRevenueDisplay`
+- Replace `allSourceOptions` (lines 67-83) to build from `REVENUE_SOURCE_MAP` entries + unknown values from data
+- Filter logic (lines 115-126) same pattern
 
 ## Files Changed
 | File | Action |
 |------|--------|
-| `src/pages/ExpensesPage.tsx` | Remove hardcoded arrays, use DB categories everywhere |
-| `src/pages/RevenuesPage.tsx` | Remove hardcoded arrays, use DB categories everywhere |
+| `src/lib/categoryMap.ts` | Create — static maps + helper functions |
+| `src/pages/ExpensesPage.tsx` | Use map-based display + options |
+| `src/pages/RevenuesPage.tsx` | Use map-based display + options |
 
