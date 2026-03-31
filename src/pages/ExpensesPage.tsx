@@ -359,8 +359,41 @@ export default function ExpensesPage() {
               )}
             </div>
 
-            {(filterType !== "all" || filterCategory !== "all" || sortField) && (
-              <button onClick={() => { setFilterType("all"); setFilterCategory("all"); setSortField(null); }}
+            {availableBanks.length > 0 && (
+              <div className="relative" ref={bankFilterRef}>
+                <button onClick={() => setBankFilterOpen(o => !o)}
+                  className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg outline-none"
+                  style={{
+                    background: filterBank !== "all" ? "rgba(45,212,191,0.15)" : "#080C10",
+                    border: `1px solid ${filterBank !== "all" ? "rgba(45,212,191,0.4)" : "#1A2535"}`,
+                    color: filterBank !== "all" ? "#2DD4BF" : "#64748B",
+                  }}>
+                  🏦 {filterBank !== "all" ? filterBank : "Todos os bancos"}
+                  <ChevronDown className="w-3 h-3" />
+                </button>
+                {bankFilterOpen && (
+                  <div className="absolute z-50 mt-1 w-64 rounded-lg shadow-xl overflow-hidden" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+                    <div className="max-h-60 overflow-y-auto">
+                      <button onClick={() => { setFilterBank("all"); setBankFilterOpen(false); }}
+                        className="w-full text-left px-3 py-2 text-xs hover:bg-[#131B22] transition-colors"
+                        style={{ color: filterBank === "all" ? "#E8C97A" : "#94A3B8" }}>
+                        Todos os bancos
+                      </button>
+                      {availableBanks.map(bank => (
+                        <button key={bank} onClick={() => { setFilterBank(bank); setBankFilterOpen(false); }}
+                          className="w-full text-left px-3 py-2 text-xs hover:bg-[#131B22] transition-colors flex items-center gap-2"
+                          style={{ color: filterBank === bank ? "#2DD4BF" : "#CBD5E1" }}>
+                          🏦 {bank}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {(filterType !== "all" || filterCategory !== "all" || filterBank !== "all" || sortField) && (
+              <button onClick={() => { setFilterType("all"); setFilterCategory("all"); setFilterBank("all"); setSortField(null); }}
                 className="px-3 py-1.5 text-xs rounded-lg"
                 style={{ background: "rgba(244,63,94,0.1)", color: "#F43F5E", border: "1px solid rgba(244,63,94,0.2)" }}>
                 Limpar filtros
