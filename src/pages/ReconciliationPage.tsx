@@ -231,7 +231,7 @@ function ImportTab({ accounts }: { accounts: any[] }) {
   }, [handleFile]);
 
   const doImport = async () => {
-    alert('🚀 doImport foi chamada! Versão NOVA');
+    
     if (!selectedAccount) { toast.error("Selecione uma conta bancária."); return; }
     if (!preview.length) { toast.error("Selecione um arquivo primeiro."); return; }
 
@@ -317,55 +317,34 @@ function ImportTab({ accounts }: { accounts: any[] }) {
       const transfers = rows.filter(r => r.status === "ignored").length;
       const doubts = rows.filter(r => r.status === "pending").length;
 
-      let uploadOk = false;
-      const fileExists = !!fileRef.current?.files?.[0];
-      console.log('🔍 Verificando upload...', {
-        temArquivo: fileExists,
-        nomeArquivo: fileRef.current?.files?.[0]?.name,
-        contaSelecionada: selectedAccount,
-        totalLinhas: rows.length
-      });
-
-      if (fileExists) {
-        const originalFile = fileRef.current!.files![0];
+      // Fazer upload do arquivo para histórico
+      if (fileRef.current?.files?.[0]) {
+        const originalFile = fileRef.current.files[0];
         const periodDates = rows.map(r => r.date).filter(Boolean).sort();
-        
-        const importStats = {
-          totalTransactions: rows.length,
-          newTransactions: revenues + expenses,
-          duplicateTransactions: 0,
-          autoCategorized: rows.filter(r => r.status === "matched").length,
-          pendingReview: doubts,
-          totalCredits: rows.filter(r => r.type === "credit").reduce((s, r) => s + r.amount, 0),
-          totalDebits: rows.filter(r => r.type === "debit").reduce((s, r) => s + r.amount, 0),
-          periodStart: periodDates[0] || new Date().toISOString().split('T')[0],
-          periodEnd: periodDates[periodDates.length - 1] || new Date().toISOString().split('T')[0],
-          referenceMonth: periodDates[0]?.slice(0, 7) || getCurrentMonth()
-        };
 
-        console.log('📁 Iniciando upload para Storage...');
-
-        try {
-          await uploadStatementMutation.mutateAsync({
-            file: originalFile,
-            accountId: selectedAccount,
-            importStats
-          });
-          uploadOk = true;
-          console.log('✅ Upload concluído!');
-        } catch (uploadErr: any) {
-          console.error('❌ Erro no upload:', uploadErr);
-          toast.warning('Transações importadas, mas falha ao salvar extrato no histórico: ' + uploadErr.message);
-        }
-      } else {
-        console.warn('⚠️ Arquivo não encontrado no fileRef');
+        await uploadStatementMutation.mutateAsync({
+          file: originalFile,
+          accountId: selectedAccount,
+          importStats: {
+            totalTransactions: rows.length,
+            newTransactions: rows.length,
+            duplicateTransactions: 0,
+            autoCategorized: autoRows.length,
+            pendingReview: doubts,
+            totalCredits: rows.filter(r => r.type === "credit").reduce((s, r) => s + r.amount, 0),
+            totalDebits: rows.filter(r => r.type === "debit").reduce((s, r) => s + r.amount, 0),
+            periodStart: periodDates[0] || new Date().toISOString().split('T')[0],
+            periodEnd: periodDates[periodDates.length - 1] || new Date().toISOString().split('T')[0],
+            referenceMonth: periodDates[0]?.slice(0, 7) || getCurrentMonth()
+          }
+        });
       }
 
       toast.success(
         `✅ ${revenues} receitas e ${expenses} despesas criadas automaticamente · ` +
         `${transfers} transferências ignoradas · ` +
-        `${doubts > 0 ? `${doubts} aguardam sua classificação` : "nenhuma dúvida"}` +
-        `${uploadOk ? " · 📁 Extrato salvo no histórico" : ""}`
+        `${doubts > 0 ? `${doubts} aguardam sua classificação` : "nenhuma dúvida"} · ` +
+        `📁 Extrato salvo`
       );
       setPreview([]);
       setFileName("");
