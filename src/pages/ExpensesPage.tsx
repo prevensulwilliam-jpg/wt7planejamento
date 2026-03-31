@@ -19,27 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PieChart, Pie, Cell, Legend, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis } from "recharts";
 
-const categoryOptions = [
-  { value: "alimentacao", label: "🍽️ Alimentação" },
-  { value: "suplementos", label: "💊 Suplementos" },
-  { value: "academia", label: "🏋️ Academia/Personal" },
-  { value: "saude", label: "🏥 Saúde" },
-  { value: "lazer", label: "🎉 Lazer" },
-  { value: "viagens", label: "✈️ Viagens" },
-  { value: "impostos", label: "🧾 Impostos" },
-  { value: "empresas_t7", label: "🏢 Empresas/T7" },
-  { value: "kitnets_manutencao", label: "🔧 Kitnets Manutenção" },
-  { value: "assinaturas", label: "📱 Assinaturas" },
-  { value: "veiculo", label: "🚗 Veículo" },
-  { value: "casamento", label: "💍 Casamento" },
-  { value: "outros", label: "📦 Outros" },
-];
-
-const catColors: Record<string, string> = {
-  alimentacao: '#F59E0B', suplementos: '#8B5CF6', academia: '#10B981', saude: '#EC4899',
-  lazer: '#3B82F6', viagens: '#2DD4BF', impostos: '#F43F5E', empresas_t7: '#C9A84C',
-  kitnets_manutencao: '#F97316', assinaturas: '#6366F1', veiculo: '#94A3B8', casamento: '#EC4899', outros: '#4A5568',
-};
+const DEFAULT_CAT_COLOR = '#4A5568';
 
 function navigateMonth(current: string, delta: number): string {
   const [y, m] = current.split("-").map(Number);
@@ -91,23 +71,24 @@ export default function ExpensesPage() {
       label: `${c.emoji || '📦'} ${c.name}`,
       emoji: c.emoji || '📦',
       name: c.name,
+      color: c.color || DEFAULT_CAT_COLOR,
     }));
-    // Add hardcoded ones not in DB
-    const dbValues = new Set(dbCats.map(c => c.value));
-    categoryOptions.forEach(co => {
-      if (!dbValues.has(co.value)) dbCats.push({ value: co.value, label: co.label, emoji: co.label.split(' ')[0], name: co.label.replace(/^.+?\s/, '') });
-    });
-    // Add any from data not in either
+    // Add any from data not in DB
     const allValues = new Set(dbCats.map(c => c.value));
     expenses.forEach(e => {
       if (e.category && !allValues.has(e.category)) {
-        dbCats.push({ value: e.category, label: `📦 ${e.category}`, emoji: '📦', name: e.category });
+        dbCats.push({ value: e.category, label: `📦 ${e.category}`, emoji: '📦', name: e.category, color: DEFAULT_CAT_COLOR });
         allValues.add(e.category);
       }
     });
-    // Sort by usage count desc, then alphabetically
     return dbCats.sort((a, b) => (categoryCounts[b.value] ?? 0) - (categoryCounts[a.value] ?? 0) || a.name.localeCompare(b.name));
   }, [categories, expenses, categoryCounts]);
+
+  const getCategoryDisplay = (catValue: string | null) => {
+    if (!catValue) return { emoji: '📦', name: 'outros', label: '📦 outros', color: DEFAULT_CAT_COLOR };
+    const cat = allCategoryOptions.find(c => c.value === catValue || c.name.toLowerCase() === catValue.toLowerCase() || toSlug(c.name) === catValue);
+    return { emoji: cat?.emoji ?? '📦', name: cat?.name ?? catValue, label: cat?.label ?? catValue, color: cat?.color ?? DEFAULT_CAT_COLOR };
+  };
 
   // Close filter dropdown on click outside
   useEffect(() => {
@@ -124,7 +105,14 @@ export default function ExpensesPage() {
   const filteredExpenses = useMemo(() => {
     let data = [...expenses];
     if (filterType !== "all") data = data.filter(e => e.type === filterType);
-    if (filterCategory !== "all") data = data.filter(e => e.category === filterCategory);
+    if (filterCategory !== "all") {
+      const selectedCat = allCategoryOptions.find(c => c.value === filterCategory);
+      if (selectedCat) {
+        data = data.filter(e => e.category === filterCategory || e.category === selectedCat.name || e.category?.toLowerCase() === selectedCat.name.toLowerCase());
+      } else {
+        data = data.filter(e => e.category === filterCategory);
+      }
+    }
     if (sortField) {
       data.sort((a, b) => {
         let va: any = sortField === "date" ? (a.paid_at ?? "") : (a as any)[sortField] ?? "";
@@ -150,11 +138,10 @@ export default function ExpensesPage() {
 
   const topCategory = Object.entries(byCat).sort((a, b) => b[1] - a[1])[0];
 
-  const pieData = Object.entries(byCat).map(([k, v]) => ({
-    name: categoryOptions.find(c => c.value === k)?.label?.replace(/^.+\s/, '') ?? k,
-    value: v,
-    color: catColors[k] ?? '#4A5568',
-  }));
+  const pieData = Object.entries(byCat).map(([k, v]) => {
+    const display = getCategoryDisplay(k);
+    return { name: display.name, value: v, color: display.color };
+  });
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -198,7 +185,7 @@ export default function ExpensesPage() {
     exportCSV(expenses, ["Categoria", "Descrição", "Tipo", "Valor", "Data", "Mês"], ["category", "description", "type", "amount", "paid_at", "reference_month"], `despesas_${month}.csv`);
   };
 
-  const allCategories = categories.length > 0 ? categories : categoryOptions.map(c => ({ name: c.label.replace(/^.+\s/, ''), emoji: c.label.split(' ')[0], id: c.value }));
+  
 
   return (
     <div className="space-y-6 max-w-[1400px] mx-auto">
@@ -407,7 +394,7 @@ export default function ExpensesPage() {
                 <TableBody>
                   {filteredExpenses.map(expense => {
                     const isEditing = editingId === expense.id;
-                    const catOpt = categoryOptions.find(c => c.value === expense.category);
+                    const catDisplay = getCategoryDisplay(expense.category);
 
                     return (
                       <TableRow key={expense.id} style={{ borderColor: '#1A2535' }}>
@@ -417,12 +404,12 @@ export default function ExpensesPage() {
                               onChange={e => setEditForm(f => ({ ...f, category: e.target.value }))}
                               className="text-xs px-2 py-1 rounded outline-none w-full"
                               style={{ background: "#080C10", border: "1px solid #1A2535", color: "#F0F4F8" }}>
-                              {categoryOptions.map(c => (
+                              {allCategoryOptions.map(c => (
                                 <option key={c.value} value={c.value}>{c.label}</option>
                               ))}
                             </select>
                           ) : (
-                            <WtBadge variant="gray">{catOpt?.label ?? expense.category}</WtBadge>
+                            <WtBadge variant="gray">{catDisplay.label}</WtBadge>
                           )}
                         </TableCell>
                         <TableCell>

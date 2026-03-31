@@ -19,27 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 
-const sourceOptions = [
-  { value: "aluguel_kitnets", label: "Kitnets" },
-  { value: "sal_rio", label: "Salário" },
-  { value: "comiss_o_prevensul", label: "Comissão Prevensul" },
-  { value: "t7", label: "T7 Sales" },
-  { value: "solar_energia", label: "Energia Solar" },
-  { value: "laudos_t_cnicos", label: "Laudos Técnicos" },
-  { value: "casamento_energia", label: "Casamento Energia" },
-  { value: "outros_receita", label: "Outros (Receita)" },
-  { value: "outros__receita_", label: "Outros" },
-];
-
-const sourceColors: Record<string, string> = {
-  aluguel_kitnets: '#C9A84C', comiss_o_prevensul: '#2DD4BF', sal_rio: '#10B981',
-  solar_energia: '#F59E0B', t7: '#8B5CF6', laudos_t_cnicos: '#3B82F6', casamento_energia: '#EC4899', outros_receita: '#4A5568', "outros__receita_": '#4A5568',
-};
-
-const sourceBadgeVariant: Record<string, 'gold' | 'green' | 'cyan' | 'gray'> = {
-  aluguel_kitnets: 'gold', comiss_o_prevensul: 'cyan', sal_rio: 'green',
-  solar_energia: 'gold', t7: 'cyan', laudos_t_cnicos: 'cyan', casamento_energia: 'green', outros_receita: 'gray', "outros__receita_": 'gray',
-};
+const DEFAULT_SRC_COLOR = '#4A5568';
 
 function navigateMonth(current: string, delta: number): string {
   const [y, m] = current.split("-").map(Number);
@@ -90,20 +70,23 @@ export default function RevenuesPage() {
       label: `${c.emoji || '💰'} ${c.name}`,
       emoji: c.emoji || '💰',
       name: c.name,
+      color: c.color || DEFAULT_SRC_COLOR,
     }));
-    const dbValues = new Set(dbCats.map(c => c.value));
-    sourceOptions.forEach(so => {
-      if (!dbValues.has(so.value)) dbCats.push({ value: so.value, label: so.label, emoji: '💰', name: so.label });
-    });
     const allValues = new Set(dbCats.map(c => c.value));
     revenues.forEach(r => {
       if (r.source && !allValues.has(r.source)) {
-        dbCats.push({ value: r.source, label: `💰 ${r.source}`, emoji: '💰', name: r.source });
+        dbCats.push({ value: r.source, label: `💰 ${r.source}`, emoji: '💰', name: r.source, color: DEFAULT_SRC_COLOR });
         allValues.add(r.source);
       }
     });
     return dbCats.sort((a, b) => (sourceCounts[b.value] ?? 0) - (sourceCounts[a.value] ?? 0) || a.name.localeCompare(b.name));
   }, [categories, revenues, sourceCounts]);
+
+  const getSourceDisplay = (srcValue: string | null) => {
+    if (!srcValue) return { emoji: '💰', name: 'outros', label: '💰 outros', color: DEFAULT_SRC_COLOR };
+    const src = allSourceOptions.find(c => c.value === srcValue || c.name.toLowerCase() === srcValue.toLowerCase() || toSlug(c.name) === srcValue);
+    return { emoji: src?.emoji ?? '💰', name: src?.name ?? srcValue, label: src?.label ?? srcValue, color: src?.color ?? DEFAULT_SRC_COLOR };
+  };
 
   // Close filter dropdown on click outside
   useEffect(() => {
@@ -120,7 +103,14 @@ export default function RevenuesPage() {
   const filteredRevenues = useMemo(() => {
     let data = [...revenues];
     if (filterType !== "all") data = data.filter(r => r.type === filterType);
-    if (filterSource !== "all") data = data.filter(r => r.source === filterSource);
+    if (filterSource !== "all") {
+      const selectedSrc = allSourceOptions.find(c => c.value === filterSource);
+      if (selectedSrc) {
+        data = data.filter(r => r.source === filterSource || r.source === selectedSrc.name || r.source?.toLowerCase() === selectedSrc.name.toLowerCase());
+      } else {
+        data = data.filter(r => r.source === filterSource);
+      }
+    }
     if (sortField) {
       data.sort((a, b) => {
         let va: any = sortField === "date" ? (a.received_at ?? "") : (a as any)[sortField] ?? "";
@@ -144,11 +134,10 @@ export default function RevenuesPage() {
     return acc;
   }, {} as Record<string, number>);
 
-  const pieData = Object.entries(bySource).map(([k, v]) => ({
-    name: sourceOptions.find(s => s.value === k)?.label ?? k,
-    value: v,
-    color: sourceColors[k] ?? '#4A5568',
-  }));
+  const pieData = Object.entries(bySource).map(([k, v]) => {
+    const display = getSourceDisplay(k);
+    return { name: display.name, value: v, color: display.color };
+  });
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -400,7 +389,7 @@ export default function RevenuesPage() {
                 <TableBody>
                   {filteredRevenues.map(revenue => {
                     const isEditing = editingId === revenue.id;
-                    const srcOpt = sourceOptions.find(s => s.value === revenue.source);
+                    const srcDisplay = getSourceDisplay(revenue.source);
 
                     return (
                       <TableRow key={revenue.id} style={{ borderColor: '#1A2535' }}>
@@ -410,12 +399,12 @@ export default function RevenuesPage() {
                               onChange={e => setEditForm(f => ({ ...f, source: e.target.value }))}
                               className="text-xs px-2 py-1 rounded outline-none w-full"
                               style={{ background: "#080C10", border: "1px solid #1A2535", color: "#F0F4F8" }}>
-                              {sourceOptions.map(s => (
+                              {allSourceOptions.map(s => (
                                 <option key={s.value} value={s.value}>{s.label}</option>
                               ))}
                             </select>
                           ) : (
-                            <WtBadge variant={sourceBadgeVariant[revenue.source ?? ''] ?? 'gray'}>{srcOpt?.label ?? revenue.source}</WtBadge>
+                            <WtBadge variant="gray">{srcDisplay.label}</WtBadge>
                           )}
                         </TableCell>
                         <TableCell>
