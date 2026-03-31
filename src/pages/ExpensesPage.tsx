@@ -69,11 +69,43 @@ export default function ExpensesPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Record<string, any>>({});
 
-  // Build unique category list from actual data
-  const uniqueCategories = useMemo(() => {
-    const cats = new Set(expenses.map(e => e.category).filter(Boolean));
-    return Array.from(cats).sort();
+  const [catSearchOpen, setCatSearchOpen] = useState(false);
+  const [catSearch, setCatSearch] = useState("");
+  const [filterCatSearchOpen, setFilterCatSearchOpen] = useState(false);
+  const [filterCatSearch, setFilterCatSearch] = useState("");
+  const filterCatRef = useRef<HTMLDivElement>(null);
+
+  // Count usage per category from current expenses
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    expenses.forEach(e => { if (e.category) counts[e.category] = (counts[e.category] ?? 0) + 1; });
+    return counts;
   }, [expenses]);
+
+  // All categories from DB + any in data not in DB, sorted by usage
+  const allCategoryOptions = useMemo(() => {
+    const dbCats = categories.map(c => ({
+      value: c.name.toLowerCase().replace(/[\s/]+/g, "_"),
+      label: `${c.emoji || '📦'} ${c.name}`,
+      emoji: c.emoji || '📦',
+      name: c.name,
+    }));
+    // Add hardcoded ones not in DB
+    const dbValues = new Set(dbCats.map(c => c.value));
+    categoryOptions.forEach(co => {
+      if (!dbValues.has(co.value)) dbCats.push({ value: co.value, label: co.label, emoji: co.label.split(' ')[0], name: co.label.replace(/^.+?\s/, '') });
+    });
+    // Add any from data not in either
+    const allValues = new Set(dbCats.map(c => c.value));
+    expenses.forEach(e => {
+      if (e.category && !allValues.has(e.category)) {
+        dbCats.push({ value: e.category, label: `📦 ${e.category}`, emoji: '📦', name: e.category });
+        allValues.add(e.category);
+      }
+    });
+    // Sort by usage count desc, then alphabetically
+    return dbCats.sort((a, b) => (categoryCounts[b.value] ?? 0) - (categoryCounts[a.value] ?? 0) || a.name.localeCompare(b.name));
+  }, [categories, expenses, categoryCounts]);
 
   const filteredExpenses = useMemo(() => {
     let data = [...expenses];
