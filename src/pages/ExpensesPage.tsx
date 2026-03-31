@@ -19,27 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PieChart, Pie, Cell, Legend, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis } from "recharts";
 
-const categoryOptions = [
-  { value: "alimentacao", label: "🍽️ Alimentação" },
-  { value: "suplementos", label: "💊 Suplementos" },
-  { value: "academia", label: "🏋️ Academia/Personal" },
-  { value: "saude", label: "🏥 Saúde" },
-  { value: "lazer", label: "🎉 Lazer" },
-  { value: "viagens", label: "✈️ Viagens" },
-  { value: "impostos", label: "🧾 Impostos" },
-  { value: "empresas_t7", label: "🏢 Empresas/T7" },
-  { value: "kitnets_manutencao", label: "🔧 Kitnets Manutenção" },
-  { value: "assinaturas", label: "📱 Assinaturas" },
-  { value: "veiculo", label: "🚗 Veículo" },
-  { value: "casamento", label: "💍 Casamento" },
-  { value: "outros", label: "📦 Outros" },
-];
-
-const catColors: Record<string, string> = {
-  alimentacao: '#F59E0B', suplementos: '#8B5CF6', academia: '#10B981', saude: '#EC4899',
-  lazer: '#3B82F6', viagens: '#2DD4BF', impostos: '#F43F5E', empresas_t7: '#C9A84C',
-  kitnets_manutencao: '#F97316', assinaturas: '#6366F1', veiculo: '#94A3B8', casamento: '#EC4899', outros: '#4A5568',
-};
+const DEFAULT_CAT_COLOR = '#4A5568';
 
 function navigateMonth(current: string, delta: number): string {
   const [y, m] = current.split("-").map(Number);
