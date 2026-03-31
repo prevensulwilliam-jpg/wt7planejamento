@@ -83,9 +83,10 @@ export default function RevenuesPage() {
   }, [revenues]);
 
   // All source options from DB + hardcoded + data, sorted by usage
+  const toSlug = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[\s/]+/g, "_").replace(/[^a-z0-9_]/g, "");
   const allSourceOptions = useMemo(() => {
     const dbCats = categories.map(c => ({
-      value: c.name.toLowerCase().replace(/[\s/]+/g, "_"),
+      value: toSlug(c.name),
       label: `${c.emoji || '💰'} ${c.name}`,
       emoji: c.emoji || '💰',
       name: c.name,
