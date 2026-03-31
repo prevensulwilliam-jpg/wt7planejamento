@@ -136,7 +136,7 @@ export function ImportHistoryTab({ accounts }: { accounts: any[] }) {
                       <span className="font-mono text-sm font-semibold truncate" style={{ color: "#F0F4F8" }}>
                         {item.file_name}
                       </span>
-                      <WtBadge variant={item.file_type === 'ofx' ? 'success' : 'info'}>
+                      <WtBadge variant={item.file_type === 'ofx' ? 'green' : 'cyan'}>
                         {item.file_type?.toUpperCase() || 'CSV'}
                       </WtBadge>
                       <span className="text-xs font-mono" style={{ color: "#94A3B8" }}>
