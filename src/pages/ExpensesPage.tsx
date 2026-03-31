@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { Plus, Download, Trash2, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, Pencil, Check, X } from "lucide-react";
+import { useState, useMemo, useRef } from "react";
+import { Plus, Download, Trash2, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, Pencil, Check, X, Search, ChevronDown } from "lucide-react";
 import { KpiCard } from "@/components/wt7/KpiCard";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
 import { GoldButton } from "@/components/wt7/GoldButton";
