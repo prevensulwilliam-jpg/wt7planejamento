@@ -389,7 +389,7 @@ export default function RevenuesPage() {
                 <TableBody>
                   {filteredRevenues.map(revenue => {
                     const isEditing = editingId === revenue.id;
-                    const srcOpt = sourceOptions.find(s => s.value === revenue.source);
+                    const srcDisplay = getSourceDisplay(revenue.source);
 
                     return (
                       <TableRow key={revenue.id} style={{ borderColor: '#1A2535' }}>
@@ -399,12 +399,12 @@ export default function RevenuesPage() {
                               onChange={e => setEditForm(f => ({ ...f, source: e.target.value }))}
                               className="text-xs px-2 py-1 rounded outline-none w-full"
                               style={{ background: "#080C10", border: "1px solid #1A2535", color: "#F0F4F8" }}>
-                              {sourceOptions.map(s => (
+                              {allSourceOptions.map(s => (
                                 <option key={s.value} value={s.value}>{s.label}</option>
                               ))}
                             </select>
                           ) : (
-                            <WtBadge variant={sourceBadgeVariant[revenue.source ?? ''] ?? 'gray'}>{srcOpt?.label ?? revenue.source}</WtBadge>
+                            <WtBadge variant="gray">{srcDisplay.label}</WtBadge>
                           )}
                         </TableCell>
                         <TableCell>

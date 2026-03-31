@@ -394,7 +394,7 @@ export default function ExpensesPage() {
                 <TableBody>
                   {filteredExpenses.map(expense => {
                     const isEditing = editingId === expense.id;
-                    const catOpt = categoryOptions.find(c => c.value === expense.category);
+                    const catDisplay = getCategoryDisplay(expense.category);
 
                     return (
                       <TableRow key={expense.id} style={{ borderColor: '#1A2535' }}>
@@ -404,12 +404,12 @@ export default function ExpensesPage() {
                               onChange={e => setEditForm(f => ({ ...f, category: e.target.value }))}
                               className="text-xs px-2 py-1 rounded outline-none w-full"
                               style={{ background: "#080C10", border: "1px solid #1A2535", color: "#F0F4F8" }}>
-                              {categoryOptions.map(c => (
+                              {allCategoryOptions.map(c => (
                                 <option key={c.value} value={c.value}>{c.label}</option>
                               ))}
                             </select>
                           ) : (
-                            <WtBadge variant="gray">{catOpt?.label ?? expense.category}</WtBadge>
+                            <WtBadge variant="gray">{catDisplay.label}</WtBadge>
                           )}
                         </TableCell>
                         <TableCell>
