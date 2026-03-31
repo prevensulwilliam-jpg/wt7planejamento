@@ -71,23 +71,24 @@ export default function ExpensesPage() {
       label: `${c.emoji || '📦'} ${c.name}`,
       emoji: c.emoji || '📦',
       name: c.name,
+      color: c.color || DEFAULT_CAT_COLOR,
     }));
-    // Add hardcoded ones not in DB
-    const dbValues = new Set(dbCats.map(c => c.value));
-    categoryOptions.forEach(co => {
-      if (!dbValues.has(co.value)) dbCats.push({ value: co.value, label: co.label, emoji: co.label.split(' ')[0], name: co.label.replace(/^.+?\s/, '') });
-    });
-    // Add any from data not in either
+    // Add any from data not in DB
     const allValues = new Set(dbCats.map(c => c.value));
     expenses.forEach(e => {
       if (e.category && !allValues.has(e.category)) {
-        dbCats.push({ value: e.category, label: `📦 ${e.category}`, emoji: '📦', name: e.category });
+        dbCats.push({ value: e.category, label: `📦 ${e.category}`, emoji: '📦', name: e.category, color: DEFAULT_CAT_COLOR });
         allValues.add(e.category);
       }
     });
-    // Sort by usage count desc, then alphabetically
     return dbCats.sort((a, b) => (categoryCounts[b.value] ?? 0) - (categoryCounts[a.value] ?? 0) || a.name.localeCompare(b.name));
   }, [categories, expenses, categoryCounts]);
+
+  const getCategoryDisplay = (catValue: string | null) => {
+    if (!catValue) return { emoji: '📦', name: 'outros', label: '📦 outros', color: DEFAULT_CAT_COLOR };
+    const cat = allCategoryOptions.find(c => c.value === catValue || c.name.toLowerCase() === catValue.toLowerCase() || toSlug(c.name) === catValue);
+    return { emoji: cat?.emoji ?? '📦', name: cat?.name ?? catValue, label: cat?.label ?? catValue, color: cat?.color ?? DEFAULT_CAT_COLOR };
+  };
 
   // Close filter dropdown on click outside
   useEffect(() => {
