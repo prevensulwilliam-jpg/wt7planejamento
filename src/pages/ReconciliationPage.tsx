@@ -271,12 +271,12 @@ function ImportTab({ accounts }: { accounts: any[] }) {
       for (const tx of autoRows) {
         const { data: btRow } = await supabase
           .from("bank_transactions" as any)
-          .select("id")
+          .select("id, matched_revenue_id, matched_expense_id")
           .eq("external_id", tx.external_id)
           .single();
         const btId = (btRow as any)?.id;
 
-        if (tx.category_intent === "receita") {
+        if (tx.category_intent === "receita" && !(btRow as any)?.matched_revenue_id) {
           const { data, error } = await supabase.from("revenues").insert({
             source: tx.category_suggestion,
             description: tx.description,
@@ -290,7 +290,7 @@ function ImportTab({ accounts }: { accounts: any[] }) {
               .update({ matched_revenue_id: data.id }).eq("id", btId);
             revenues++;
           }
-        } else if (tx.category_intent === "despesa") {
+        } else if (tx.category_intent === "despesa" && !(btRow as any)?.matched_expense_id) {
           const { data, error } = await supabase.from("expenses").insert({
             category: tx.category_suggestion,
             description: tx.description,
