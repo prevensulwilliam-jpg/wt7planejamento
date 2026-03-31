@@ -1,40 +1,19 @@
 
 
-# Fix build errors + ReconciliationPage modifications
+# Limpar dados — 4 tabelas
 
-## Part 1: Fix ImportHistoryTab build errors
-The `KpiCard` expects `value: number` and `color: 'gold' | 'green' | 'red' | 'cyan' | 'gray'`, but ImportHistoryTab passes strings and hex colors. `WtBadge` expects the same color union but gets `'success'`, `'info'`, `'warning'`.
+## Ação
+Executar DELETE em todas as linhas das 4 tabelas via migração SQL:
 
-**Fix in `ImportHistoryTab.tsx`:**
-- KpiCard `value` props: pass numbers instead of strings (use `formatAs="number"`)
-- KpiCard `color` props: map to valid union values (`"gold"`, `"cyan"`, `"green"/"gold"` conditional, `"gray"`)
-- WtBadge variants: `'success'` → `'green'`, `'info'` → `'cyan'`, `'warning'` → `'gold'`
-
-## Part 2: ReconciliationPage modifications
-
-### 2a. Add imports (after line 23)
-```ts
-import { useBankStatementUpload } from "@/hooks/useBankStatementUpload";
-import { ImportHistoryTab } from "@/components/reconciliation/ImportHistoryTab";
+```sql
+DELETE FROM bank_import_history;
+DELETE FROM bank_transactions;
+DELETE FROM revenues;
+DELETE FROM expenses;
 ```
 
-### 2b. Replace HistoryTab usage (line 144)
-Replace `<HistoryTab month={month} accounts={accounts} />` with `<ImportHistoryTab accounts={accounts} />`
+A ordem importa: `bank_transactions` tem colunas `matched_revenue_id` e `matched_expense_id` que referenciam revenues/expenses, então limpar `bank_transactions` antes.
 
-### 2c. Add upload mutation (after line 157)
-```ts
-const uploadStatementMutation = useBankStatementUpload();
-```
-
-### 2d. Add upload block in doImport (after line 311, before toast.success at line 316)
-Save the original file to storage with import stats after successful import.
-
-### 2e. Update toast message (line 319)
-Append `📁 Extrato salvo no histórico` to the success message.
-
-## Files Changed
-| File | Action |
-|------|--------|
-| `src/components/reconciliation/ImportHistoryTab.tsx` | Fix KpiCard and WtBadge type errors |
-| `src/pages/ReconciliationPage.tsx` | Add imports, upload mutation, upload logic in doImport, update toast |
+## Resultado
+Todas as 4 tabelas ficarão vazias, prontas para reimportação do zero.
 
