@@ -3,7 +3,7 @@
 # Limpar dados — 4 tabelas
 
 ## Ação
-Executar DELETE em todas as linhas das 4 tabelas via migração SQL:
+Executar DELETE em todas as linhas das 4 tabelas usando o insert tool (para operações de dados):
 
 ```sql
 DELETE FROM bank_import_history;
@@ -12,7 +12,7 @@ DELETE FROM revenues;
 DELETE FROM expenses;
 ```
 
-A ordem importa: `bank_transactions` tem colunas `matched_revenue_id` e `matched_expense_id` que referenciam revenues/expenses, então limpar `bank_transactions` antes.
+Ordem: `bank_import_history` e `bank_transactions` primeiro (referências a revenues/expenses), depois as tabelas principais.
 
 ## Resultado
 Todas as 4 tabelas ficarão vazias, prontas para reimportação do zero.
