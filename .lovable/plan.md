@@ -1,22 +1,61 @@
 
 
-# Update upload logging format in doImport
+# Rewrite doImport upload block — remove separate try-catch
 
-The upload block already has try-catch and logging from the previous change. This plan updates the log format to match your exact requested style (emoji prefixes instead of `[Upload]` prefix) for easier identification in the console.
+## What changes
 
-## Change in `src/pages/ReconciliationPage.tsx` (lines 319-361)
+In `src/pages/ReconciliationPage.tsx`, lines **320-369**:
 
-Replace the existing logging with your exact format:
+Remove the `uploadOk` flag, the separate `try-catch`, and the conditional logs. Replace with the user's exact upload code placed directly inside the main `try` block (so any error bubbles up and stops execution).
 
-- **Line 321**: Change `console.log("[Upload] fileRef check:", ...)` → `console.log('🔍 Verificando upload...', { temArquivo, nomeArquivo, contaSelecionada, totalLinhas })`
-- **Line 340-345**: Change `console.log("[Upload] Preparing upload:", ...)` → `console.log('📁 Iniciando upload para Storage...')`
-- **Line 354**: Change `console.log("[Upload] Success!")` → `console.log('✅ Upload concluído!')`
-- **Line 356**: Change `console.error("[Upload] Failed:", ...)` → `console.error('❌ Erro no upload:', uploadErr)`
-- **Line 357**: Update toast message to `'Transações importadas, mas falha ao salvar extrato no histórico: ' + uploadErr.message`
-- **Line 360**: Change `console.warn("[Upload] Nenhum arquivo...")` → `console.warn('⚠️ Arquivo não encontrado no fileRef')`
+### Replace lines 320-369 with:
+
+```typescript
+      const transfers = rows.filter(r => r.status === "ignored").length;
+      const doubts = rows.filter(r => r.status === "pending").length;
+
+      // Fazer upload do arquivo para histórico
+      if (fileRef.current?.files?.[0]) {
+        const originalFile = fileRef.current.files[0];
+        const periodDates = rows.map(r => r.date).filter(Boolean).sort();
+
+        await uploadStatementMutation.mutateAsync({
+          file: originalFile,
+          accountId: selectedAccount,
+          importStats: {
+            totalTransactions: rows.length,
+            newTransactions: rows.length,
+            duplicateTransactions: 0,
+            autoCategorized: autoRows.length,
+            pendingReview: doubts,
+            totalCredits: rows.filter(r => r.type === "credit").reduce((s, r) => s + r.amount, 0),
+            totalDebits: rows.filter(r => r.type === "debit").reduce((s, r) => s + r.amount, 0),
+            periodStart: periodDates[0] || new Date().toISOString().split('T')[0],
+            periodEnd: periodDates[periodDates.length - 1] || new Date().toISOString().split('T')[0],
+            referenceMonth: periodDates[0]?.slice(0, 7) || month
+          }
+        });
+      }
+
+      toast.success(
+        `✅ ${revenues} receitas e ${expenses} despesas criadas automaticamente · ` +
+        `${transfers} transferências ignoradas · ` +
+        `${doubts > 0 ? `${doubts} aguardam sua classificação` : "nenhuma dúvida"} · ` +
+        `📁 Extrato salvo`
+      );
+```
+
+Also remove the `alert('🚀 doImport foi chamada! Versão NOVA');` debug line (around line 234).
+
+### Key points:
+- No separate try-catch — upload errors go to the main catch and show via `toast.error`
+- `newTransactions: rows.length` and `autoCategorized: autoRows.length` as requested
+- `referenceMonth` uses `month` (state variable) as fallback
+- Success toast always shows "📁 Extrato salvo"
+- Debug alert removed
 
 ## Files Changed
 | File | Action |
 |------|--------|
-| `src/pages/ReconciliationPage.tsx` | Update log format in upload block |
+| `src/pages/ReconciliationPage.tsx` | Rewrite upload block in doImport, remove debug alert |
 
