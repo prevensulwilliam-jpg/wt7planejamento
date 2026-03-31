@@ -143,7 +143,7 @@ export default function ReconciliationPage() {
           <ReconcileTab month={month} accounts={accounts} statusFilter={statusFilter} setStatusFilter={setStatusFilter} accountFilter={accountFilter} setAccountFilter={setAccountFilter} />
         </TabsContent>
         <TabsContent value="history">
-          <HistoryTab month={month} accounts={accounts} />
+          <ImportHistoryTab accounts={accounts} />
         </TabsContent>
       </Tabs>
     </div>
