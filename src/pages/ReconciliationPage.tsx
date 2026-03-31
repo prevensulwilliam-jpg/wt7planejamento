@@ -21,6 +21,8 @@ import { formatCurrency, formatDate, formatMonth, getCurrentMonth } from "@/lib/
 import { Upload, CheckCircle2, XCircle, ArrowLeftRight, FileText, Wifi, Download } from "lucide-react";
 import { toast } from "sonner";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { useBankStatementUpload } from "@/hooks/useBankStatementUpload";
+import { ImportHistoryTab } from "@/components/reconciliation/ImportHistoryTab";
 
 const DESPESA_OPTIONS = [
   { value: "cartao_credito", label: "💳 Cartão de Crédito" },
