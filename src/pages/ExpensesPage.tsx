@@ -9,6 +9,7 @@ import { useExpenses, useCreateExpense, useDeleteExpense, useUpdateExpense, expo
 import { useCategories } from "@/hooks/useCategories";
 import { formatCurrency, formatDate, formatMonth, getCurrentMonth } from "@/lib/formatters";
 import { detectTransactionType } from "@/lib/categorizeTransaction";
+import { EXPENSE_CATEGORY_MAP, getExpenseDisplay } from "@/lib/categoryMap";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
