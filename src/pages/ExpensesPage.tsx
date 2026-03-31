@@ -82,10 +82,12 @@ export default function ExpensesPage() {
     return counts;
   }, [expenses]);
 
+  const toSlug = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[\s/]+/g, "_").replace(/[^a-z0-9_]/g, "");
+
   // All categories from DB + any in data not in DB, sorted by usage
   const allCategoryOptions = useMemo(() => {
     const dbCats = categories.map(c => ({
-      value: c.name.toLowerCase().replace(/[\s/]+/g, "_"),
+      value: toSlug(c.name),
       label: `${c.emoji || '📦'} ${c.name}`,
       emoji: c.emoji || '📦',
       name: c.name,
