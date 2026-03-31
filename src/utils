@@ -1,0 +1,24 @@
+export const calculateTransactionHash = (
+  accountId: string,
+  date: string,
+  amount: number,
+  description: string = '',
+  memo: string = ''
+): string => {
+  const normalizedData = [
+    accountId.trim(),
+    date.trim(),
+    amount.toFixed(2),
+    description.trim().toLowerCase(),
+    memo.trim().toLowerCase()
+  ].join('|');
+
+  let hash = 0;
+  for (let i = 0; i < normalizedData.length; i++) {
+    const char = normalizedData.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  
+  return Math.abs(hash).toString(36);
+};
