@@ -115,7 +115,12 @@ export default function RevenuesPage() {
     if (filterSource !== "all") {
       const selectedSrc = allSourceOptions.find(c => c.value === filterSource);
       if (selectedSrc) {
-        data = data.filter(r => r.source === filterSource || r.source === selectedSrc.name || r.source?.toLowerCase() === selectedSrc.name.toLowerCase());
+        const normalize = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
+        const srcNorm = normalize(selectedSrc.name);
+        data = data.filter(r => {
+          const rNorm = normalize(r.source ?? "");
+          return rNorm === srcNorm || r.source === selectedSrc.name || rNorm.includes(srcNorm.slice(0, 6)) || srcNorm.includes(rNorm.slice(0, 6));
+        });
       } else {
         data = data.filter(r => r.source === filterSource);
       }
