@@ -342,12 +342,7 @@ function ImportTab({ accounts }: { accounts: any[] }) {
           referenceMonth: periodDates[0]?.slice(0, 7) || getCurrentMonth()
         };
 
-        console.log("[Upload] Preparing upload:", {
-          fileName: originalFile.name,
-          fileSize: originalFile.size,
-          accountId: selectedAccount,
-          importStats
-        });
+        console.log('📁 Iniciando upload para Storage...');
 
         try {
           await uploadStatementMutation.mutateAsync({
