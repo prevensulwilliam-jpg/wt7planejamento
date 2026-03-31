@@ -115,6 +115,9 @@ export default function RevenuesPage() {
     if (filterSource !== "all") {
       data = data.filter(r => r.source === filterSource);
     }
+    if (filterBank !== "all") {
+      data = data.filter(r => extractBank(r.description ?? "") === filterBank);
+    }
     if (sortField) {
       data.sort((a, b) => {
         let va: any = sortField === "date" ? (a.received_at ?? "") : (a as any)[sortField] ?? "";
@@ -126,7 +129,7 @@ export default function RevenuesPage() {
       });
     }
     return data;
-  }, [revenues, sortField, sortDir, filterType, filterSource]);
+  }, [revenues, sortField, sortDir, filterType, filterSource, filterBank]);
 
   const totalMonth = filteredRevenues.reduce((s, r) => s + (r.amount ?? 0), 0);
   const totalFixed = revenues.filter(r => r.type === 'fixed').reduce((s, r) => s + (r.amount ?? 0), 0);

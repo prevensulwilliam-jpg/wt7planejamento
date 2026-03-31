@@ -117,6 +117,9 @@ export default function ExpensesPage() {
     if (filterCategory !== "all") {
       data = data.filter(e => e.category === filterCategory);
     }
+    if (filterBank !== "all") {
+      data = data.filter(e => extractBank(e.description ?? "") === filterBank);
+    }
     if (sortField) {
       data.sort((a, b) => {
         let va: any = sortField === "date" ? (a.paid_at ?? "") : (a as any)[sortField] ?? "";
@@ -128,7 +131,7 @@ export default function ExpensesPage() {
       });
     }
     return data;
-  }, [expenses, sortField, sortDir, filterType, filterCategory]);
+  }, [expenses, sortField, sortDir, filterType, filterCategory, filterBank]);
 
   const totalMonth = filteredExpenses.reduce((s, e) => s + (e.amount ?? 0), 0);
   const totalFixed = expenses.filter(e => e.type === 'fixed').reduce((s, e) => s + (e.amount ?? 0), 0);
