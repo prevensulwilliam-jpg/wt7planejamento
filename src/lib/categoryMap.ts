@@ -44,6 +44,8 @@ export const EXPENSE_CATEGORY_MAP: Record<string, { emoji: string; name: string;
   veiculo:              { emoji: "🚗", name: "Veículo",                color: "#94A3B8" },
   kitnets_manutencao:   { emoji: "🔧", name: "Kitnets Manutenção",     color: "#F97316" },
   energia_agua:         { emoji: "💧", name: "Energia/Água",           color: "#3B82F6" },
+  gas:                  { emoji: "🔥", name: "Gás",                    color: "#F97316" },
+  aluguel:              { emoji: "🏠", name: "Aluguel",                color: "#F43F5E" },
   outros:               { emoji: "📦", name: "Outros",                 color: "#4A5568" },
 };
 
