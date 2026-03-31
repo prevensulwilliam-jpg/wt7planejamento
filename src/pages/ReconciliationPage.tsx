@@ -353,8 +353,8 @@ function ImportTab({ accounts }: { accounts: any[] }) {
           uploadOk = true;
           console.log('✅ Upload concluído!');
         } catch (uploadErr: any) {
-          console.error("[Upload] Failed:", uploadErr);
-          toast.warning(`⚠️ Importação OK, mas falha ao salvar arquivo: ${uploadErr.message}`);
+          console.error('❌ Erro no upload:', uploadErr);
+          toast.warning('Transações importadas, mas falha ao salvar extrato no histórico: ' + uploadErr.message);
         }
       } else {
         console.warn("[Upload] Nenhum arquivo encontrado no fileRef");
