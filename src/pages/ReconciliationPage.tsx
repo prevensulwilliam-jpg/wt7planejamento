@@ -316,8 +316,12 @@ function ImportTab({ accounts }: { accounts: any[] }) {
       const transfers = rows.filter(r => r.status === "ignored").length;
       const doubts = rows.filter(r => r.status === "pending").length;
 
-      if (fileRef.current?.files?.[0]) {
-        const originalFile = fileRef.current.files[0];
+      let uploadOk = false;
+      const fileExists = !!fileRef.current?.files?.[0];
+      console.log("[Upload] fileRef check:", { fileExists, filesLength: fileRef.current?.files?.length });
+
+      if (fileExists) {
+        const originalFile = fileRef.current!.files![0];
         const periodDates = rows.map(r => r.date).filter(Boolean).sort();
         
         const importStats = {
@@ -332,19 +336,35 @@ function ImportTab({ accounts }: { accounts: any[] }) {
           periodEnd: periodDates[periodDates.length - 1] || new Date().toISOString().split('T')[0],
           referenceMonth: periodDates[0]?.slice(0, 7) || getCurrentMonth()
         };
-        
-        await uploadStatementMutation.mutateAsync({
-          file: originalFile,
+
+        console.log("[Upload] Preparing upload:", {
+          fileName: originalFile.name,
+          fileSize: originalFile.size,
           accountId: selectedAccount,
           importStats
         });
+
+        try {
+          await uploadStatementMutation.mutateAsync({
+            file: originalFile,
+            accountId: selectedAccount,
+            importStats
+          });
+          uploadOk = true;
+          console.log("[Upload] Success!");
+        } catch (uploadErr: any) {
+          console.error("[Upload] Failed:", uploadErr);
+          toast.warning(`⚠️ Importação OK, mas falha ao salvar arquivo: ${uploadErr.message}`);
+        }
+      } else {
+        console.warn("[Upload] Nenhum arquivo encontrado no fileRef");
       }
 
       toast.success(
         `✅ ${revenues} receitas e ${expenses} despesas criadas automaticamente · ` +
         `${transfers} transferências ignoradas · ` +
-        `${doubts > 0 ? `${doubts} aguardam sua classificação` : "nenhuma dúvida"} · ` +
-        `📁 Extrato salvo no histórico`
+        `${doubts > 0 ? `${doubts} aguardam sua classificação` : "nenhuma dúvida"}` +
+        `${uploadOk ? " · 📁 Extrato salvo no histórico" : ""}`
       );
       setPreview([]);
       setFileName("");
