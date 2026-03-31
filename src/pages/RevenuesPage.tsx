@@ -69,11 +69,52 @@ export default function RevenuesPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Record<string, any>>({});
 
-  // Build unique source list from actual data
-  const uniqueSources = useMemo(() => {
-    const srcs = new Set(revenues.map(r => r.source).filter(Boolean));
-    return Array.from(srcs).sort();
+  const [srcSearchOpen, setSrcSearchOpen] = useState(false);
+  const [srcSearch, setSrcSearch] = useState("");
+  const [filterSrcSearchOpen, setFilterSrcSearchOpen] = useState(false);
+  const [filterSrcSearch, setFilterSrcSearch] = useState("");
+  const filterSrcRef = useRef<HTMLDivElement>(null);
+
+  // Count usage per source
+  const sourceCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    revenues.forEach(r => { if (r.source) counts[r.source] = (counts[r.source] ?? 0) + 1; });
+    return counts;
   }, [revenues]);
+
+  // All source options from DB + hardcoded + data, sorted by usage
+  const allSourceOptions = useMemo(() => {
+    const dbCats = categories.map(c => ({
+      value: c.name.toLowerCase().replace(/[\s/]+/g, "_"),
+      label: `${c.emoji || '💰'} ${c.name}`,
+      emoji: c.emoji || '💰',
+      name: c.name,
+    }));
+    const dbValues = new Set(dbCats.map(c => c.value));
+    sourceOptions.forEach(so => {
+      if (!dbValues.has(so.value)) dbCats.push({ value: so.value, label: so.label, emoji: '💰', name: so.label });
+    });
+    const allValues = new Set(dbCats.map(c => c.value));
+    revenues.forEach(r => {
+      if (r.source && !allValues.has(r.source)) {
+        dbCats.push({ value: r.source, label: `💰 ${r.source}`, emoji: '💰', name: r.source });
+        allValues.add(r.source);
+      }
+    });
+    return dbCats.sort((a, b) => (sourceCounts[b.value] ?? 0) - (sourceCounts[a.value] ?? 0) || a.name.localeCompare(b.name));
+  }, [categories, revenues, sourceCounts]);
+
+  // Close filter dropdown on click outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (filterSrcRef.current && !filterSrcRef.current.contains(e.target as Node)) {
+        setFilterSrcSearchOpen(false);
+        setFilterSrcSearch("");
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   const filteredRevenues = useMemo(() => {
     let data = [...revenues];
