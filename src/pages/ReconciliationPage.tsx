@@ -13,7 +13,7 @@ import { WtBadge } from "@/components/wt7/WtBadge";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useBankTransactions, useImportTransactions, useMatchTransaction, useIgnoreTransaction, useReconciliationSummary } from "@/hooks/useBankReconciliation";
-import { useUpdateBankAccount } from "@/hooks/useFinances";
+import { useUpdateBankAccount, useBankAccounts } from "@/hooks/useFinances";
 import { parseOFX, parseCSV, type ParsedTransaction, type ParseResult } from "@/lib/parseOFX";
 import { categorizeTransaction, CATEGORY_LABELS, INTENT_CONFIG, detectTransactionType } from "@/lib/categorizeTransaction";
 import { getAllPatterns, normalizeDescription, recordClassification } from "@/lib/patternLearning";
@@ -162,6 +162,7 @@ function ImportTab({ accounts }: { accounts: any[] }) {
   const importMutation = useImportTransactions();
   const uploadStatementMutation = useBankStatementUpload();
   const updateBankAccount = useUpdateBankAccount();
+  const { data: allAccounts = [] } = useBankAccounts();
 
   const handleFile = useCallback(async (file: File) => {
     setFileName(file.name);
@@ -170,12 +171,7 @@ function ImportTab({ accounts }: { accounts: any[] }) {
     reader.onload = async (e) => {
       const text = e.target?.result as string;
       const ext = file.name.toLowerCase();
-      let result: ParseResult;
-      if (ext.endsWith(".ofx")) {
-        result = parseOFX(text);
-      } else {
-        result = parseCSV(text);
-      }
+      const result: ParseResult = ext.endsWith(".ofx") ? parseOFX(text) : parseCSV(text);
       const parsed: ParsedTransaction[] = result.transactions;
       setParsedFinalBalance(result.finalBalance);
       if (parsed.length === 0) {
@@ -352,13 +348,38 @@ function ImportTab({ accounts }: { accounts: any[] }) {
         });
       }
 
-      // Atualizar saldo da conta bancária com o valor final do extrato
-      if (parsedFinalBalance !== undefined) {
-        await updateBankAccount.mutateAsync({
-          id: selectedAccount,
-          balance: parsedFinalBalance,
-          last_updated: new Date().toISOString().split('T')[0],
-        });
+      // Atualizar saldo da conta bancária
+      const newTxs = importResult?.newTransactions ?? [];
+      const today = new Date().toISOString().split('T')[0];
+      const selectedAccountData = allAccounts.find((a: any) => a.id === selectedAccount);
+      const isBBSaldoDia = selectedAccountData?.bank_name === "BB Saldo Dia";
+
+      if (isBBSaldoDia) {
+        // BB Saldo Dia → usa LEDGERBAL direto do OFX
+        if (parsedFinalBalance !== undefined) {
+          await updateBankAccount.mutateAsync({ id: selectedAccount, balance: parsedFinalBalance, last_updated: today });
+        }
+        // BB Rende Fácil → delta inverso dos movimentos rdcpos
+        const bbRF = allAccounts.find((a: any) => a.bank_name === "BB Rende Fácil");
+        if (bbRF && newTxs.length > 0) {
+          const rfTxs = newTxs.filter((r: any) => {
+            const desc = (r.description ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            return desc.includes("rende facil") || desc.includes("rende f");
+          });
+          // CC débito → dinheiro FOI pro RF → RF aumenta; CC crédito → veio do RF → RF diminui
+          const rfDelta = rfTxs.filter((r: any) => r.type === "debit").reduce((s: number, r: any) => s + (r.amount ?? 0), 0)
+                        - rfTxs.filter((r: any) => r.type === "credit").reduce((s: number, r: any) => s + (r.amount ?? 0), 0);
+          if (rfDelta !== 0) {
+            await updateBankAccount.mutateAsync({ id: bbRF.id, balance: (bbRF.balance ?? 0) + rfDelta, last_updated: today });
+          }
+        }
+      } else if (newTxs.length > 0) {
+        // Demais contas → delta incremental
+        const deltaCredits = newTxs.filter((r: any) => r.type === "credit").reduce((s: number, r: any) => s + (r.amount ?? 0), 0);
+        const deltaDebits  = newTxs.filter((r: any) => r.type === "debit").reduce((s: number, r: any) => s + (r.amount ?? 0), 0);
+        const { data: accData } = await supabase.from("bank_accounts").select("balance").eq("id", selectedAccount).single();
+        const currentBalance = (accData as any)?.balance ?? 0;
+        await updateBankAccount.mutateAsync({ id: selectedAccount, balance: currentBalance + deltaCredits - deltaDebits, last_updated: today });
       }
 
       toast.success(

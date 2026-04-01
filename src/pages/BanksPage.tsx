@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Pencil, Trash2, Landmark } from "lucide-react";
+import { Plus, Pencil, Trash2, Landmark, ChevronRight, Check, X } from "lucide-react";
 import { KpiCard } from "@/components/wt7/KpiCard";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
 import { GoldButton } from "@/components/wt7/GoldButton";
@@ -37,6 +37,18 @@ export default function BanksPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState({ bank_name: "", account_type: "corrente", balance: "", last_updated: "", notes: "" });
 
+  // BB detail modal
+  const [bbDetailOpen, setBbDetailOpen] = useState(false);
+  const [editingRF, setEditingRF] = useState(false);
+  const [editRFValue, setEditRFValue] = useState("");
+
+  // Separar contas BB das demais
+  const bbAccounts = data.filter(a => a.bank_name?.startsWith("BB "));
+  const otherAccounts = data.filter(a => !a.bank_name?.startsWith("BB "));
+  const bbSaldoDia = bbAccounts.find(a => a.bank_name === "BB Saldo Dia");
+  const bbRendeFacil = bbAccounts.find(a => a.bank_name === "BB Rende Fácil");
+  const bbTotal = bbAccounts.reduce((s, a) => s + (a.balance ?? 0), 0);
+
   const totalBalance = data.reduce((s, a) => s + (a.balance ?? 0), 0);
 
   const handleSubmit = async () => {
@@ -69,6 +81,21 @@ export default function BanksPage() {
       toast({ title: "Conta removida" });
     } catch {
       toast({ title: "Erro ao remover", variant: "destructive" });
+    }
+  };
+
+  const saveRFBalance = async () => {
+    if (!bbRendeFacil) return;
+    try {
+      await updateAccount.mutateAsync({
+        id: bbRendeFacil.id,
+        balance: parseFloat(editRFValue) || 0,
+        last_updated: new Date().toISOString().split('T')[0],
+      });
+      toast({ title: "Saldo Rende Fácil atualizado" });
+      setEditingRF(false);
+    } catch {
+      toast({ title: "Erro ao salvar", variant: "destructive" });
     }
   };
 
@@ -131,7 +158,134 @@ export default function BanksPage() {
         </PremiumCard>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {data.map(acc => (
+
+          {/* Card BB Total (agrupa todas as contas "BB *") */}
+          {bbAccounts.length > 0 && (
+            <>
+              <PremiumCard
+                style={{ cursor: 'pointer' }}
+                onClick={() => setBbDetailOpen(true)}
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">🏦</span>
+                    <h3 className="font-display font-bold text-sm" style={{ color: '#F0F4F8' }}>Banco do Brasil</h3>
+                  </div>
+                  <WtBadge variant="cyan">BB Total</WtBadge>
+                </div>
+                <p className="font-mono text-2xl font-medium mb-2" style={{ color: '#E8C97A' }}>{formatCurrency(bbTotal)}</p>
+                <p className="text-xs font-mono mb-4" style={{ color: '#4A5568' }}>
+                  Atualizado: {bbSaldoDia?.last_updated ? formatDate(bbSaldoDia.last_updated) : '—'}
+                </p>
+                <div className="flex items-center gap-1 text-xs" style={{ color: '#C9A84C' }}>
+                  <span>ver detalhes</span>
+                  <ChevronRight className="w-3 h-3" />
+                </div>
+              </PremiumCard>
+
+              {/* Modal de detalhes BB */}
+              <Dialog open={bbDetailOpen} onOpenChange={o => { setBbDetailOpen(o); if (!o) setEditingRF(false); }}>
+                <DialogContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+                  <DialogHeader>
+                    <DialogTitle style={{ color: '#F0F4F8' }}>🏦 Banco do Brasil — Detalhes</DialogTitle>
+                  </DialogHeader>
+
+                  <div className="space-y-4 pt-2">
+                    {/* BB Saldo Dia */}
+                    <div className="rounded-xl p-4" style={{ background: '#080C10', border: '1px solid #1A2535' }}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-medium" style={{ color: '#94A3B8' }}>💳 Saldo Dia (CC)</span>
+                        <span className="text-xs font-mono" style={{ color: '#4A5568' }}>
+                          {bbSaldoDia?.last_updated ? formatDate(bbSaldoDia.last_updated) : '—'}
+                        </span>
+                      </div>
+                      <p
+                        className="font-mono text-xl font-bold"
+                        style={{ color: (bbSaldoDia?.balance ?? 0) < 0 ? '#F43F5E' : '#E8C97A' }}
+                      >
+                        {formatCurrency(bbSaldoDia?.balance ?? 0)}
+                      </p>
+                      <p className="text-xs mt-1" style={{ color: '#4A5568' }}>Atualizado automaticamente via OFX</p>
+                    </div>
+
+                    {/* BB Rende Fácil */}
+                    <div className="rounded-xl p-4" style={{ background: '#080C10', border: '1px solid #1A2535' }}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-medium" style={{ color: '#94A3B8' }}>📈 Rende Fácil</span>
+                        <span className="text-xs font-mono" style={{ color: '#4A5568' }}>
+                          {bbRendeFacil?.last_updated ? formatDate(bbRendeFacil.last_updated) : '—'}
+                        </span>
+                      </div>
+
+                      {editingRF ? (
+                        <div className="flex items-center gap-2 mt-1">
+                          <Input
+                            type="number"
+                            value={editRFValue}
+                            onChange={e => setEditRFValue(e.target.value)}
+                            autoFocus
+                            style={{ background: '#0D1318', borderColor: '#C9A84C', color: '#F0F4F8', height: '36px' }}
+                          />
+                          <button onClick={saveRFBalance} className="text-green-400 hover:text-green-300"><Check className="w-5 h-5" /></button>
+                          <button onClick={() => setEditingRF(false)} className="text-red-400 hover:text-red-300"><X className="w-5 h-5" /></button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between">
+                          <p className="font-mono text-xl font-bold" style={{ color: '#E8C97A' }}>
+                            {formatCurrency(bbRendeFacil?.balance ?? 0)}
+                          </p>
+                          <button
+                            onClick={() => { setEditRFValue(String(bbRendeFacil?.balance ?? 0)); setEditingRF(true); }}
+                            className="text-wt-text-muted hover:text-wt-text-primary"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
+                      <p className="text-xs mt-1" style={{ color: '#4A5568' }}>Atualizado automaticamente via OFX · editável manualmente</p>
+                    </div>
+
+                    {/* Linha total */}
+                    <div
+                      className="rounded-xl p-4 flex items-center justify-between"
+                      style={{ background: 'rgba(201,168,76,0.08)', border: '1px solid rgba(201,168,76,0.25)' }}
+                    >
+                      <span className="font-display font-bold text-sm" style={{ color: '#E8C97A' }}>BB Total</span>
+                      <span className="font-mono text-xl font-bold" style={{ color: '#E8C97A' }}>{formatCurrency(bbTotal)}</span>
+                    </div>
+                  </div>
+
+                  {/* Editar/excluir contas individuais */}
+                  <div className="flex gap-2 pt-2 border-t" style={{ borderColor: '#1A2535' }}>
+                    {bbAccounts.map(acc => (
+                      <div key={acc.id} className="flex items-center gap-1">
+                        <span className="text-xs" style={{ color: '#4A5568' }}>{acc.bank_name}</span>
+                        <button onClick={() => { setBbDetailOpen(false); openEdit(acc); }} className="text-wt-text-muted hover:text-wt-text-primary"><Pencil className="w-3 h-3" /></button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <button className="text-wt-text-muted hover:text-red-400"><Trash2 className="w-3 h-3" /></button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle style={{ color: '#F0F4F8' }}>Excluir {acc.bank_name}?</AlertDialogTitle>
+                              <AlertDialogDescription>Esta ação não pode ser desfeita.</AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleDelete(acc.id)} className="bg-red-600 hover:bg-red-700">Excluir</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    ))}
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </>
+          )}
+
+          {/* Demais contas (não-BB) */}
+          {otherAccounts.map(acc => (
             <PremiumCard key={acc.id}>
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
