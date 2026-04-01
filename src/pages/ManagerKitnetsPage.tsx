@@ -397,6 +397,8 @@ function RepasseDialog({ kitnet, month, onClose }: { kitnet: Tables<"kitnets">; 
         broker_name: form.broker_name || null,
         broker_creci: form.broker_creci || null,
         created_by: user?.id,
+        _kitnetCode: kitnet.code ?? undefined,
+        _tenantName: kitnet.tenant_name ?? undefined,
       });
       toast({ title: "Repasse salvo!" });
       onClose();

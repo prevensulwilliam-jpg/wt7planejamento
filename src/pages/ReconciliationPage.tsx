@@ -12,7 +12,7 @@ import { GoldButton } from "@/components/wt7/GoldButton";
 import { WtBadge } from "@/components/wt7/WtBadge";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useBankTransactions, useImportTransactions, useMatchTransaction, useIgnoreTransaction, useReconciliationSummary } from "@/hooks/useBankReconciliation";
+import { useBankTransactions, useImportTransactions, useMatchTransaction, useIgnoreTransaction, useReconciliationSummary, useAutoMatchKitnets } from "@/hooks/useBankReconciliation";
 import { useUpdateBankAccount, useBankAccounts } from "@/hooks/useFinances";
 import { parseOFX, parseCSV, type ParsedTransaction, type ParseResult } from "@/lib/parseOFX";
 import { categorizeTransaction, CATEGORY_LABELS, INTENT_CONFIG, detectTransactionType } from "@/lib/categorizeTransaction";
@@ -562,6 +562,7 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
   const { data: allTransactions = [], isLoading } = useBankTransactions({ month });
   const matchMutation = useMatchTransaction();
   const ignoreMutation = useIgnoreTransaction();
+  const autoMatchKitnetsMutation = useAutoMatchKitnets();
 
   const recategorizeMutation = useMutation({
     mutationFn: async () => {
@@ -849,6 +850,18 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
           className="text-xs px-4 py-2 rounded-lg font-medium flex items-center gap-1.5 transition-all"
           style={{ background: "rgba(201,168,76,0.15)", color: "#E8C97A", border: "1px solid rgba(201,168,76,0.3)" }}>
           {recategorizeMutation.isPending ? "..." : "🔄 Recategorizar"}
+        </button>
+        <button
+          onClick={() => autoMatchKitnetsMutation.mutate(month, {
+            onSuccess: (r) => toast.success(r.matched > 0
+              ? `🏘️ ${r.matched} repasse${r.matched > 1 ? "s" : ""} de kitnet conciliado${r.matched > 1 ? "s" : ""} pelo valor!`
+              : "Nenhum crédito casou com repasses de kitnets neste mês."),
+            onError: () => toast.error("Erro ao conciliar kitnets."),
+          })}
+          disabled={autoMatchKitnetsMutation.isPending}
+          className="text-xs px-4 py-2 rounded-lg font-medium flex items-center gap-1.5 transition-all"
+          style={{ background: "rgba(45,212,191,0.15)", color: "#2DD4BF", border: "1px solid rgba(45,212,191,0.3)" }}>
+          {autoMatchKitnetsMutation.isPending ? "..." : "🏘️ Conciliar Kitnets"}
         </button>
       </div>
 
