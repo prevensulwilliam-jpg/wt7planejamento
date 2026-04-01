@@ -157,7 +157,6 @@ function ImportTab({ accounts }: { accounts: any[] }) {
   const [preview, setPreview] = useState<any[]>([]);
   const [fileName, setFileName] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [parsedFinalBalance, setParsedFinalBalance] = useState<number | undefined>(undefined);
   const fileRef = useRef<HTMLInputElement>(null);
   const importMutation = useImportTransactions();
   const uploadStatementMutation = useBankStatementUpload();
@@ -170,14 +169,8 @@ function ImportTab({ accounts }: { accounts: any[] }) {
     reader.onload = async (e) => {
       const text = e.target?.result as string;
       const ext = file.name.toLowerCase();
-      let result: ParseResult;
-      if (ext.endsWith(".ofx")) {
-        result = parseOFX(text);
-      } else {
-        result = parseCSV(text);
-      }
+      const result: ParseResult = ext.endsWith(".ofx") ? parseOFX(text) : parseCSV(text);
       const parsed: ParsedTransaction[] = result.transactions;
-      setParsedFinalBalance(result.finalBalance);
       if (parsed.length === 0) {
         toast.error("Nenhuma transação encontrada no arquivo.");
         return;
@@ -352,11 +345,16 @@ function ImportTab({ accounts }: { accounts: any[] }) {
         });
       }
 
-      // Atualizar saldo da conta bancária com o valor final do extrato
-      if (parsedFinalBalance !== undefined) {
+      // Atualizar saldo da conta bancária com delta das transações novas
+      const newTxs = importResult?.newTransactions ?? [];
+      if (newTxs.length > 0) {
+        const deltaCredits = newTxs.filter((r: any) => r.type === "credit").reduce((s: number, r: any) => s + (r.amount ?? 0), 0);
+        const deltaDebits  = newTxs.filter((r: any) => r.type === "debit").reduce((s: number, r: any) => s + (r.amount ?? 0), 0);
+        const { data: accData } = await supabase.from("bank_accounts").select("balance").eq("id", selectedAccount).single();
+        const currentBalance = (accData as any)?.balance ?? 0;
         await updateBankAccount.mutateAsync({
           id: selectedAccount,
-          balance: parsedFinalBalance,
+          balance: currentBalance + deltaCredits - deltaDebits,
           last_updated: new Date().toISOString().split('T')[0],
         });
       }
@@ -370,7 +368,6 @@ function ImportTab({ accounts }: { accounts: any[] }) {
       setPreview([]);
       setFileName("");
       setSelectedFile(null);
-      setParsedFinalBalance(undefined);
     } catch (err: any) {
       toast.error(err.message || "Erro ao importar.");
     }

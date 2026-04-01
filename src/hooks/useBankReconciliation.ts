@@ -52,7 +52,7 @@ export function useImportTransactions() {
         .insert(newTxs);
 
       if (error) throw new Error(`Erro ao salvar: ${error.message}`);
-      return { imported: newTxs.length, skipped: transactions.length - newTxs.length };
+      return { imported: newTxs.length, skipped: transactions.length - newTxs.length, newTransactions: newTxs };
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["bank_transactions"] }),
   });
