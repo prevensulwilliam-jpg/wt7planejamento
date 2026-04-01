@@ -268,7 +268,7 @@ function ImportTab({ accounts }: { accounts: any[] }) {
     }));
 
     try {
-      await importMutation.mutateAsync(rows);
+      const importResult = await importMutation.mutateAsync(rows);
 
       // Auto-create revenues/expenses for confirmed rows and link back
       const autoRows = rows.filter(r => r.status === "matched" && r.category_intent !== "transferencia");
@@ -334,8 +334,8 @@ function ImportTab({ accounts }: { accounts: any[] }) {
           accountId: selectedAccount,
           importStats: {
             totalTransactions: rows.length,
-            newTransactions: rows.length,
-            duplicateTransactions: 0,
+            newTransactions: importResult?.imported ?? rows.length,
+            duplicateTransactions: importResult?.skipped ?? 0,
             autoCategorized: autoRows.length,
             pendingReview: doubts,
             totalCredits: rows.filter(r => r.type === "credit").reduce((s, r) => s + r.amount, 0),
