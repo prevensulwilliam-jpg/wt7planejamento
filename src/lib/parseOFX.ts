@@ -85,7 +85,7 @@ export function parseCSV(content: string): ParsedTransaction[] {
     if (!date || isNaN(amount) || amount === 0) return;
 
     transactions.push({
-      external_id: `csv-${date}-${idx}-${amount}`,
+      external_id: `csv-${date}-${amount}-${description.slice(0, 20).replace(/\s+/g, '_')}-${idx}`,
       date,
       description,
       amount,
