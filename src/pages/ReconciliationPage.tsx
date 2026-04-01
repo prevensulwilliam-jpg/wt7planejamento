@@ -155,12 +155,14 @@ function ImportTab({ accounts }: { accounts: any[] }) {
   const [selectedAccount, setSelectedAccount] = useState("");
   const [preview, setPreview] = useState<any[]>([]);
   const [fileName, setFileName] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const importMutation = useImportTransactions();
   const uploadStatementMutation = useBankStatementUpload();
 
   const handleFile = useCallback(async (file: File) => {
     setFileName(file.name);
+    setSelectedFile(file);
     const reader = new FileReader();
     reader.onload = async (e) => {
       const text = e.target?.result as string;
@@ -323,8 +325,8 @@ function ImportTab({ accounts }: { accounts: any[] }) {
       const doubts = rows.filter(r => r.status === "pending").length;
 
       // Fazer upload do arquivo para histórico
-      if (fileRef.current?.files?.[0]) {
-        const originalFile = fileRef.current.files[0];
+      if (selectedFile) {
+        const originalFile = selectedFile;
         const periodDates = rows.map(r => r.date).filter(Boolean).sort();
 
         await uploadStatementMutation.mutateAsync({
@@ -353,6 +355,7 @@ function ImportTab({ accounts }: { accounts: any[] }) {
       );
       setPreview([]);
       setFileName("");
+      setSelectedFile(null);
     } catch (err: any) {
       toast.error(err.message || "Erro ao importar.");
     }
