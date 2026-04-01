@@ -13,7 +13,8 @@ import { WtBadge } from "@/components/wt7/WtBadge";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useBankTransactions, useImportTransactions, useMatchTransaction, useIgnoreTransaction, useReconciliationSummary } from "@/hooks/useBankReconciliation";
-import { parseOFX, parseCSV, type ParsedTransaction } from "@/lib/parseOFX";
+import { useUpdateBankAccount } from "@/hooks/useFinances";
+import { parseOFX, parseCSV, type ParsedTransaction, type ParseResult } from "@/lib/parseOFX";
 import { categorizeTransaction, CATEGORY_LABELS, INTENT_CONFIG, detectTransactionType } from "@/lib/categorizeTransaction";
 import { getAllPatterns, normalizeDescription, recordClassification } from "@/lib/patternLearning";
 import { useCategories } from "@/hooks/useCategories";
@@ -156,9 +157,11 @@ function ImportTab({ accounts }: { accounts: any[] }) {
   const [preview, setPreview] = useState<any[]>([]);
   const [fileName, setFileName] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [parsedFinalBalance, setParsedFinalBalance] = useState<number | undefined>(undefined);
   const fileRef = useRef<HTMLInputElement>(null);
   const importMutation = useImportTransactions();
   const uploadStatementMutation = useBankStatementUpload();
+  const updateBankAccount = useUpdateBankAccount();
 
   const handleFile = useCallback(async (file: File) => {
     setFileName(file.name);
@@ -167,12 +170,14 @@ function ImportTab({ accounts }: { accounts: any[] }) {
     reader.onload = async (e) => {
       const text = e.target?.result as string;
       const ext = file.name.toLowerCase();
-      let parsed: ParsedTransaction[] = [];
+      let result: ParseResult;
       if (ext.endsWith(".ofx")) {
-        parsed = parseOFX(text);
+        result = parseOFX(text);
       } else {
-        parsed = parseCSV(text);
+        result = parseCSV(text);
       }
+      const parsed: ParsedTransaction[] = result.transactions;
+      setParsedFinalBalance(result.finalBalance);
       if (parsed.length === 0) {
         toast.error("Nenhuma transação encontrada no arquivo.");
         return;
@@ -347,6 +352,15 @@ function ImportTab({ accounts }: { accounts: any[] }) {
         });
       }
 
+      // Atualizar saldo da conta bancária com o valor final do extrato
+      if (parsedFinalBalance !== undefined) {
+        await updateBankAccount.mutateAsync({
+          id: selectedAccount,
+          balance: parsedFinalBalance,
+          last_updated: new Date().toISOString().split('T')[0],
+        });
+      }
+
       toast.success(
         `✅ ${revenues} receitas e ${expenses} despesas criadas automaticamente · ` +
         `${transfers} transferências ignoradas · ` +
@@ -356,6 +370,7 @@ function ImportTab({ accounts }: { accounts: any[] }) {
       setPreview([]);
       setFileName("");
       setSelectedFile(null);
+      setParsedFinalBalance(undefined);
     } catch (err: any) {
       toast.error(err.message || "Erro ao importar.");
     }
