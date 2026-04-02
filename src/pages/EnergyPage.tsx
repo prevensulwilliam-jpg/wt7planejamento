@@ -93,24 +93,12 @@ function InvoicesTab() {
         const base64 = (ev.target?.result as string).split(",")[1];
         const mediaType = file.type; // keep original type (application/pdf or image/*)
 
-        const { data: { session } } = await supabase.auth.getSession();
-        const res = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/extract-celesc-invoice`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${session?.access_token}`,
-            },
-            body: JSON.stringify({ imageBase64: base64, mediaType }),
-          }
-        );
+        const { data: json, error: fnError } = await supabase.functions.invoke("extract-celesc-invoice", {
+          body: { imageBase64: base64, mediaType },
+        });
 
-        const json = await res.json();
-
-        if (!res.ok || !json.ok) {
-          throw new Error(json.error || "Erro na extração");
-        }
+        if (fnError) throw new Error(fnError.message);
+        if (!json?.ok) throw new Error(json?.error || "Erro na extração");
 
         const d = json.data;
         setForm(f => ({
