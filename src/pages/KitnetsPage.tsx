@@ -85,9 +85,9 @@ function OverviewTab({ month }: { month: string }) {
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard label="Total Recebido" value={summary.totalReceived} color="gold" compact />
-        <KpiCard label="Ocupadas" value={summary.occupied} color="green" compact />
-        <KpiCard label="Manutenção" value={summary.maintenance} color="cyan" compact />
-        <KpiCard label="Vacâncias" value={summary.vacant} color="red" compact />
+        <KpiCard label="Ocupadas" value={summary.occupied} color="green" compact formatAs="number" />
+        <KpiCard label="Manutenção" value={summary.maintenance} color="cyan" compact formatAs="number" />
+        <KpiCard label="Vacâncias" value={summary.vacant} color="red" compact formatAs="number" />
       </div>
 
       {/* RWT02 */}

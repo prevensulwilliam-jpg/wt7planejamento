@@ -1,23 +1,22 @@
 
 
-# Add user auth log at start of doImport
+# Show Ocupadas/Manutenção/Vacâncias as plain numbers
 
-## Change in `src/pages/ReconciliationPage.tsx`
+The three KPI cards (Ocupadas, Manutenção, Vacâncias) currently display as currency (R$) because `formatAs` defaults to `'currency'`. Add `formatAs="number"` to each.
 
-At **line 234** (right after `const doImport = async () => {`), insert:
+## Changes
 
-```typescript
-    const { data: { user } } = await supabase.auth.getUser();
-    console.log('👤 Usuário logado:', {
-      userId: user?.id,
-      email: user?.email
-    });
+**`src/pages/KitnetsPage.tsx`** (lines 88-90):
+```tsx
+<KpiCard label="Ocupadas" value={summary.occupied} color="green" compact formatAs="number" />
+<KpiCard label="Manutenção" value={summary.maintenance} color="cyan" compact formatAs="number" />
+<KpiCard label="Vacâncias" value={summary.vacant} color="red" compact formatAs="number" />
 ```
 
-Single `getUser()` call stored in a variable to avoid calling it twice. No other changes needed.
+Same change in **`src/pages/ManagerKitnetsPage.tsx`** (lines 87-89).
 
-## Files Changed
 | File | Action |
 |------|--------|
-| `src/pages/ReconciliationPage.tsx` | Add user log at line 234 |
+| `src/pages/KitnetsPage.tsx` | Add `formatAs="number"` to 3 KPI cards |
+| `src/pages/ManagerKitnetsPage.tsx` | Add `formatAs="number"` to 3 KPI cards |
 

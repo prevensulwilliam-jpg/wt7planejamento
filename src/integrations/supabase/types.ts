@@ -780,6 +780,7 @@ export type Database = {
       kitnets: {
         Row: {
           code: string | null
+          contract_url: string | null
           deposit_account: string | null
           deposit_agency: string | null
           deposit_bank: string | null
@@ -788,10 +789,12 @@ export type Database = {
           residencial_code: string | null
           status: string | null
           tenant_name: string | null
+          tenant_phone: string | null
           unit_number: number | null
         }
         Insert: {
           code?: string | null
+          contract_url?: string | null
           deposit_account?: string | null
           deposit_agency?: string | null
           deposit_bank?: string | null
@@ -800,10 +803,12 @@ export type Database = {
           residencial_code?: string | null
           status?: string | null
           tenant_name?: string | null
+          tenant_phone?: string | null
           unit_number?: number | null
         }
         Update: {
           code?: string | null
+          contract_url?: string | null
           deposit_account?: string | null
           deposit_agency?: string | null
           deposit_bank?: string | null
@@ -812,6 +817,7 @@ export type Database = {
           residencial_code?: string | null
           status?: string | null
           tenant_name?: string | null
+          tenant_phone?: string | null
           unit_number?: number | null
         }
         Relationships: []
