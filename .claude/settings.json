@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path // empty' | { read -r f; [ -n \"$f\" ] && git -C /home/user/wt7planejamento add \"$f\" && git -C /home/user/wt7planejamento commit -m \"auto: update $(basename -- \"$f\")\" && git -C /home/user/wt7planejamento push origin HEAD; } 2>/dev/null || true",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

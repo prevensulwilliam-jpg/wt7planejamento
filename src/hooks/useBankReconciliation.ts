@@ -120,6 +120,76 @@ export function useBulkConfirmSuggestions() {
   });
 }
 
+// Auto-match bank credit transactions to kitnet revenues by exact amount
+export function useAutoMatchKitnets() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (month: string) => {
+      const [y, m] = month.split("-");
+      const start = `${y}-${m}-01`;
+      const end = new Date(+y, +m, 0).toISOString().split("T")[0];
+
+      // 1. Unmatched credits for the month
+      const { data: credits } = await supabase
+        .from("bank_transactions")
+        .select("id, amount, description")
+        .eq("type", "credit")
+        .in("status", ["pending", "auto_categorized"])
+        .gte("date", start)
+        .lte("date", end);
+
+      if (!credits?.length) return { matched: 0 };
+
+      // 2. Kitnet revenues for the month
+      const { data: kitnetRevenues } = await supabase
+        .from("revenues")
+        .select("id, amount, description")
+        .eq("source", "kitnets")
+        .eq("reference_month", month);
+
+      if (!kitnetRevenues?.length) return { matched: 0 };
+
+      // 3. Already matched revenue IDs (avoid double-matching)
+      const { data: alreadyLinked } = await supabase
+        .from("bank_transactions")
+        .select("matched_revenue_id")
+        .eq("status", "matched")
+        .not("matched_revenue_id", "is", null);
+
+      const usedRevenueIds = new Set((alreadyLinked ?? []).map((t: any) => t.matched_revenue_id));
+      const available = kitnetRevenues.filter(r => !usedRevenueIds.has(r.id));
+
+      // 4. Match by exact amount (compare in cents to avoid float issues)
+      let matchCount = 0;
+      for (const credit of credits) {
+        const creditCents = Math.round(Math.abs(credit.amount) * 100);
+        const match = available.find(r => Math.round(r.amount * 100) === creditCents);
+        if (!match) continue;
+
+        await supabase
+          .from("bank_transactions")
+          .update({
+            category_confirmed: "kitnets",
+            category_intent: "receita",
+            category_label: match.description,
+            status: "matched",
+            matched_revenue_id: match.id,
+          })
+          .eq("id", credit.id);
+
+        usedRevenueIds.add(match.id); // prevent same revenue from matching twice
+        matchCount++;
+      }
+
+      return { matched: matchCount };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["bank_transactions"] });
+      qc.invalidateQueries({ queryKey: ["revenues"] });
+    },
+  });
+}
+
 export function useReconciliationSummary(month: string) {
   const { data = [], isLoading } = useBankTransactions({ month });
   const totalCredits = data.filter((t: any) => t.type === "credit").reduce((s: number, t: any) => s + Math.abs(t.amount ?? 0), 0);
