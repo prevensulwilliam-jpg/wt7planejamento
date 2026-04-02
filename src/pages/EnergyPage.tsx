@@ -87,11 +87,11 @@ function InvoicesTab() {
 
     setExtracting(true);
 
-    try {
-      const reader = new FileReader();
-      reader.onload = async (ev) => {
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      try {
         const base64 = (ev.target?.result as string).split(",")[1];
-        const mediaType = file.type === "application/pdf" ? "image/jpeg" : file.type;
+        const mediaType = file.type; // keep original type (application/pdf or image/*)
 
         const { data: { session } } = await supabase.auth.getSession();
         const res = await fetch(
@@ -127,15 +127,20 @@ function InvoicesTab() {
         }));
 
         toast({ title: "✅ Dados extraídos!", description: "Confira e ajuste se necessário." });
-        setMode("manual"); // switch to form view after extraction
-      };
-      reader.readAsDataURL(file);
-    } catch (err: any) {
-      toast({ title: "Erro na extração", description: err.message, variant: "destructive" });
-      setMode("manual");
-    } finally {
+        setMode("manual");
+      } catch (err: any) {
+        toast({ title: "Erro na extração", description: err.message, variant: "destructive" });
+        setMode("manual");
+      } finally {
+        setExtracting(false);
+      }
+    };
+    reader.onerror = () => {
+      toast({ title: "Erro ao ler arquivo", variant: "destructive" });
       setExtracting(false);
-    }
+      setMode("manual");
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleSave = async () => {
