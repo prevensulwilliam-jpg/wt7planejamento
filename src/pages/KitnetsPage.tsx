@@ -3,16 +3,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+// Dialog/Select/Input used in EntriesTab
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { GoldButton } from "@/components/wt7/GoldButton";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
 import { KpiCard } from "@/components/wt7/KpiCard";
 import { WtBadge } from "@/components/wt7/WtBadge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useKitnets, useKitnetEntries, useKitnetSummary, useUpdateKitnet, useCreateKitnetEntry } from "@/hooks/useKitnets";
+import { KitnetModal } from "@/components/wt7/KitnetModal";
+import { useKitnets, useKitnetEntries, useKitnetSummary, useCreateKitnetEntry } from "@/hooks/useKitnets";
 import { formatCurrency, formatMonth, getCurrentMonth, formatDate } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
-import { Pencil, Plus, Download } from "lucide-react";
+import { Plus, Download } from "lucide-react";
+import type { Tables } from "@/integrations/supabase/types";
 
 const statusLabels: Record<string, { label: string; variant: "green" | "gold" | "red" }> = {
   occupied: { label: "Ocupada", variant: "green" },
@@ -43,29 +46,12 @@ export default function KitnetsPage() {
 
 // ─── Overview Tab ───
 function OverviewTab({ month }: { month: string }) {
-  const { data: kitnets, isLoading } = useKitnets();
+  const { data: kitnets, isLoading, refetch } = useKitnets();
   const summary = useKitnetSummary(month);
-  const [editing, setEditing] = useState<any>(null);
-  const updateMut = useUpdateKitnet();
-  const { toast } = useToast();
+  const [selected, setSelected] = useState<Tables<"kitnets"> | null>(null);
 
   const rwt02 = (kitnets ?? []).filter(k => k.residencial_code === "RWT02");
   const rwt03 = (kitnets ?? []).filter(k => k.residencial_code === "RWT03");
-
-  const handleSaveEdit = async () => {
-    try {
-      await updateMut.mutateAsync({
-        id: editing.id,
-        tenant_name: editing.tenant_name,
-        rent_value: Number(editing.rent_value),
-        status: editing.status,
-      });
-      toast({ title: "Kitnet atualizada!" });
-      setEditing(null);
-    } catch (e: any) {
-      toast({ title: "Erro", description: e.message, variant: "destructive" });
-    }
-  };
 
   if (isLoading) {
     return (
@@ -93,52 +79,27 @@ function OverviewTab({ month }: { month: string }) {
       {/* RWT02 */}
       <div>
         <h2 className="font-display font-bold text-lg text-foreground mb-3">RWT02 — Rua Amauri de Souza, 08</h2>
-        <KitnetGrid kitnets={rwt02} onEdit={setEditing} />
+        <KitnetGrid kitnets={rwt02} onManage={setSelected} />
       </div>
 
       {/* RWT03 */}
       <div>
         <h2 className="font-display font-bold text-lg text-foreground mb-3">RWT03 — Rua Manoel Corrêa, 125</h2>
-        <KitnetGrid kitnets={rwt03} onEdit={setEditing} />
+        <KitnetGrid kitnets={rwt03} onManage={setSelected} />
       </div>
 
-      {/* Edit Dialog */}
-      <Dialog open={!!editing} onOpenChange={o => !o && setEditing(null)}>
-        <DialogContent className="bg-card border-border">
-          <DialogHeader><DialogTitle className="text-foreground">Editar Kitnet {editing?.code}</DialogTitle></DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Inquilino</label>
-              <Input value={editing?.tenant_name ?? ""} onChange={e => setEditing({ ...editing, tenant_name: e.target.value })} className="bg-background border-border text-foreground" />
-            </div>
-            <div>
-              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Valor Aluguel</label>
-              <Input type="number" value={editing?.rent_value ?? ""} onChange={e => setEditing({ ...editing, rent_value: e.target.value })} className="bg-background border-border text-foreground" />
-            </div>
-            <div>
-              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Status</label>
-              <Select value={editing?.status ?? "occupied"} onValueChange={v => setEditing({ ...editing, status: v })}>
-                <SelectTrigger className="bg-background border-border text-foreground"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="occupied">Ocupada</SelectItem>
-                  <SelectItem value="maintenance">Manutenção</SelectItem>
-                  <SelectItem value="vacant">Vaga</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <GoldButton onClick={handleSaveEdit} disabled={updateMut.isPending}>
-              {updateMut.isPending ? "Salvando..." : "Salvar"}
-            </GoldButton>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {selected && (
+        <KitnetModal
+          kitnet={selected}
+          onClose={() => setSelected(null)}
+          onUpdated={() => refetch()}
+        />
+      )}
     </div>
   );
 }
 
-function KitnetGrid({ kitnets, onEdit }: { kitnets: any[]; onEdit: (k: any) => void }) {
+function KitnetGrid({ kitnets, onManage }: { kitnets: Tables<"kitnets">[]; onManage: (k: Tables<"kitnets">) => void }) {
   if (!kitnets.length) {
     return <p className="text-muted-foreground text-sm">Nenhuma kitnet cadastrada.</p>;
   }
@@ -153,10 +114,11 @@ function KitnetGrid({ kitnets, onEdit }: { kitnets: any[]; onEdit: (k: any) => v
               <WtBadge variant={s.variant}>{s.label}</WtBadge>
             </div>
             <p className="text-sm text-muted-foreground truncate">{k.tenant_name || "—"}</p>
+            {k.tenant_phone && <p className="text-xs text-muted-foreground">{k.tenant_phone}</p>}
             <p className="font-mono text-lg text-foreground mt-1">{formatCurrency(k.rent_value ?? 0)}</p>
-            <button onClick={() => onEdit(k)} className="absolute top-3 right-3 text-muted-foreground hover:text-foreground transition-colors">
-              <Pencil className="w-3.5 h-3.5" />
-            </button>
+            <GoldButton className="w-full text-xs justify-center mt-2" onClick={() => onManage(k)}>
+              Gerenciar
+            </GoldButton>
           </PremiumCard>
         );
       })}
