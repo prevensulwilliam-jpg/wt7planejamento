@@ -125,6 +125,42 @@ export function useEnergyReadings(month: string, residencialCode?: string) {
   });
 }
 
+// ─── Kitnet Entries by kitnet ───
+export function useKitnetFechamentos(kitnetId: string | null) {
+  return useQuery({
+    queryKey: ["kitnet_fechamentos", kitnetId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("kitnet_entries")
+        .select("*")
+        .eq("kitnet_id", kitnetId!)
+        .order("reference_month", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!kitnetId,
+  });
+}
+
+// ─── Last energy reading for a kitnet ───
+export function useLastEnergyReading(kitnetId: string | null) {
+  return useQuery({
+    queryKey: ["last_energy_reading", kitnetId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("energy_readings")
+        .select("*")
+        .eq("kitnet_id", kitnetId!)
+        .order("reference_month", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!kitnetId,
+  });
+}
+
 export function useSaveEnergyReadings() {
   const qc = useQueryClient();
   return useMutation({
