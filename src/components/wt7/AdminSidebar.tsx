@@ -3,7 +3,7 @@ import { WT7Logo } from "@/components/wt7/WT7Logo";
 import {
   LayoutDashboard, Bot, TrendingUp, TrendingDown, Landmark,
   Home, Zap, HardHat, Building2, BarChart3, RefreshCw, Heart,
-  Target, Receipt, Radio, ClipboardList, Coins, Users, ArrowLeftRight, Brain, Tag
+  Target, Receipt, Radio, ClipboardList, Coins, Users, ArrowLeftRight, Brain, Tag, KeyRound
 } from "lucide-react";
 
 const navGroups = [
@@ -30,6 +30,7 @@ const navGroups = [
     items: [
       { label: "Kitnets (13)", icon: Home, href: "/kitnets" },
       { label: "Energia Solar", icon: Zap, href: "/energy" },
+      { label: "Portal Manager", icon: KeyRound, href: "/manager/kitnets" },
       { label: "Obras & Terrenos", icon: HardHat, href: "/constructions" },
       { label: "Patrimônio", icon: Building2, href: "/assets" },
     ],

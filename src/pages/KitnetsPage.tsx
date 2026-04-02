@@ -11,11 +11,13 @@ import { KpiCard } from "@/components/wt7/KpiCard";
 import { WtBadge } from "@/components/wt7/WtBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { KitnetModal } from "@/components/wt7/KitnetModal";
-import { useKitnets, useKitnetEntries, useKitnetSummary, useCreateKitnetEntry } from "@/hooks/useKitnets";
+import { useKitnets, useKitnetEntries, useKitnetSummary, useCreateKitnetEntry, useEnergyReadings, useCelescInvoices, useSaveEnergyReadings } from "@/hooks/useKitnets";
 import { formatCurrency, formatMonth, getCurrentMonth, formatDate } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Download } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { Plus, Download, Save } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
+import { useMemo } from "react";
 
 const statusLabels: Record<string, { label: string; variant: "green" | "gold" | "red" }> = {
   occupied: { label: "Ocupada", variant: "green" },
@@ -34,11 +36,13 @@ export default function KitnetsPage() {
           <TabsTrigger value="overview">Visão Geral</TabsTrigger>
           <TabsTrigger value="entries">Lançamentos</TabsTrigger>
           <TabsTrigger value="report">Relatório Mensal</TabsTrigger>
+          <TabsTrigger value="energia">Energia Solar</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview"><OverviewTab month={month} /></TabsContent>
         <TabsContent value="entries"><EntriesTab month={month} setMonth={setMonth} /></TabsContent>
         <TabsContent value="report"><ReportTab month={month} setMonth={setMonth} /></TabsContent>
+        <TabsContent value="energia"><EnergiaTab month={month} /></TabsContent>
       </Tabs>
     </div>
   );
@@ -338,6 +342,163 @@ function ReportTab({ month, setMonth }: { month: string; setMonth: (m: string) =
           <p className="font-mono text-3xl font-bold mt-1" style={{ color: '#E8C97A' }}>{formatCurrency(grandTotal)}</p>
         </PremiumCard>
       ) : null}
+    </div>
+  );
+}
+
+// ─── Energia Solar Tab ───
+function EnergiaTab({ month }: { month: string }) {
+  const [complex, setComplex] = useState("RWT02");
+  const { data: kitnets } = useKitnets();
+  const { data: invoices } = useCelescInvoices(month);
+  const { data: existingReadings } = useEnergyReadings(month, complex);
+  const saveMut = useSaveEnergyReadings();
+  const { toast } = useToast();
+
+  const tariff = useMemo(() => {
+    const inv = (invoices ?? []).find(i => i.residencial_code === complex);
+    return inv?.tariff_per_kwh ?? 0;
+  }, [invoices, complex]);
+
+  const units = useMemo(
+    () => (kitnets ?? []).filter(k => k.residencial_code === complex),
+    [kitnets, complex]
+  );
+
+  const [readings, setReadings] = useState<Record<string, string>>({});
+
+  useMemo(() => {
+    const map: Record<string, string> = {};
+    (existingReadings ?? []).forEach((r: any) => {
+      if (r.kitnet_id) map[r.kitnet_id] = String(r.reading_current ?? "");
+    });
+    setReadings(map);
+  }, [existingReadings]);
+
+  const getPrevReading = (kitnetId: string) =>
+    (existingReadings ?? []).find((r: any) => r.kitnet_id === kitnetId)?.reading_previous ?? 0;
+
+  const calcRow = (kitnetId: string) => {
+    const current = Number(readings[kitnetId]) || 0;
+    const previous = getPrevReading(kitnetId);
+    const kwh = Math.max(0, current - previous);
+    return { previous, kwh, amount: kwh * tariff };
+  };
+
+  const totals = useMemo(() => {
+    let totalCharged = 0;
+    units.forEach(u => { totalCharged += calcRow(u.id).amount; });
+    const invoicePaid = (invoices ?? []).find(i => i.residencial_code === complex)?.amount_paid ?? 0;
+    return { totalCharged, invoicePaid, margin: totalCharged - invoicePaid };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [units, readings, invoices, complex, tariff]);
+
+  const handleSave = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const invoiceId = (invoices ?? []).find(i => i.residencial_code === complex)?.id;
+      const toSave = units.map(u => {
+        const current = Number(readings[u.id]) || 0;
+        const previous = getPrevReading(u.id);
+        const kwh = Math.max(0, current - previous);
+        const amount = kwh * tariff;
+        const existing = (existingReadings ?? []).find((r: any) => r.kitnet_id === u.id);
+        return {
+          ...(existing?.id ? { id: existing.id } : {}),
+          kitnet_id: u.id,
+          reference_month: month,
+          reading_current: current,
+          reading_previous: previous,
+          consumption_kwh: kwh,
+          amount_to_charge: Number(amount.toFixed(2)),
+          tariff_per_kwh: tariff,
+          celesc_invoice_id: invoiceId ?? null,
+          created_by: user?.id,
+        };
+      });
+      await saveMut.mutateAsync(toSave as any);
+      toast({ title: "Leituras salvas!" });
+    } catch (e: any) {
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    }
+  };
+
+  return (
+    <div className="space-y-4 mt-4">
+      <div className="flex items-center gap-3">
+        <Select value={complex} onValueChange={setComplex}>
+          <SelectTrigger className="w-40 bg-background border-border text-foreground"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="RWT02">RWT02</SelectItem>
+            <SelectItem value="RWT03">RWT03</SelectItem>
+          </SelectContent>
+        </Select>
+        {tariff > 0 && (
+          <span className="text-xs text-muted-foreground">
+            Tarifa: <span className="font-mono text-foreground">R$ {tariff.toFixed(4)}/kWh</span>
+          </span>
+        )}
+        <div className="ml-auto">
+          <GoldButton onClick={handleSave} disabled={saveMut.isPending}>
+            <Save className="w-4 h-4 mr-1" />
+            {saveMut.isPending ? "Salvando..." : "Salvar Leituras"}
+          </GoldButton>
+        </div>
+      </div>
+
+      {tariff === 0 ? (
+        <PremiumCard className="text-center py-8">
+          <p className="text-sm text-muted-foreground">
+            Nenhuma fatura CELESC registrada para {complex} em {formatMonth(month)}.
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">Cadastre a fatura em Energia Solar → Faturas CELESC.</p>
+        </PremiumCard>
+      ) : (
+        <div className="rounded-xl overflow-hidden border border-border">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-border">
+                <TableHead className="text-muted-foreground">Unidade</TableHead>
+                <TableHead className="text-muted-foreground">Inquilino</TableHead>
+                <TableHead className="text-muted-foreground">Ant. (kWh)</TableHead>
+                <TableHead className="text-muted-foreground">Atual (kWh)</TableHead>
+                <TableHead className="text-muted-foreground">Consumo</TableHead>
+                <TableHead className="text-muted-foreground">Valor</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {units.map(u => {
+                const { previous, kwh, amount } = calcRow(u.id);
+                return (
+                  <TableRow key={u.id} className="border-border">
+                    <TableCell className="font-mono text-foreground">{u.code}</TableCell>
+                    <TableCell className="text-muted-foreground">{u.tenant_name || "—"}</TableCell>
+                    <TableCell className="font-mono text-muted-foreground">{previous}</TableCell>
+                    <TableCell>
+                      <Input
+                        type="number"
+                        value={readings[u.id] ?? ""}
+                        onChange={e => setReadings(r => ({ ...r, [u.id]: e.target.value }))}
+                        className="w-28 bg-background border-border text-foreground font-mono"
+                      />
+                    </TableCell>
+                    <TableCell className="font-mono text-foreground">{kwh.toFixed(2)}</TableCell>
+                    <TableCell className="font-mono font-medium" style={{ color: '#E8C97A' }}>{formatCurrency(amount)}</TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      {tariff > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <KpiCard label="Total Cobrado Inquilinos" value={totals.totalCharged} color="gold" />
+          <KpiCard label="Fatura CELESC Paga" value={totals.invoicePaid} color="red" />
+          <KpiCard label="Margem Solar" value={totals.margin} color="green" />
+        </div>
+      )}
     </div>
   );
 }
