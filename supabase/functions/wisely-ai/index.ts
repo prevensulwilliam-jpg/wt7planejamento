@@ -90,6 +90,11 @@ serve(async (req) => {
 
     // ── Modo chat Naval (padrão) ──
     const { messages, stream } = body_req;
+    if (!Array.isArray(messages)) {
+      return new Response(JSON.stringify({ error: "messages deve ser um array" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const body: Record<string, unknown> = {
       model: "google/gemini-2.5-flash",
