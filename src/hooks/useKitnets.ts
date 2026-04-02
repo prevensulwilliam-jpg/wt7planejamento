@@ -30,6 +30,22 @@ export function useUpdateKitnet() {
 }
 
 // ─── Kitnet Entries ───
+export function useKitnetEntriesForKitnet(kitnetId: string | null) {
+  return useQuery({
+    queryKey: ["kitnet_entries_for", kitnetId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("kitnet_entries")
+        .select("*")
+        .eq("kitnet_id", kitnetId!)
+        .order("reference_month", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!kitnetId,
+  });
+}
+
 export function useKitnetEntries(month: string) {
   return useQuery({
     queryKey: ["kitnet_entries", month],
