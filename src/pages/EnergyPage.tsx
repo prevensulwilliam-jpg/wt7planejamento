@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,7 @@ import { useKitnets, useCelescInvoices, useCreateCelescInvoice, useEnergyReading
 import { formatCurrency, formatMonth, getCurrentMonth } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Plus, Save } from "lucide-react";
+import { Plus, Save, Upload, Pencil, Sparkles, Loader2 } from "lucide-react";
 
 export default function EnergyPage() {
   return (
@@ -30,29 +30,113 @@ export default function EnergyPage() {
   );
 }
 
+const EMPTY_FORM = {
+  residencial_code: "RWT02",
+  reference_month: getCurrentMonth(),
+  due_date: "",
+  kwh_total: "",
+  invoice_total: "",
+  cosip: "0",
+  pis_cofins_pct: "0",
+  icms_pct: "0",
+  solar_kwh_offset: "0",
+  amount_paid: "",
+};
+
 // ─── Invoices Tab ───
 function InvoicesTab() {
   const { data: invoices, isLoading } = useCelescInvoices();
   const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<"upload" | "manual">("upload");
+  const [extracting, setExtracting] = useState(false);
+  const [previewFile, setPreviewFile] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const createMut = useCreateCelescInvoice();
   const { toast } = useToast();
-  const [form, setForm] = useState({
-    residencial_code: "RWT02",
-    reference_month: getCurrentMonth(),
-    due_date: "",
-    kwh_total: "",
-    invoice_total: "",
-    cosip: "0",
-    pis_cofins_pct: "0",
-    icms_pct: "0",
-    solar_kwh_offset: "0",
-    amount_paid: "",
-  });
+  const [form, setForm] = useState(EMPTY_FORM);
 
   const invoiceTotal = Number(form.invoice_total) || 0;
   const cosip = Number(form.cosip) || 0;
   const kwhTotal = Number(form.kwh_total) || 0;
   const tariff = kwhTotal > 0 ? (invoiceTotal - cosip) / kwhTotal : 0;
+
+  const handleOpen = () => {
+    setForm(EMPTY_FORM);
+    setPreviewFile(null);
+    setMode("upload");
+    setOpen(true);
+  };
+
+  // Convert file to base64 and call edge function
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const allowed = ["image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf"];
+    if (!allowed.includes(file.type)) {
+      toast({ title: "Formato inválido", description: "Use JPG, PNG, WEBP ou PDF", variant: "destructive" });
+      return;
+    }
+
+    // Show preview for images
+    if (file.type !== "application/pdf") {
+      setPreviewFile(URL.createObjectURL(file));
+    } else {
+      setPreviewFile("pdf");
+    }
+
+    setExtracting(true);
+
+    try {
+      const reader = new FileReader();
+      reader.onload = async (ev) => {
+        const base64 = (ev.target?.result as string).split(",")[1];
+        const mediaType = file.type === "application/pdf" ? "image/jpeg" : file.type;
+
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/extract-celesc-invoice`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session?.access_token}`,
+            },
+            body: JSON.stringify({ imageBase64: base64, mediaType }),
+          }
+        );
+
+        const json = await res.json();
+
+        if (!res.ok || !json.ok) {
+          throw new Error(json.error || "Erro na extração");
+        }
+
+        const d = json.data;
+        setForm(f => ({
+          ...f,
+          reference_month: d.reference_month ?? f.reference_month,
+          due_date: d.due_date ?? f.due_date,
+          kwh_total: d.kwh_total != null ? String(d.kwh_total) : f.kwh_total,
+          invoice_total: d.invoice_total != null ? String(d.invoice_total) : f.invoice_total,
+          cosip: d.cosip != null ? String(d.cosip) : f.cosip,
+          pis_cofins_pct: d.pis_cofins_pct != null ? String(d.pis_cofins_pct) : f.pis_cofins_pct,
+          icms_pct: d.icms_pct != null ? String(d.icms_pct) : f.icms_pct,
+          solar_kwh_offset: d.solar_kwh_offset != null ? String(d.solar_kwh_offset) : f.solar_kwh_offset,
+          amount_paid: d.amount_paid != null ? String(d.amount_paid) : f.amount_paid,
+        }));
+
+        toast({ title: "✅ Dados extraídos!", description: "Confira e ajuste se necessário." });
+        setMode("manual"); // switch to form view after extraction
+      };
+      reader.readAsDataURL(file);
+    } catch (err: any) {
+      toast({ title: "Erro na extração", description: err.message, variant: "destructive" });
+      setMode("manual");
+    } finally {
+      setExtracting(false);
+    }
+  };
 
   const handleSave = async () => {
     try {
@@ -83,7 +167,7 @@ function InvoicesTab() {
   return (
     <div className="space-y-4 mt-4">
       <div className="flex justify-end">
-        <GoldButton onClick={() => setOpen(true)}><Plus className="w-4 h-4 mr-1" />Nova Fatura</GoldButton>
+        <GoldButton onClick={handleOpen}><Plus className="w-4 h-4 mr-1" />Nova Fatura</GoldButton>
       </div>
 
       {isLoading ? (
@@ -124,29 +208,89 @@ function InvoicesTab() {
       )}
 
       {/* New Invoice Dialog */}
+      <input ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={handleFileUpload} />
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="bg-card border-border max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle className="text-foreground">Nova Fatura CELESC</DialogTitle></DialogHeader>
+
+          {/* Mode toggle */}
+          <div className="flex rounded-lg overflow-hidden border border-border">
+            <button
+              onClick={() => setMode("upload")}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 text-sm font-medium transition-colors ${mode === "upload" ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              style={{ background: mode === "upload" ? 'rgba(201,168,76,0.12)' : 'transparent' }}
+            >
+              <Sparkles className="w-4 h-4" /> Upload com IA
+            </button>
+            <button
+              onClick={() => setMode("manual")}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 text-sm font-medium transition-colors ${mode === "manual" ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              style={{ background: mode === "manual" ? 'rgba(201,168,76,0.12)' : 'transparent' }}
+            >
+              <Pencil className="w-4 h-4" /> Manual
+            </button>
+          </div>
+
+          {/* Upload mode */}
+          {mode === "upload" && (
+            <div>
+              {extracting ? (
+                <PremiumCard className="text-center py-10 space-y-3">
+                  <Loader2 className="w-8 h-8 animate-spin mx-auto text-[#E8C97A]" />
+                  <p className="text-sm text-foreground font-medium">Analisando com IA...</p>
+                  <p className="text-xs text-muted-foreground">Extraindo dados da fatura</p>
+                </PremiumCard>
+              ) : previewFile ? (
+                <div className="space-y-3">
+                  {previewFile !== "pdf" && (
+                    <img src={previewFile} alt="Fatura" className="w-full rounded-lg border border-border max-h-48 object-contain" />
+                  )}
+                  {previewFile === "pdf" && (
+                    <PremiumCard className="text-center py-4">
+                      <p className="text-sm text-muted-foreground">PDF carregado — aguarde a extração</p>
+                    </PremiumCard>
+                  )}
+                  <button onClick={() => { setPreviewFile(null); if (fileRef.current) fileRef.current.value = ""; }} className="text-xs text-muted-foreground hover:text-foreground underline">
+                    Trocar arquivo
+                  </button>
+                </div>
+              ) : (
+                <label className="cursor-pointer block">
+                  <input type="file" accept="image/*,application/pdf" className="hidden" onChange={handleFileUpload} />
+                  <PremiumCard className="p-8 text-center border-dashed hover:border-[#E8C97A]/50 transition-colors cursor-pointer">
+                    <Upload className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                    <p className="text-sm text-foreground font-medium">Arraste ou clique para enviar</p>
+                    <p className="text-xs text-muted-foreground mt-1">Foto ou PDF da fatura CELESC</p>
+                    <p className="text-xs text-muted-foreground">A IA preenche os campos automaticamente</p>
+                  </PremiumCard>
+                </label>
+              )}
+            </div>
+          )}
+
           <div className="space-y-3">
+            {/* Complexo selector always visible */}
+            <div>
+              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Complexo</label>
+              <Select value={form.residencial_code} onValueChange={v => set("residencial_code", v)}>
+                <SelectTrigger className="bg-background border-border text-foreground"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="RWT02">RWT02</SelectItem>
+                  <SelectItem value="RWT03">RWT03</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Form fields — always shown (editable after auto-fill) */}
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Complexo</label>
-                <Select value={form.residencial_code} onValueChange={v => set("residencial_code", v)}>
-                  <SelectTrigger className="bg-background border-border text-foreground"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="RWT02">RWT02</SelectItem>
-                    <SelectItem value="RWT03">RWT03</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
               <div>
                 <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Mês Referência</label>
                 <Input type="month" value={form.reference_month} onChange={e => set("reference_month", e.target.value)} className="bg-background border-border text-foreground font-mono" />
               </div>
-            </div>
-            <div>
-              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Vencimento</label>
-              <Input type="date" value={form.due_date} onChange={e => set("due_date", e.target.value)} className="bg-background border-border text-foreground" />
+              <div>
+                <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Vencimento</label>
+                <Input type="date" value={form.due_date} onChange={e => set("due_date", e.target.value)} className="bg-background border-border text-foreground" />
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
