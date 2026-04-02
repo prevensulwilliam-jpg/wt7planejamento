@@ -13,25 +13,25 @@ Analise a imagem desta fatura e extraia os seguintes dados em JSON. Se um campo 
 Retorne APENAS o JSON, sem explicações, sem markdown, sem código de bloco. Apenas o objeto JSON puro.
 
 {
-  "reference_month": "YYYY-MM",         // mês de competência/referência (ex: "2026-04")
-  "due_date": "YYYY-MM-DD",             // data de vencimento
-  "kwh_total": number,                   // consumo total em kWh
-  "invoice_total": number,              // valor total da fatura em R$
-  "cosip": number,                      // valor do COSIP/taxa de iluminação pública em R$
-  "pis_cofins_pct": number,             // alíquota PIS/COFINS em % (ex: 3.5 para 3,5%)
-  "icms_pct": number,                   // alíquota ICMS em % (ex: 12.0 para 12%)
-  "solar_kwh_offset": number,           // kWh gerado pela energia solar / créditos compensados
-  "amount_paid": number                 // valor efetivamente pago / valor da conta após desconto solar
+  "reference_month": "YYYY-MM",
+  "due_date": "YYYY-MM-DD",
+  "kwh_total": number,
+  "invoice_total": number,
+  "cosip": number,
+  "pis_cofins_pct": number,
+  "icms_pct": number,
+  "solar_kwh_offset": number,
+  "amount_paid": number
 }
 
-Dicas para localizar os dados:
+Dicas:
 - "Mês de referência" ou "Competência" → reference_month
 - "Vencimento" → due_date
 - "Consumo" ou "kWh" → kwh_total
 - "Valor a pagar" ou "Total" → invoice_total
 - "COSIP" ou "Iluminação Pública" → cosip
-- "PIS/COFINS" → pis_cofins_pct
-- "ICMS" → icms_pct
+- "PIS/COFINS" → pis_cofins_pct (em %, ex: 3.5)
+- "ICMS" → icms_pct (em %, ex: 12.0)
 - "Energia Solar", "Geração", "Créditos", "GD" → solar_kwh_offset
 - "Valor pago" ou valor real cobrado após compensação solar → amount_paid`;
 
@@ -50,35 +50,33 @@ serve(async (req) => {
       });
     }
 
-    const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+    const apiKey = Deno.env.get("LOVABLE_API_KEY");
     if (!apiKey) {
-      return new Response(JSON.stringify({ error: "ANTHROPIC_API_KEY não configurada" }), {
+      return new Response(JSON.stringify({ error: "LOVABLE_API_KEY não configurada" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const mime = mediaType || "image/jpeg";
+    const dataUrl = `data:${mime};base64,${imageBase64}`;
+
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
+        model: "google/gemini-2.5-flash",
         max_tokens: 512,
         messages: [
           {
             role: "user",
             content: [
               {
-                type: "image",
-                source: {
-                  type: "base64",
-                  media_type: mediaType || "image/jpeg",
-                  data: imageBase64,
-                },
+                type: "image_url",
+                image_url: { url: dataUrl },
               },
               {
                 type: "text",
@@ -92,22 +90,19 @@ serve(async (req) => {
 
     if (!response.ok) {
       const err = await response.text();
-      return new Response(JSON.stringify({ error: "Erro na API Claude", detail: err }), {
+      return new Response(JSON.stringify({ error: "Erro no gateway de IA", detail: err }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const claudeData = await response.json();
-    const rawText = claudeData.content?.[0]?.text ?? "";
+    const data = await response.json();
+    const rawText = data.choices?.[0]?.message?.content ?? "";
 
-    // Parse JSON from response
     let extracted: Record<string, unknown> = {};
     try {
-      // Try direct parse first
       extracted = JSON.parse(rawText.trim());
     } catch {
-      // Try to extract JSON from text
       const match = rawText.match(/\{[\s\S]*\}/);
       if (match) {
         try {
