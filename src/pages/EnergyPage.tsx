@@ -93,8 +93,8 @@ function InvoicesTab() {
         const base64 = (ev.target?.result as string).split(",")[1];
         const mediaType = file.type; // keep original type (application/pdf or image/*)
 
-        const { data: json, error: fnError } = await supabase.functions.invoke("extract-celesc-invoice", {
-          body: { imageBase64: base64, mediaType },
+        const { data: json, error: fnError } = await supabase.functions.invoke("wisely-ai", {
+          body: { action: "extract-celesc", imageBase64: base64, mediaType },
         });
 
         if (fnError) throw new Error(fnError.message);

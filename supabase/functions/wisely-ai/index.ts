@@ -22,15 +22,74 @@ MODO ESTRATÉGICO: Além de responder perguntas, identifique proativamente:
 
 Responda SEMPRE em português, direto e executivo. Use **negrito** para números e pontos importantes. Trate William pelo nome. Máximo 4 parágrafos por resposta, a não ser que ele peça mais detalhes.`;
 
+const CELESC_EXTRACT_PROMPT = `Você é um extrator de dados de faturas CELESC (energia elétrica de Santa Catarina, Brasil).
+
+Analise a imagem desta fatura e extraia os campos abaixo em JSON puro, sem markdown, sem explicações.
+Se um campo não estiver visível, use null.
+
+{
+  "reference_month": "YYYY-MM",
+  "due_date": "YYYY-MM-DD",
+  "kwh_total": number,
+  "invoice_total": number,
+  "cosip": number,
+  "pis_cofins_pct": number,
+  "icms_pct": number,
+  "solar_kwh_offset": number,
+  "amount_paid": number
+}`;
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { messages, stream } = await req.json();
+    const body_req = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+
+    // ── Modo extração CELESC ──
+    if (body_req.action === "extract-celesc") {
+      const { imageBase64, mediaType } = body_req;
+      const dataUrl = `data:${mediaType || "image/jpeg"};base64,${imageBase64}`;
+
+      const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          max_tokens: 512,
+          messages: [{
+            role: "user",
+            content: [
+              { type: "image_url", image_url: { url: dataUrl } },
+              { type: "text", text: CELESC_EXTRACT_PROMPT },
+            ],
+          }],
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.text();
+        return new Response(JSON.stringify({ error: "Erro no gateway", detail: err }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const data = await res.json();
+      const rawText = data.choices?.[0]?.message?.content ?? "";
+      let extracted: Record<string, unknown> = {};
+      try { extracted = JSON.parse(rawText.trim()); }
+      catch { const m = rawText.match(/\{[\s\S]*\}/); if (m) extracted = JSON.parse(m[0]); }
+
+      return new Response(JSON.stringify({ ok: true, data: extracted }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ── Modo chat Naval (padrão) ──
+    const { messages, stream } = body_req;
 
     const body: Record<string, unknown> = {
       model: "google/gemini-2.5-flash",
