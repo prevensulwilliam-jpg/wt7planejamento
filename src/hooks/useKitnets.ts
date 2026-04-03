@@ -220,3 +220,33 @@ export function useSaveEnergyReadings() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["energy_readings"] }),
   });
 }
+
+// ─── Energy Config (tarifa por complexo) ───
+export function useEnergyConfig() {
+  return useQuery({
+    queryKey: ["energy_config"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("energy_config" as any)
+        .select("*")
+        .order("residencial_code");
+      if (error) throw error;
+      return data as { id: string; residencial_code: string; tariff_kwh: number }[];
+    },
+  });
+}
+
+export function useUpdateEnergyTariff() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ residencial_code, tariff_kwh }: { residencial_code: string; tariff_kwh: number }) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { error } = await supabase
+        .from("energy_config" as any)
+        .update({ tariff_kwh, updated_by: user?.id, updated_at: new Date().toISOString() })
+        .eq("residencial_code", residencial_code);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["energy_config"] }),
+  });
+}

@@ -19,6 +19,7 @@ import {
   useEnergyReadings,
   useCelescInvoices,
   useSaveEnergyReadings,
+  useEnergyConfig,
 } from "@/hooks/useKitnets";
 import { formatCurrency, formatMonth, getCurrentMonth } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
@@ -222,13 +223,15 @@ function EnergiaTab({ month }: { month: string }) {
   const { data: kitnets } = useKitnets();
   const { data: invoices } = useCelescInvoices(month);
   const { data: existingReadings } = useEnergyReadings(month, complex);
+  const { data: energyConfig } = useEnergyConfig();
   const saveMut = useSaveEnergyReadings();
   const { toast } = useToast();
 
+  // Tarifa fixa da config (padrão 1.06) — manager só lê, não edita
   const tariff = useMemo(() => {
-    const inv = (invoices ?? []).find(i => i.residencial_code === complex);
-    return inv?.tariff_per_kwh ?? 0;
-  }, [invoices, complex]);
+    const cfg = (energyConfig ?? []).find(c => c.residencial_code === complex);
+    return cfg?.tariff_kwh ?? 1.06;
+  }, [energyConfig, complex]);
 
   const units = useMemo(
     () => (kitnets ?? []).filter(k => k.residencial_code === complex),

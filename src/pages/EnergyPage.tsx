@@ -8,7 +8,7 @@ import { GoldButton } from "@/components/wt7/GoldButton";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
 import { KpiCard } from "@/components/wt7/KpiCard";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useKitnets, useCelescInvoices, useCreateCelescInvoice, useEnergyReadings, useSaveEnergyReadings } from "@/hooks/useKitnets";
+import { useKitnets, useCelescInvoices, useCreateCelescInvoice, useEnergyReadings, useSaveEnergyReadings, useEnergyConfig, useUpdateEnergyTariff } from "@/hooks/useKitnets";
 import { formatCurrency, formatMonth, getCurrentMonth } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -345,26 +345,36 @@ function ReadingsTab() {
   const { data: kitnets } = useKitnets();
   const { data: invoices } = useCelescInvoices(month);
   const { data: existingReadings } = useEnergyReadings(month, complex);
+  const { data: energyConfig } = useEnergyConfig();
+  const updateTariff = useUpdateEnergyTariff();
   const saveMut = useSaveEnergyReadings();
   const { toast } = useToast();
 
-  const tariff = useMemo(() => {
-    const inv = (invoices ?? []).find(i => i.residencial_code === complex);
-    return inv?.tariff_per_kwh ?? 0;
-  }, [invoices, complex]);
+  // Tarifa vem da config (padrão 1.06), não da fatura CELESC
+  const configEntry = useMemo(() => (energyConfig ?? []).find(c => c.residencial_code === complex), [energyConfig, complex]);
+  const tariff = configEntry?.tariff_kwh ?? 1.06;
+  const [tariffEdit, setTariffEdit] = useState<string>("");
 
-  const units = useMemo(() => {
-    return (kitnets ?? []).filter(k => k.residencial_code === complex);
-  }, [kitnets, complex]);
+  // Sync tariffEdit quando muda de complexo
+  useMemo(() => { setTariffEdit(String(configEntry?.tariff_kwh ?? 1.06)); }, [configEntry]);
 
+  const handleSaveTariff = async () => {
+    const val = Number(tariffEdit);
+    if (!val || val <= 0) return;
+    try {
+      await updateTariff.mutateAsync({ residencial_code: complex, tariff_kwh: val });
+      toast({ title: "Tarifa atualizada!" });
+    } catch (e: any) {
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    }
+  };
+
+  const units = useMemo(() => (kitnets ?? []).filter(k => k.residencial_code === complex), [kitnets, complex]);
   const [readings, setReadings] = useState<Record<string, string>>({});
 
-  // Pre-fill from existing readings
   useMemo(() => {
     const map: Record<string, string> = {};
-    (existingReadings ?? []).forEach((r: any) => {
-      if (r.kitnet_id) map[r.kitnet_id] = String(r.reading_current ?? "");
-    });
+    (existingReadings ?? []).forEach((r: any) => { if (r.kitnet_id) map[r.kitnet_id] = String(r.reading_current ?? ""); });
     setReadings(map);
   }, [existingReadings]);
 
@@ -377,18 +387,14 @@ function ReadingsTab() {
     const current = Number(readings[kitnetId]) || 0;
     const previous = getPreviousReading(kitnetId);
     const kwh = Math.max(0, current - previous);
-    const amount = kwh * tariff;
-    return { current, previous, kwh, amount };
+    return { current, previous, kwh, amount: kwh * tariff };
   };
 
   const totals = useMemo(() => {
     let totalCharged = 0;
-    units.forEach(u => {
-      const { amount } = calculateRow(u.id);
-      totalCharged += amount;
-    });
-    const invoiceAmount = (invoices ?? []).find(i => i.residencial_code === complex)?.amount_paid ?? 0;
-    return { totalCharged, invoicePaid: invoiceAmount, margin: totalCharged - invoiceAmount };
+    units.forEach(u => { totalCharged += calculateRow(u.id).amount; });
+    const invoicePaid = (invoices ?? []).find(i => i.residencial_code === complex)?.amount_paid ?? 0;
+    return { totalCharged, invoicePaid, margin: totalCharged - invoicePaid };
   }, [units, readings, invoices, complex, tariff]);
 
   const handleSave = async () => {
@@ -400,15 +406,10 @@ function ReadingsTab() {
         const existing = (existingReadings ?? []).find((r: any) => r.kitnet_id === u.id);
         return {
           ...(existing?.id ? { id: existing.id } : {}),
-          kitnet_id: u.id,
-          reference_month: month,
-          reading_current: current,
-          reading_previous: previous,
-          consumption_kwh: kwh,
-          amount_to_charge: Number(amount.toFixed(2)),
-          tariff_per_kwh: tariff,
-          celesc_invoice_id: invoiceId ?? null,
-          created_by: user?.id,
+          kitnet_id: u.id, reference_month: month,
+          reading_current: current, reading_previous: previous,
+          consumption_kwh: kwh, amount_to_charge: Number(amount.toFixed(2)),
+          tariff_per_kwh: tariff, celesc_invoice_id: invoiceId ?? null, created_by: user?.id,
         };
       });
       await saveMut.mutateAsync(toSave as any);
@@ -420,7 +421,7 @@ function ReadingsTab() {
 
   return (
     <div className="space-y-4 mt-4">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         <Input type="month" value={month} onChange={e => setMonth(e.target.value)} className="w-44 bg-background border-border text-foreground font-mono" />
         <Select value={complex} onValueChange={setComplex}>
           <SelectTrigger className="w-36 bg-background border-border text-foreground"><SelectValue /></SelectTrigger>
@@ -429,18 +430,28 @@ function ReadingsTab() {
             <SelectItem value="RWT03">RWT03</SelectItem>
           </SelectContent>
         </Select>
+
+        {/* Tarifa editável — só admin vê este bloco */}
+        <div className="flex items-center gap-2 ml-2">
+          <label className="text-xs text-muted-foreground uppercase tracking-wider whitespace-nowrap">Tarifa R$/kWh</label>
+          <Input
+            type="number"
+            step="0.0001"
+            value={tariffEdit}
+            onChange={e => setTariffEdit(e.target.value)}
+            className="w-24 bg-background border-border text-foreground font-mono text-sm"
+          />
+          <GoldButton onClick={handleSaveTariff} disabled={updateTariff.isPending} className="h-9 px-3 text-xs">
+            <Save className="w-3 h-3 mr-1" />Salvar tarifa
+          </GoldButton>
+        </div>
+
         <div className="ml-auto">
           <GoldButton onClick={handleSave} disabled={saveMut.isPending}>
             <Save className="w-4 h-4 mr-1" />{saveMut.isPending ? "Salvando..." : "Salvar Leituras"}
           </GoldButton>
         </div>
       </div>
-
-      {tariff === 0 && (
-        <PremiumCard className="text-center py-4">
-          <p className="text-muted-foreground text-sm">Nenhuma fatura CELESC cadastrada para {complex} em {formatMonth(month)}. Cadastre primeiro na aba Faturas.</p>
-        </PremiumCard>
-      )}
 
       <div className="rounded-xl overflow-hidden border border-border">
         <Table>
@@ -479,7 +490,6 @@ function ReadingsTab() {
         </Table>
       </div>
 
-      {/* Summary cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <KpiCard label="Total Cobrado Inquilinos" value={totals.totalCharged} color="gold" />
         <KpiCard label="Total Pago CELESC" value={totals.invoicePaid} color="red" />
