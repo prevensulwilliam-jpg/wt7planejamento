@@ -60,28 +60,35 @@ serve(async (req) => {
         body: JSON.stringify({
           model: "google/gemini-2.5-flash",
           max_tokens: 512,
-          messages: [{
-            role: "user",
-            content: [
-              { type: "image_url", image_url: { url: dataUrl } },
-              { type: "text", text: CELESC_EXTRACT_PROMPT },
-            ],
-          }],
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "image_url", image_url: { url: dataUrl } },
+                { type: "text", text: CELESC_EXTRACT_PROMPT },
+              ],
+            },
+          ],
         }),
       });
 
       if (!res.ok) {
         const err = await res.text();
         return new Response(JSON.stringify({ error: "Erro no gateway", detail: err }), {
-          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
       const data = await res.json();
       const rawText = data.choices?.[0]?.message?.content ?? "";
       let extracted: Record<string, unknown> = {};
-      try { extracted = JSON.parse(rawText.trim()); }
-      catch { const m = rawText.match(/\{[\s\S]*\}/); if (m) extracted = JSON.parse(m[0]); }
+      try {
+        extracted = JSON.parse(rawText.trim());
+      } catch {
+        const m = rawText.match(/\{[\s\S]*\}/);
+        if (m) extracted = JSON.parse(m[0]);
+      }
 
       return new Response(JSON.stringify({ ok: true, data: extracted }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -92,7 +99,8 @@ serve(async (req) => {
     const { messages, stream } = body_req;
     if (!Array.isArray(messages)) {
       return new Response(JSON.stringify({ error: "messages deve ser um array" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -103,38 +111,35 @@ serve(async (req) => {
     };
     if (!stream) body.max_tokens = 1500;
 
-    const response = await fetch(
-      "https://ai.gateway.lovable.dev/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
-      }
-    );
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
 
     if (!response.ok) {
       const status = response.status;
       if (status === 429) {
         return new Response(
           JSON.stringify({ error: "Limite de requisições excedido. Tente novamente em alguns segundos." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
       if (status === 402) {
-        return new Response(
-          JSON.stringify({ error: "Créditos esgotados. Adicione fundos no workspace." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ error: "Créditos esgotados. Adicione fundos no workspace." }), {
+          status: 402,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
       const t = await response.text();
       console.error("AI gateway error:", status, t);
-      return new Response(
-        JSON.stringify({ error: "Erro no gateway de IA" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Erro no gateway de IA" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     if (stream) {
@@ -150,9 +155,9 @@ serve(async (req) => {
     });
   } catch (e) {
     console.error("wisely-ai error:", e);
-    return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Erro desconhecido" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Erro desconhecido" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });
