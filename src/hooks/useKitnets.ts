@@ -250,3 +250,27 @@ export function useUpdateEnergyTariff() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["energy_config"] }),
   });
 }
+
+// ─── Energy Readings Summary (agrupado por complexo) ───
+export function useEnergyReadingsSummary(month: string) {
+  return useQuery({
+    queryKey: ["energy_readings_summary", month],
+    queryFn: async () => {
+      // Busca todas as leituras do mês com join em kitnets para pegar residencial_code
+      const { data, error } = await supabase
+        .from("energy_readings")
+        .select("amount_to_charge, kitnet:kitnets(residencial_code)")
+        .eq("reference_month", month);
+      if (error) throw error;
+
+      // Agrupa por residencial_code
+      const summary: Record<string, number> = {};
+      (data ?? []).forEach((r: any) => {
+        const code = r.kitnet?.residencial_code;
+        if (code) summary[code] = (summary[code] ?? 0) + (r.amount_to_charge ?? 0);
+      });
+      return summary; // { RWT02: 1187.43, RWT03: 891.12 }
+    },
+    enabled: !!month,
+  });
+}

@@ -8,7 +8,7 @@ import { GoldButton } from "@/components/wt7/GoldButton";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
 import { KpiCard } from "@/components/wt7/KpiCard";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useKitnets, useCelescInvoices, useCreateCelescInvoice, useEnergyReadings, useSaveEnergyReadings, useEnergyConfig, useUpdateEnergyTariff } from "@/hooks/useKitnets";
+import { useKitnets, useCelescInvoices, useCreateCelescInvoice, useEnergyReadings, useSaveEnergyReadings, useEnergyConfig, useUpdateEnergyTariff, useEnergyReadingsSummary } from "@/hooks/useKitnets";
 import { formatCurrency, formatMonth, getCurrentMonth } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -22,9 +22,11 @@ export default function EnergyPage() {
         <TabsList className="bg-card border border-border">
           <TabsTrigger value="invoices">Faturas CELESC</TabsTrigger>
           <TabsTrigger value="readings">Leituras & Cobrança</TabsTrigger>
+          <TabsTrigger value="balancete">Balancete</TabsTrigger>
         </TabsList>
         <TabsContent value="invoices"><InvoicesTab /></TabsContent>
         <TabsContent value="readings"><ReadingsTab /></TabsContent>
+        <TabsContent value="balancete"><BalanceteTab /></TabsContent>
       </Tabs>
     </div>
   );
@@ -494,6 +496,83 @@ function ReadingsTab() {
         <KpiCard label="Total Cobrado Inquilinos" value={totals.totalCharged} color="gold" />
         <KpiCard label="Total Pago CELESC" value={totals.invoicePaid} color="red" />
         <KpiCard label="Margem Solar" value={totals.margin} color="green" />
+      </div>
+    </div>
+  );
+}
+
+// ─── Balancete Tab ───
+const COMPLEXOS = [
+  { code: "RWT02", label: "RWT02 — R. Amauri de Souza" },
+  { code: "RWT03", label: "RWT03 — R. Manoel Corrêa" },
+];
+
+function BalanceteTab() {
+  const [month, setMonth] = useState(getCurrentMonth());
+  const { data: invoices } = useCelescInvoices(month);
+  const { data: summary } = useEnergyReadingsSummary(month);
+
+  const rows = COMPLEXOS.map(({ code, label }) => {
+    const fatura = (invoices ?? []).find(i => i.residencial_code === code)?.amount_paid ?? 0;
+    const cobrado = summary?.[code] ?? 0;
+    const saldo = cobrado - fatura;
+    return { code, label, fatura, cobrado, saldo };
+  });
+
+  const totalSaldo = rows.reduce((acc, r) => acc + r.saldo, 0);
+
+  return (
+    <div className="space-y-6 mt-4">
+      <div className="flex items-center gap-3">
+        <label className="text-xs uppercase tracking-wider text-muted-foreground">Mês</label>
+        <Input
+          type="month"
+          value={month}
+          onChange={e => setMonth(e.target.value)}
+          className="w-44 bg-background border-border text-foreground font-mono"
+        />
+      </div>
+
+      <div className="space-y-4">
+        {rows.map(({ code, label, fatura, cobrado, saldo }) => (
+          <PremiumCard key={code} className="overflow-hidden p-0">
+            {/* Header */}
+            <div className="px-5 py-3 border-b border-border">
+              <p className="font-mono font-semibold text-foreground text-sm">{label}</p>
+            </div>
+            {/* Rows */}
+            <div className="divide-y divide-border">
+              <div className="flex justify-between items-center px-5 py-3">
+                <span className="text-sm text-muted-foreground">Valor da Fatura CELESC</span>
+                <span className="font-mono font-semibold text-sm" style={{ color: '#F43F5E' }}>
+                  {formatCurrency(fatura)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center px-5 py-3">
+                <span className="text-sm text-muted-foreground">Valor Cobrado Inquilinos</span>
+                <span className="font-mono font-semibold text-sm text-foreground">
+                  {formatCurrency(cobrado)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center px-5 py-3">
+                <span className="text-sm font-medium text-foreground">Saldo Energia Solar</span>
+                <span className="font-mono font-bold text-sm" style={{ color: '#22C55E' }}>
+                  {formatCurrency(saldo)}
+                </span>
+              </div>
+            </div>
+          </PremiumCard>
+        ))}
+
+        {/* Total */}
+        <PremiumCard glowColor="hsl(43 52% 54%)" className="px-5 py-4">
+          <div className="flex justify-between items-center">
+            <span className="font-semibold text-foreground uppercase tracking-wider text-sm">Saldo Total</span>
+            <span className="font-mono font-bold text-2xl" style={{ color: '#E8C97A' }}>
+              {formatCurrency(totalSaldo)}
+            </span>
+          </div>
+        </PremiumCard>
       </div>
     </div>
   );
