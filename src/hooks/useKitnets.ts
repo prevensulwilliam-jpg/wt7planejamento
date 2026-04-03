@@ -231,7 +231,7 @@ export function useEnergyConfig() {
         .select("*")
         .order("residencial_code");
       if (error) throw error;
-      return data as { id: string; residencial_code: string; tariff_kwh: number }[];
+      return data as unknown as { id: string; residencial_code: string; tariff_kwh: number }[];
     },
   });
 }
