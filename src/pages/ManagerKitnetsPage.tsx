@@ -23,7 +23,7 @@ import {
 } from "@/hooks/useKitnets";
 import { formatCurrency, formatMonth, getCurrentMonth } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
-import { LogOut, Home, Zap, Save } from "lucide-react";
+import { LogOut, Home, Zap, Save, ArrowLeft } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 
 const statusLabels: Record<string, { label: string; variant: "green" | "gold" | "red" }> = {
@@ -62,7 +62,17 @@ export default function ManagerKitnetsPage() {
 
 function ManagerContent() {
   const [month, setMonth] = useState(getCurrentMonth());
+  const [isAdmin, setIsAdmin] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase.rpc("has_role", { _user_id: user.id, _role: "admin" });
+      setIsAdmin(!!data);
+    })();
+  }, []);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -74,6 +84,14 @@ function ManagerContent() {
       {/* Header */}
       <header className="sticky top-0 z-50 flex items-center justify-between px-6 h-14 border-b border-border" style={{ background: '#080C10' }}>
         <div className="flex items-center gap-3">
+          {isAdmin && (
+            <button
+              onClick={() => navigate("/")}
+              className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mr-2"
+            >
+              <ArrowLeft className="w-4 h-4" /> Dashboard
+            </button>
+          )}
           <WT7Logo size="sm" />
           <span className="text-sm text-muted-foreground hidden sm:inline">Portal Administração</span>
         </div>
