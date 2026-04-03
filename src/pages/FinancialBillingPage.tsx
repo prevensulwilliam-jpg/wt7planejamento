@@ -4,6 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
+import { MonthPicker } from "@/components/wt7/MonthPicker";
+import { DatePicker } from "@/components/wt7/DatePicker";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -70,13 +72,7 @@ export default function FinancialBillingPage() {
           <h1 className="font-display text-2xl font-bold" style={{ color: '#F0F4F8' }}>
             Faturamento — {formatMonth(month)}
           </h1>
-          <Input
-            type="month"
-            value={month}
-            onChange={(e) => setMonth(e.target.value)}
-            className="w-44"
-            style={{ background: '#0D1318', border: '1px solid #1A2535', color: '#F0F4F8' }}
-          />
+          <MonthPicker value={month} onChange={v => setMonth(v)} className="w-44" />
         </div>
         <KPISection month={month} />
         <BillingForm month={month} userId={userId} />
@@ -206,7 +202,7 @@ function BillingForm({ month, userId }: { month: string; userId: string }) {
         </div>
         <div>
           <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Data fechamento</label>
-          <Input type="date" value={form.closing_date} onChange={(e) => setForm(p => ({ ...p, closing_date: e.target.value }))} style={inputStyle} />
+          <DatePicker value={form.closing_date} onChange={v => setForm(p => ({ ...p, closing_date: v }))} />
         </div>
         <div>
           <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Valor recebido (R$) *</label>

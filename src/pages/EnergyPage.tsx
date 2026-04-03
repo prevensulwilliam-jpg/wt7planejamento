@@ -2,6 +2,8 @@ import { useState, useMemo, useRef } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { MonthPicker } from "@/components/wt7/MonthPicker";
+import { DatePicker } from "@/components/wt7/DatePicker";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { GoldButton } from "@/components/wt7/GoldButton";
@@ -323,16 +325,16 @@ function InvoicesTab() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Mês Referência</label>
-                <Input type="month" value={form.reference_month} onChange={e => set("reference_month", e.target.value)} className="bg-background border-border text-foreground font-mono" />
+                <MonthPicker value={form.reference_month} onChange={v => set("reference_month", v)} />
               </div>
               <div>
                 <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Vencimento</label>
-                <Input type="date" value={form.due_date} onChange={e => set("due_date", e.target.value)} className="bg-background border-border text-foreground" />
+                <DatePicker value={form.due_date} onChange={v => set("due_date", v)} />
               </div>
             </div>
             <div>
               <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Data de Pagamento</label>
-              <Input type="date" value={form.payment_date} onChange={e => set("payment_date", e.target.value)} className="bg-background border-border text-foreground" />
+              <DatePicker value={form.payment_date} onChange={v => set("payment_date", v)} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -471,7 +473,7 @@ function ReadingsTab() {
   return (
     <div className="space-y-4 mt-4">
       <div className="flex items-center gap-3 flex-wrap">
-        <Input type="month" value={month} onChange={e => setMonth(e.target.value)} className="w-44 bg-background border-border text-foreground font-mono" />
+        <MonthPicker value={month} onChange={v => setMonth(v)} className="w-44" />
         <Select value={complex} onValueChange={setComplex}>
           <SelectTrigger className="w-36 bg-background border-border text-foreground"><SelectValue /></SelectTrigger>
           <SelectContent>
@@ -572,12 +574,7 @@ function BalanceteTab() {
     <div className="space-y-6 mt-4">
       <div className="flex items-center gap-3">
         <label className="text-xs uppercase tracking-wider text-muted-foreground">Mês</label>
-        <Input
-          type="month"
-          value={month}
-          onChange={e => setMonth(e.target.value)}
-          className="w-44 bg-background border-border text-foreground font-mono"
-        />
+        <MonthPicker value={month} onChange={v => setMonth(v)} className="w-44" />
       </div>
 
       <div className="space-y-4">

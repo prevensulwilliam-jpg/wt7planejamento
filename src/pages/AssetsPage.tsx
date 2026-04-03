@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/wt7/DatePicker";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
@@ -179,7 +180,7 @@ export default function AssetsPage() {
               </Select>
             </div>
             <div><Label style={{ color: '#94A3B8' }}>Valor Estimado</Label><Input type="number" value={assetForm.estimated_value} onChange={e => setAssetForm({ ...assetForm, estimated_value: e.target.value })} style={inputStyle} /></div>
-            <div><Label style={{ color: '#94A3B8' }}>Data Aquisição</Label><Input type="date" value={assetForm.acquisition_date} onChange={e => setAssetForm({ ...assetForm, acquisition_date: e.target.value })} style={inputStyle} /></div>
+            <div><Label style={{ color: '#94A3B8' }}>Data Aquisição</Label><DatePicker value={assetForm.acquisition_date} onChange={v => setAssetForm({ ...assetForm, acquisition_date: v })} /></div>
             <div><Label style={{ color: '#94A3B8' }}>Observações</Label><Input value={assetForm.notes} onChange={e => setAssetForm({ ...assetForm, notes: e.target.value })} style={inputStyle} /></div>
           </div>
           <DialogFooter><GoldButton onClick={handleCreateAsset}>Registrar</GoldButton></DialogFooter>
@@ -208,7 +209,7 @@ export default function AssetsPage() {
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div><Label style={{ color: '#94A3B8' }}>Taxa % a.a.</Label><Input type="number" value={invForm.rate_percent} onChange={e => setInvForm({ ...invForm, rate_percent: e.target.value })} style={inputStyle} /></div>
-              <div><Label style={{ color: '#94A3B8' }}>Vencimento</Label><Input type="date" value={invForm.maturity_date} onChange={e => setInvForm({ ...invForm, maturity_date: e.target.value })} style={inputStyle} /></div>
+              <div><Label style={{ color: '#94A3B8' }}>Vencimento</Label><DatePicker value={invForm.maturity_date} onChange={v => setInvForm({ ...invForm, maturity_date: v })} /></div>
             </div>
           </div>
           <DialogFooter><GoldButton onClick={handleCreateInv}>Registrar</GoldButton></DialogFooter>

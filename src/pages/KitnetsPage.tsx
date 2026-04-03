@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { MonthPicker } from "@/components/wt7/MonthPicker";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 // Dialog/Select/Input used in EntriesTab
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
@@ -161,7 +162,7 @@ function EntriesTab({ month, setMonth }: { month: string; setMonth: (m: string) 
   return (
     <div className="space-y-4 mt-4">
       <div className="flex items-center justify-between">
-        <Input type="month" value={month} onChange={e => setMonth(e.target.value)} className="w-44 bg-background border-border text-foreground font-mono" />
+        <MonthPicker value={month} onChange={v => setMonth(v)} className="w-44" />
         <GoldButton onClick={() => setOpen(true)}><Plus className="w-4 h-4 mr-1" />Novo Lançamento</GoldButton>
       </div>
 
@@ -224,7 +225,7 @@ function EntriesTab({ month, setMonth }: { month: string; setMonth: (m: string) 
             </div>
             <div>
               <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Mês Referência</label>
-              <Input type="month" value={form.reference_month} onChange={e => setForm({ ...form, reference_month: e.target.value })} className="bg-background border-border text-foreground font-mono" />
+              <MonthPicker value={form.reference_month} onChange={v => setForm({ ...form, reference_month: v })} />
             </div>
           </div>
           <DialogFooter>
@@ -279,7 +280,7 @@ function ReportTab({ month, setMonth }: { month: string; setMonth: (m: string) =
   return (
     <div className="space-y-4 mt-4">
       <div className="flex items-center justify-between">
-        <Input type="month" value={month} onChange={e => setMonth(e.target.value)} className="w-44 bg-background border-border text-foreground font-mono" />
+        <MonthPicker value={month} onChange={v => setMonth(v)} className="w-44" />
         <GoldButton onClick={handleExportCSV} disabled={!entries?.length}><Download className="w-4 h-4 mr-1" />Exportar CSV</GoldButton>
       </div>
 

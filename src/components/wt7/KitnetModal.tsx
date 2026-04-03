@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
+import { MonthPicker } from "@/components/wt7/MonthPicker";
+import { DatePicker } from "@/components/wt7/DatePicker";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { GoldButton } from "@/components/wt7/GoldButton";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
@@ -335,17 +337,17 @@ function FechamentoForm({ kitnet, onSaved }: { kitnet: Tables<"kitnets">; onSave
 
       <div>
         <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Mês Referência</label>
-        <Input type="month" value={form.reference_month} onChange={e => set("reference_month", e.target.value)} className="bg-background border-border text-foreground font-mono" />
+        <MonthPicker value={form.reference_month} onChange={v => set("reference_month", v)} />
       </div>
 
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Início</label>
-          <Input type="date" value={form.period_start} onChange={e => set("period_start", e.target.value)} className="bg-background border-border text-foreground" />
+          <DatePicker value={form.period_start} onChange={v => set("period_start", v)} />
         </div>
         <div>
           <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Fim</label>
-          <Input type="date" value={form.period_end} onChange={e => set("period_end", e.target.value)} className="bg-background border-border text-foreground" />
+          <DatePicker value={form.period_end} onChange={v => set("period_end", v)} />
         </div>
       </div>
 

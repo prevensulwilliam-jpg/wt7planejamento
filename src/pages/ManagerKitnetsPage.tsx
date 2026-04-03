@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
+import { MonthPicker } from "@/components/wt7/MonthPicker";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { GoldButton } from "@/components/wt7/GoldButton";
@@ -102,12 +103,7 @@ function ManagerContent() {
 
       <div className="max-w-6xl mx-auto p-6 space-y-6">
         <div className="flex items-center gap-3">
-          <Input
-            type="month"
-            value={month}
-            onChange={e => setMonth(e.target.value)}
-            className="w-44 bg-background border-border text-foreground font-mono"
-          />
+          <MonthPicker value={month} onChange={v => setMonth(v)} className="w-44" />
           <span className="text-sm text-muted-foreground">{formatMonth(month)}</span>
         </div>
 

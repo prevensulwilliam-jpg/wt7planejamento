@@ -6,6 +6,7 @@ import { GoldButton } from "@/components/wt7/GoldButton";
 import { WtBadge } from "@/components/wt7/WtBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/wt7/DatePicker";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -484,8 +485,7 @@ function VendorDetailModal({ vendor, open, onClose }: { vendor: any; open: boole
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-xs mb-1 block" style={{ color: "#94A3B8" }}>Vencimento</label>
-                  <Input type="date" value={paymentForm.due_date} onChange={e => setPaymentForm(f => ({ ...f, due_date: e.target.value }))}
-                    style={{ background: "#0D1318", borderColor: "#1A2535", color: "#F0F4F8", fontSize: "13px" }} />
+                  <DatePicker value={paymentForm.due_date} onChange={v => setPaymentForm(f => ({ ...f, due_date: v }))} />
                 </div>
                 <div>
                   <label className="text-xs mb-1 block" style={{ color: "#94A3B8" }}>Forma de pagamento</label>

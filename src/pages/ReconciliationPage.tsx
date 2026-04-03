@@ -4,6 +4,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { MonthPicker } from "@/components/wt7/MonthPicker";
+import { DatePicker } from "@/components/wt7/DatePicker";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
@@ -1418,8 +1420,7 @@ function NewExpenseModal({ open, onClose, defaultMonth }: { open: boolean; onClo
             </div>
             <div>
               <label className="text-xs font-mono uppercase mb-1 block" style={{ color: "#94A3B8" }}>Data</label>
-              <Input type="date" value={form.paid_at} onChange={e => setForm(f => ({ ...f, paid_at: e.target.value }))}
-                style={{ background: "#080C10", borderColor: "#1A2535", color: "#F0F4F8" }} />
+              <DatePicker value={form.paid_at} onChange={v => setForm(f => ({ ...f, paid_at: v }))} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -1437,9 +1438,7 @@ function NewExpenseModal({ open, onClose, defaultMonth }: { open: boolean; onClo
             </div>
             <div>
               <label className="text-xs font-mono uppercase mb-1 block" style={{ color: "#94A3B8" }}>Mês referência</label>
-              <Input type="month" value={form.reference_month}
-                onChange={e => setForm(f => ({ ...f, reference_month: e.target.value }))}
-                style={{ background: "#080C10", borderColor: "#1A2535", color: "#F0F4F8" }} />
+              <MonthPicker value={form.reference_month} onChange={v => setForm(f => ({ ...f, reference_month: v }))} />
             </div>
           </div>
         </div>
@@ -1524,9 +1523,7 @@ function NewRevenueModal({ open, onClose, defaultMonth }: { open: boolean; onClo
             </div>
             <div>
               <label className="text-xs font-mono uppercase mb-1 block" style={{ color: "#94A3B8" }}>Data</label>
-              <Input type="date" value={form.received_at}
-                onChange={e => setForm(f => ({ ...f, received_at: e.target.value }))}
-                style={{ background: "#080C10", borderColor: "#1A2535", color: "#F0F4F8" }} />
+              <DatePicker value={form.received_at} onChange={v => setForm(f => ({ ...f, received_at: v }))} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -1545,9 +1542,7 @@ function NewRevenueModal({ open, onClose, defaultMonth }: { open: boolean; onClo
             </div>
             <div>
               <label className="text-xs font-mono uppercase mb-1 block" style={{ color: "#94A3B8" }}>Mês referência</label>
-              <Input type="month" value={form.reference_month}
-                onChange={e => setForm(f => ({ ...f, reference_month: e.target.value }))}
-                style={{ background: "#080C10", borderColor: "#1A2535", color: "#F0F4F8" }} />
+              <MonthPicker value={form.reference_month} onChange={v => setForm(f => ({ ...f, reference_month: v }))} />
             </div>
           </div>
         </div>

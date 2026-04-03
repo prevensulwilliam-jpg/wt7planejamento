@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/wt7/DatePicker";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
@@ -140,7 +141,7 @@ export default function GoalsPage() {
               <div><Label style={{ color: '#94A3B8' }}>Valor Meta</Label><Input type="number" value={form.target_value} onChange={e => setForm({ ...form, target_value: e.target.value })} style={{ background: '#080C10', border: '1px solid #1A2535', color: '#F0F4F8' }} /></div>
               <div><Label style={{ color: '#94A3B8' }}>Valor Atual</Label><Input type="number" value={form.current_value} onChange={e => setForm({ ...form, current_value: e.target.value })} style={{ background: '#080C10', border: '1px solid #1A2535', color: '#F0F4F8' }} /></div>
             </div>
-            <div><Label style={{ color: '#94A3B8' }}>Prazo</Label><Input type="date" value={form.deadline} onChange={e => setForm({ ...form, deadline: e.target.value })} style={{ background: '#080C10', border: '1px solid #1A2535', color: '#F0F4F8' }} /></div>
+            <div><Label style={{ color: '#94A3B8' }}>Prazo</Label><DatePicker value={form.deadline} onChange={v => setForm({ ...form, deadline: v })} /></div>
             <div><Label style={{ color: '#94A3B8' }}>Observações</Label><Input value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} style={{ background: '#080C10', border: '1px solid #1A2535', color: '#F0F4F8' }} /></div>
           </div>
           <DialogFooter><GoldButton onClick={handleCreate}>Criar Meta</GoldButton></DialogFooter>

@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
+import { MonthPicker } from "@/components/wt7/MonthPicker";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
 import { KpiCard } from "@/components/wt7/KpiCard";
 import { WtBadge } from "@/components/wt7/WtBadge";
@@ -69,11 +70,11 @@ function MonthlyTab() {
       <div className="flex items-center gap-4 flex-wrap">
         <div>
           <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Mês inicial</label>
-          <Input type="month" value={startMonth} onChange={e => setStartMonth(e.target.value)} className="w-40" style={inputStyle} />
+          <MonthPicker value={startMonth} onChange={v => setStartMonth(v)} className="w-40" />
         </div>
         <div>
           <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Mês final</label>
-          <Input type="month" value={endMonth} onChange={e => setEndMonth(e.target.value)} className="w-40" style={inputStyle} />
+          <MonthPicker value={endMonth} onChange={v => setEndMonth(v)} className="w-40" />
         </div>
       </div>
 

@@ -15,6 +15,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
+import { MonthPicker } from "@/components/wt7/MonthPicker";
+import { DatePicker } from "@/components/wt7/DatePicker";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -272,11 +274,11 @@ export default function ExpensesPage() {
               </div>
               <div>
                 <Label style={{ color: '#94A3B8' }}>Data Pagamento</Label>
-                <Input type="date" value={form.paid_at} onChange={e => setForm(f => ({ ...f, paid_at: e.target.value }))} style={{ background: '#080C10', borderColor: '#1A2535', color: '#F0F4F8' }} />
+                <DatePicker value={form.paid_at} onChange={v => setForm(f => ({ ...f, paid_at: v }))} />
               </div>
               <div>
                 <Label style={{ color: '#94A3B8' }}>Mês Referência</Label>
-                <Input type="month" value={form.reference_month} onChange={e => setForm(f => ({ ...f, reference_month: e.target.value }))} style={{ background: '#080C10', borderColor: '#1A2535', color: '#F0F4F8' }} />
+                <MonthPicker value={form.reference_month} onChange={v => setForm(f => ({ ...f, reference_month: v }))} />
               </div>
               <GoldButton onClick={handleSubmit} disabled={createExpense.isPending} className="w-full justify-center">
                 {createExpense.isPending ? "Salvando..." : "Registrar Despesa"}

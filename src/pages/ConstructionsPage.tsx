@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/wt7/DatePicker";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -234,7 +235,7 @@ export default function ConstructionsPage() {
         <DialogContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
           <DialogHeader><DialogTitle style={{ color: '#F0F4F8' }}>Nova Despesa</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <div><Label style={{ color: '#94A3B8' }}>Data</Label><Input type="date" value={form.expense_date} onChange={e => setForm({ ...form, expense_date: e.target.value })} style={{ background: '#080C10', border: '1px solid #1A2535', color: '#F0F4F8' }} /></div>
+            <div><Label style={{ color: '#94A3B8' }}>Data</Label><DatePicker value={form.expense_date} onChange={v => setForm({ ...form, expense_date: v })} /></div>
             <div><Label style={{ color: '#94A3B8' }}>Descrição</Label><Input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} style={{ background: '#080C10', border: '1px solid #1A2535', color: '#F0F4F8' }} /></div>
             <div><Label style={{ color: '#94A3B8' }}>Categoria</Label>
               <Select value={form.category} onValueChange={v => setForm({ ...form, category: v })}>
@@ -270,7 +271,7 @@ export default function ConstructionsPage() {
                   <div><Label style={{ color: '#94A3B8' }}>Total Parcelas</Label><Input type="number" value={form.installments_total} onChange={e => setForm({ ...form, installments_total: e.target.value })} style={{ background: '#080C10', border: '1px solid #1A2535', color: '#F0F4F8' }} /></div>
                   <div><Label style={{ color: '#94A3B8' }}>Pagas</Label><Input type="number" value={form.installments_paid} onChange={e => setForm({ ...form, installments_paid: e.target.value })} style={{ background: '#080C10', border: '1px solid #1A2535', color: '#F0F4F8' }} /></div>
                 </div>
-                <div><Label style={{ color: '#94A3B8' }}>Próx. Vencimento</Label><Input type="date" value={form.next_due_date} onChange={e => setForm({ ...form, next_due_date: e.target.value })} style={{ background: '#080C10', border: '1px solid #1A2535', color: '#F0F4F8' }} /></div>
+                <div><Label style={{ color: '#94A3B8' }}>Próx. Vencimento</Label><DatePicker value={form.next_due_date} onChange={v => setForm({ ...form, next_due_date: v })} /></div>
               </>
             )}
           </div>

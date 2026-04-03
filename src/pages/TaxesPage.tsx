@@ -3,6 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/wt7/DatePicker";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
@@ -173,7 +174,7 @@ export default function TaxesPage() {
               <div><Label style={{ color: '#94A3B8' }}>Valor</Label><Input type="number" value={taxForm.amount} onChange={e => setTaxForm({ ...taxForm, amount: e.target.value })} style={inputStyle} /></div>
               <div><Label style={{ color: '#94A3B8' }}>Ano Ref.</Label><Input type="number" value={taxForm.reference_year} onChange={e => setTaxForm({ ...taxForm, reference_year: e.target.value })} style={inputStyle} /></div>
             </div>
-            <div><Label style={{ color: '#94A3B8' }}>Vencimento</Label><Input type="date" value={taxForm.due_date} onChange={e => setTaxForm({ ...taxForm, due_date: e.target.value })} style={inputStyle} /></div>
+            <div><Label style={{ color: '#94A3B8' }}>Vencimento</Label><DatePicker value={taxForm.due_date} onChange={v => setTaxForm({ ...taxForm, due_date: v })} /></div>
           </div>
           <DialogFooter><GoldButton onClick={handleCreateTax}>Criar</GoldButton></DialogFooter>
         </DialogContent>
@@ -192,7 +193,7 @@ export default function TaxesPage() {
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div><Label style={{ color: '#94A3B8' }}>Parcela Mensal</Label><Input type="number" value={debtForm.monthly_payment} onChange={e => setDebtForm({ ...debtForm, monthly_payment: e.target.value })} style={inputStyle} /></div>
-              <div><Label style={{ color: '#94A3B8' }}>Vencimento</Label><Input type="date" value={debtForm.due_date} onChange={e => setDebtForm({ ...debtForm, due_date: e.target.value })} style={inputStyle} /></div>
+              <div><Label style={{ color: '#94A3B8' }}>Vencimento</Label><DatePicker value={debtForm.due_date} onChange={v => setDebtForm({ ...debtForm, due_date: v })} /></div>
             </div>
           </div>
           <DialogFooter><GoldButton onClick={handleCreateDebt}>Registrar</GoldButton></DialogFooter>
