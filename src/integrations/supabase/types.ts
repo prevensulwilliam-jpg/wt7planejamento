@@ -277,6 +277,7 @@ export type Database = {
           id: string
           invoice_total: number | null
           kwh_total: number | null
+          payment_date: string | null
           pdf_url: string | null
           pis_cofins_pct: number | null
           reference_month: string | null
@@ -294,6 +295,7 @@ export type Database = {
           id?: string
           invoice_total?: number | null
           kwh_total?: number | null
+          payment_date?: string | null
           pdf_url?: string | null
           pis_cofins_pct?: number | null
           reference_month?: string | null
@@ -311,6 +313,7 @@ export type Database = {
           id?: string
           invoice_total?: number | null
           kwh_total?: number | null
+          payment_date?: string | null
           pdf_url?: string | null
           pis_cofins_pct?: number | null
           reference_month?: string | null

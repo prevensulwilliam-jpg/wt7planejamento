@@ -45,7 +45,15 @@ serve(async (req) => {
   }
 
   try {
-    const body_req = await req.json();
+    let body_req: Record<string, unknown>;
+    try {
+      body_req = await req.json();
+    } catch {
+      return new Response(JSON.stringify({ error: "Request body vazio ou JSON inválido" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
