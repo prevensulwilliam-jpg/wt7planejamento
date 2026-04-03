@@ -523,6 +523,30 @@ export type Database = {
         }
         Relationships: []
       }
+      energy_config: {
+        Row: {
+          id: string
+          residencial_code: string
+          tariff_kwh: number
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          id?: string
+          residencial_code: string
+          tariff_kwh?: number
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          id?: string
+          residencial_code?: string
+          tariff_kwh?: number
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       energy_readings: {
         Row: {
           amount_to_charge: number | null
