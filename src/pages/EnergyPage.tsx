@@ -36,6 +36,7 @@ const EMPTY_FORM = {
   residencial_code: "RWT02",
   reference_month: getCurrentMonth(),
   due_date: "",
+  payment_date: "",
   kwh_total: "",
   invoice_total: "",
   cosip: "0",
@@ -77,6 +78,7 @@ function InvoicesTab() {
       residencial_code: inv.residencial_code ?? "RWT02",
       reference_month: inv.reference_month ?? getCurrentMonth(),
       due_date: inv.due_date ?? "",
+      payment_date: inv.payment_date ?? "",
       kwh_total: String(inv.kwh_total ?? ""),
       invoice_total: String(inv.invoice_total ?? ""),
       cosip: String(inv.cosip ?? "0"),
@@ -162,6 +164,7 @@ function InvoicesTab() {
         residencial_code: form.residencial_code,
         reference_month: form.reference_month,
         due_date: form.due_date || null,
+        payment_date: form.payment_date || null,
         kwh_total: kwhTotal,
         invoice_total: invoiceTotal,
         cosip: cosip,
@@ -205,6 +208,8 @@ function InvoicesTab() {
               <TableRow className="border-border">
                 <TableHead className="text-muted-foreground">Complexo</TableHead>
                 <TableHead className="text-muted-foreground">Mês</TableHead>
+                <TableHead className="text-muted-foreground">Vencimento</TableHead>
+                <TableHead className="text-muted-foreground">Pagamento</TableHead>
                 <TableHead className="text-muted-foreground">kWh</TableHead>
                 <TableHead className="text-muted-foreground">Total Fatura</TableHead>
                 <TableHead className="text-muted-foreground">Solar kWh</TableHead>
@@ -218,6 +223,8 @@ function InvoicesTab() {
                 <TableRow key={inv.id} className="border-border">
                   <TableCell className="font-mono text-foreground">{inv.residencial_code}</TableCell>
                   <TableCell className="text-muted-foreground">{inv.reference_month ? formatMonth(inv.reference_month) : "—"}</TableCell>
+                  <TableCell className="font-mono text-muted-foreground">{inv.due_date ? new Date(inv.due_date + "T12:00:00").toLocaleDateString("pt-BR") : "—"}</TableCell>
+                  <TableCell className="font-mono text-muted-foreground">{(inv as any).payment_date ? new Date((inv as any).payment_date + "T12:00:00").toLocaleDateString("pt-BR") : "—"}</TableCell>
                   <TableCell className="font-mono text-foreground">{inv.kwh_total ?? 0}</TableCell>
                   <TableCell className="font-mono text-foreground">{formatCurrency(inv.invoice_total ?? 0)}</TableCell>
                   <TableCell className="font-mono text-foreground">{inv.solar_kwh_offset ?? 0}</TableCell>
@@ -322,6 +329,10 @@ function InvoicesTab() {
                 <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Vencimento</label>
                 <Input type="date" value={form.due_date} onChange={e => set("due_date", e.target.value)} className="bg-background border-border text-foreground" />
               </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Data de Pagamento</label>
+              <Input type="date" value={form.payment_date} onChange={e => set("payment_date", e.target.value)} className="bg-background border-border text-foreground" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
