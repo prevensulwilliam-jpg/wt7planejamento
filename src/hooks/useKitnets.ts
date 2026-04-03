@@ -151,6 +151,17 @@ export function useCreateCelescInvoice() {
   });
 }
 
+export function useUpdateCelescInvoice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...updates }: Partial<TablesInsert<"celesc_invoices">> & { id: string }) => {
+      const { error } = await supabase.from("celesc_invoices").update(updates).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["celesc_invoices"] }),
+  });
+}
+
 // ─── Energy Readings ───
 export function useEnergyReadings(month: string, residencialCode?: string) {
   return useQuery({

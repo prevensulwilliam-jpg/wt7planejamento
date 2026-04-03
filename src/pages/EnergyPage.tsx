@@ -8,11 +8,11 @@ import { GoldButton } from "@/components/wt7/GoldButton";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
 import { KpiCard } from "@/components/wt7/KpiCard";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useKitnets, useCelescInvoices, useCreateCelescInvoice, useEnergyReadings, useSaveEnergyReadings, useEnergyConfig, useUpdateEnergyTariff, useEnergyReadingsSummary } from "@/hooks/useKitnets";
+import { useKitnets, useCelescInvoices, useCreateCelescInvoice, useUpdateCelescInvoice, useEnergyReadings, useSaveEnergyReadings, useEnergyConfig, useUpdateEnergyTariff, useEnergyReadingsSummary } from "@/hooks/useKitnets";
 import { formatCurrency, formatMonth, getCurrentMonth } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Plus, Save, Upload, Pencil, Sparkles, Loader2 } from "lucide-react";
+import { Plus, Save, Upload, Pencil, Sparkles, Loader2, X } from "lucide-react";
 
 export default function EnergyPage() {
   return (
@@ -49,11 +49,13 @@ const EMPTY_FORM = {
 function InvoicesTab() {
   const { data: invoices, isLoading } = useCelescInvoices();
   const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [mode, setMode] = useState<"upload" | "manual">("upload");
   const [extracting, setExtracting] = useState(false);
   const [previewFile, setPreviewFile] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const createMut = useCreateCelescInvoice();
+  const updateMut = useUpdateCelescInvoice();
   const { toast } = useToast();
   const [form, setForm] = useState(EMPTY_FORM);
 
@@ -64,8 +66,28 @@ function InvoicesTab() {
 
   const handleOpen = () => {
     setForm(EMPTY_FORM);
+    setEditingId(null);
     setPreviewFile(null);
     setMode("upload");
+    setOpen(true);
+  };
+
+  const handleEdit = (inv: any) => {
+    setForm({
+      residencial_code: inv.residencial_code ?? "RWT02",
+      reference_month: inv.reference_month ?? getCurrentMonth(),
+      due_date: inv.due_date ?? "",
+      kwh_total: String(inv.kwh_total ?? ""),
+      invoice_total: String(inv.invoice_total ?? ""),
+      cosip: String(inv.cosip ?? "0"),
+      pis_cofins_pct: String(inv.pis_cofins_pct ?? "0"),
+      icms_pct: String(inv.icms_pct ?? "0"),
+      solar_kwh_offset: String(inv.solar_kwh_offset ?? "0"),
+      amount_paid: String(inv.amount_paid ?? ""),
+    });
+    setEditingId(inv.id);
+    setPreviewFile(null);
+    setMode("manual");
     setOpen(true);
   };
 
@@ -136,7 +158,7 @@ function InvoicesTab() {
   const handleSave = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      await createMut.mutateAsync({
+      const payload = {
         residencial_code: form.residencial_code,
         reference_month: form.reference_month,
         due_date: form.due_date || null,
@@ -148,9 +170,14 @@ function InvoicesTab() {
         solar_kwh_offset: Number(form.solar_kwh_offset) || 0,
         amount_paid: Number(form.amount_paid) || 0,
         tariff_per_kwh: Number(tariff.toFixed(6)),
-        created_by: user?.id,
-      });
-      toast({ title: "Fatura salva!" });
+      };
+      if (editingId) {
+        await updateMut.mutateAsync({ id: editingId, ...payload });
+        toast({ title: "Fatura atualizada!" });
+      } else {
+        await createMut.mutateAsync({ ...payload, created_by: user?.id });
+        toast({ title: "Fatura salva!" });
+      }
       setOpen(false);
     } catch (e: any) {
       toast({ title: "Erro", description: e.message, variant: "destructive" });
@@ -183,6 +210,7 @@ function InvoicesTab() {
                 <TableHead className="text-muted-foreground">Solar kWh</TableHead>
                 <TableHead className="text-muted-foreground">Pago</TableHead>
                 <TableHead className="text-muted-foreground">Tarifa/kWh</TableHead>
+                <TableHead />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -195,6 +223,14 @@ function InvoicesTab() {
                   <TableCell className="font-mono text-foreground">{inv.solar_kwh_offset ?? 0}</TableCell>
                   <TableCell className="font-mono text-foreground">{formatCurrency(inv.amount_paid ?? 0)}</TableCell>
                   <TableCell className="font-mono text-foreground">R$ {(inv.tariff_per_kwh ?? 0).toFixed(4)}</TableCell>
+                  <TableCell>
+                    <button
+                      onClick={() => handleEdit(inv)}
+                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded border border-border hover:border-[#E8C97A]/50"
+                    >
+                      <Pencil className="w-3 h-3" /> Editar
+                    </button>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -206,7 +242,7 @@ function InvoicesTab() {
       <input ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={handleFileUpload} />
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="bg-card border-border max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle className="text-foreground">Nova Fatura CELESC</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="text-foreground">{editingId ? "Editar Fatura CELESC" : "Nova Fatura CELESC"}</DialogTitle></DialogHeader>
 
           {/* Mode toggle */}
           <div className="flex rounded-lg overflow-hidden border border-border">
@@ -330,8 +366,8 @@ function InvoicesTab() {
             </PremiumCard>
           </div>
           <DialogFooter>
-            <GoldButton onClick={handleSave} disabled={createMut.isPending} className="w-full justify-center">
-              {createMut.isPending ? "Salvando..." : "Salvar Fatura"}
+            <GoldButton onClick={handleSave} disabled={createMut.isPending || updateMut.isPending} className="w-full justify-center">
+              {(createMut.isPending || updateMut.isPending) ? "Salvando..." : editingId ? "Salvar Alterações" : "Salvar Fatura"}
             </GoldButton>
           </DialogFooter>
         </DialogContent>
