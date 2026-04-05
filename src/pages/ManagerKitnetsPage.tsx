@@ -24,7 +24,7 @@ import {
 } from "@/hooks/useKitnets";
 import { formatCurrency, formatMonth, getCurrentMonth } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
-import { LogOut, Home, Zap, Save, ArrowLeft } from "lucide-react";
+import { LogOut, Home, Zap, Save, ArrowLeft, Download } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 
 const statusLabels: Record<string, { label: string; variant: "green" | "gold" | "red" }> = {
@@ -280,6 +280,42 @@ function EnergiaTab({ month }: { month: string }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [units, readings, invoices, complex, tariff]);
 
+  const handleDownload = () => {
+    const monthLabel = formatMonth(month);
+    const rows: string[][] = [
+      [`Relatório de Energia Solar — ${complex} — ${monthLabel}`],
+      [`Tarifa: R$ ${tariff.toFixed(4)}/kWh`],
+      [],
+      ["Unidade", "Inquilino", "Ant. (kWh)", "Atual (kWh)", "Consumo (kWh)", "Valor (R$)"],
+    ];
+
+    units.forEach(u => {
+      const { current, previous, kwh, amount } = calcRow(u.id);
+      rows.push([
+        u.code ?? "",
+        u.tenant_name ?? "—",
+        String(previous),
+        String(current),
+        kwh.toFixed(2),
+        amount.toFixed(2),
+      ]);
+    });
+
+    rows.push([]);
+    rows.push(["Total Cobrado Inquilinos", "", "", "", "", totals.totalCharged.toFixed(2)]);
+    rows.push(["Fatura CELESC Paga", "", "", "", "", totals.invoicePaid.toFixed(2)]);
+    rows.push(["Margem Solar", "", "", "", "", totals.margin.toFixed(2)]);
+
+    const csv = rows.map(r => r.map(c => `"${c}"`).join(";")).join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `energia_${complex}_${month}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleSave = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -322,7 +358,15 @@ function EnergiaTab({ month }: { month: string }) {
             Tarifa: <span className="font-mono text-foreground">R$ {tariff.toFixed(4)}/kWh</span>
           </span>
         )}
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={handleDownload}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all"
+            style={{ background: 'rgba(45,212,191,0.1)', color: '#2DD4BF', border: '1px solid rgba(45,212,191,0.3)' }}
+          >
+            <Download className="w-4 h-4" />
+            Baixar CSV
+          </button>
           <GoldButton onClick={handleSave} disabled={saveMut.isPending}>
             <Save className="w-4 h-4 mr-1" />
             {saveMut.isPending ? "Salvando..." : "Salvar Leituras"}
