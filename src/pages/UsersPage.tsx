@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
 import { WtBadge } from "@/components/wt7/WtBadge";
+import { MonthPicker } from "@/components/wt7/MonthPicker";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDate } from "@/lib/formatters";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -316,22 +317,18 @@ export default function UsersPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Mês inicial</label>
-                  <input
-                    type="month"
+                  <MonthPicker
                     value={periodStart}
-                    onChange={e => { setPeriodStart(e.target.value); setConfirm3(false); }}
-                    className="w-full px-3 py-2 rounded-lg text-sm outline-none"
-                    style={{ background: '#080C10', border: '1px solid #1A2535', color: '#F0F4F8' }}
+                    onChange={v => { setPeriodStart(v); setConfirm3(false); }}
+                    className="w-full"
                   />
                 </div>
                 <div>
                   <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Mês final</label>
-                  <input
-                    type="month"
+                  <MonthPicker
                     value={periodEnd}
-                    onChange={e => { setPeriodEnd(e.target.value); setConfirm3(false); }}
-                    className="w-full px-3 py-2 rounded-lg text-sm outline-none"
-                    style={{ background: '#080C10', border: '1px solid #1A2535', color: '#F0F4F8' }}
+                    onChange={v => { setPeriodEnd(v); setConfirm3(false); }}
+                    className="w-full"
                   />
                 </div>
               </div>
