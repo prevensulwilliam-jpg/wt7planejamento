@@ -224,10 +224,38 @@ function ContratoTab({ kitnet, onUpdated }: { kitnet: Tables<"kitnets">; onUpdat
 function FechamentosTab({ kitnet }: { kitnet: Tables<"kitnets"> }) {
   const { data: fechamentos, isLoading } = useKitnetFechamentos(kitnet.id);
   const [showForm, setShowForm] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+
+  // Determina o mês a exibir: selectedMonth ou o mais recente
+  const latestMonth = fechamentos?.length
+    ? [...fechamentos].sort((a: any, b: any) =>
+        (b.reference_month ?? "").localeCompare(a.reference_month ?? "")
+      )[0]?.reference_month ?? null
+    : null;
+
+  const displayMonth = selectedMonth ?? latestMonth;
+
+  const displayed = fechamentos?.find((f: any) => f.reference_month === displayMonth) ?? null;
 
   return (
     <div className="space-y-4 mt-4">
-      <div className="flex justify-end">
+      <div className="flex items-center justify-between gap-3">
+        {/* Seletor de mês */}
+        <div className="flex items-center gap-2">
+          <MonthPicker
+            value={displayMonth ?? getCurrentMonth()}
+            onChange={v => setSelectedMonth(v)}
+            className="w-40"
+          />
+          {selectedMonth && selectedMonth !== latestMonth && (
+            <button
+              onClick={() => setSelectedMonth(null)}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              ← Último
+            </button>
+          )}
+        </div>
         <GoldButton onClick={() => setShowForm(v => !v)}>
           <Plus className="w-4 h-4 mr-1" />
           {showForm ? "Cancelar" : "Novo Fechamento"}
@@ -237,28 +265,37 @@ function FechamentosTab({ kitnet }: { kitnet: Tables<"kitnets"> }) {
       {showForm && <FechamentoForm kitnet={kitnet} onSaved={() => setShowForm(false)} />}
 
       {isLoading ? (
-        <div className="space-y-2">{[1, 2, 3].map(i => <Skeleton key={i} className="h-14 rounded-lg" />)}</div>
+        <Skeleton className="h-24 rounded-xl" />
       ) : !fechamentos?.length ? (
         <PremiumCard className="text-center py-8">
           <p className="text-muted-foreground text-sm">Nenhum fechamento registrado</p>
         </PremiumCard>
+      ) : displayed ? (
+        <PremiumCard className="p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium text-foreground">{formatMonth(displayed.reference_month ?? "")}</p>
+            {selectedMonth === null && (
+              <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(232,201,122,0.15)', color: '#E8C97A' }}>
+                Último fechamento
+              </span>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+            <span>Aluguel bruto: <span className="text-foreground font-mono">{formatCurrency((displayed as any).rent_gross ?? 0)}</span></span>
+            <span>ADM: <span className="text-foreground font-mono">{formatCurrency((displayed as any).adm_fee ?? 0)}</span></span>
+            {(displayed as any).celesc > 0 && <span>CELESC: <span className="text-foreground font-mono">{formatCurrency((displayed as any).celesc)}</span></span>}
+            {(displayed as any).semasa > 0 && <span>SEMASA: <span className="text-foreground font-mono">{formatCurrency((displayed as any).semasa)}</span></span>}
+            {(displayed as any).iptu_taxa > 0 && <span>IPTU/Lixo: <span className="text-foreground font-mono">{formatCurrency((displayed as any).iptu_taxa)}</span></span>}
+          </div>
+          <div className="pt-2 border-t border-border flex items-center justify-between">
+            <p className="text-xs text-muted-foreground uppercase tracking-wider">Total Líquido</p>
+            <p className="font-mono font-bold text-2xl" style={{ color: '#E8C97A' }}>{formatCurrency((displayed as any).total_liquid ?? 0)}</p>
+          </div>
+        </PremiumCard>
       ) : (
-        <div className="space-y-2">
-          {fechamentos.map((f: any) => (
-            <PremiumCard key={f.id} className="p-3 flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-foreground">{f.reference_month ? formatMonth(f.reference_month) : "—"}</p>
-                <p className="text-xs text-muted-foreground">
-                  Bruto: {formatCurrency(f.rent_gross ?? 0)} | ADM: {formatCurrency(f.adm_fee ?? 0)}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="font-mono font-bold text-lg" style={{ color: '#E8C97A' }}>{formatCurrency(f.total_liquid ?? 0)}</p>
-                <p className="text-xs text-muted-foreground">líquido</p>
-              </div>
-            </PremiumCard>
-          ))}
-        </div>
+        <PremiumCard className="text-center py-8">
+          <p className="text-muted-foreground text-sm">Nenhum fechamento em {formatMonth(displayMonth ?? "")}</p>
+        </PremiumCard>
       )}
     </div>
   );
