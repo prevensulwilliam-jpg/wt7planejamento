@@ -40,7 +40,7 @@ export default function KitnetsPage() {
           <TabsTrigger value="energia">Energia Solar</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview"><OverviewTab month={month} /></TabsContent>
+        <TabsContent value="overview"><OverviewTab month={month} setMonth={setMonth} /></TabsContent>
         <TabsContent value="entries"><EntriesTab month={month} setMonth={setMonth} /></TabsContent>
         <TabsContent value="report"><ReportTab month={month} setMonth={setMonth} /></TabsContent>
         <TabsContent value="energia"><EnergiaTab month={month} /></TabsContent>
@@ -50,7 +50,7 @@ export default function KitnetsPage() {
 }
 
 // ─── Overview Tab ───
-function OverviewTab({ month }: { month: string }) {
+function OverviewTab({ month, setMonth }: { month: string; setMonth: (v: string) => void }) {
   const { data: kitnets, isLoading, refetch } = useKitnets();
   const summary = useKitnetSummary(month);
   const [selected, setSelected] = useState<Tables<"kitnets"> | null>(null);
@@ -73,7 +73,11 @@ function OverviewTab({ month }: { month: string }) {
 
   return (
     <div className="space-y-6 mt-4">
-      {/* KPIs */}
+      {/* Seletor de mês + KPIs */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <span className="text-xs font-mono uppercase tracking-widest" style={{ color: '#4A5568' }}>Mês de referência</span>
+        <MonthPicker value={month} onChange={setMonth} className="w-40" />
+      </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard label="Total Recebido" value={summary.totalReceived} color="gold" compact />
         <KpiCard label="Ocupadas" value={summary.occupied} color="green" compact formatAs="number" />

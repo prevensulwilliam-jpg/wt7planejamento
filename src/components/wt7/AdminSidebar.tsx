@@ -28,7 +28,7 @@ const navGroups = [
   {
     label: "IMÓVEIS",
     items: [
-      { label: "Kitnets (13)", icon: Home, href: "/kitnets" },
+      { label: "Kitnets", icon: Home, href: "/kitnets" },
       { label: "Energia Solar", icon: Zap, href: "/energy" },
       { label: "Portal Manager", icon: KeyRound, href: "/manager/kitnets" },
       { label: "Obras & Terrenos", icon: HardHat, href: "/constructions" },
