@@ -282,17 +282,44 @@ function FechamentoForm({ kitnet, onSaved }: { kitnet: Tables<"kitnets">; onSave
     adm_fee: String(((kitnet.rent_value ?? 0) * 0.1).toFixed(2)),
     reference_month: month,
   });
-  const [showCelescCalc, setShowCelescCalc] = useState(false);
+  const [celescMode, setCelescMode] = useState<"idle" | "loading" | "found" | "manual">("idle");
+  const [celescFoundInfo, setCelescFoundInfo] = useState<{ kwh: number; amount: number; tariff: number } | null>(null);
   const [readingCurrent, setReadingCurrent] = useState("");
 
-  const tariff = invoices?.find(i => i.residencial_code === kitnet.residencial_code)?.tariff_per_kwh ?? 0;
+  const tariff = invoices?.find(i => i.residencial_code === kitnet.residencial_code)?.tariff_per_kwh ?? 1.06;
   const prevReading = lastReading?.reading_current ?? 0;
   const kwh = Math.max(0, (Number(readingCurrent) || 0) - prevReading);
   const celescCalc = kwh * tariff;
 
+  const handleCelescCalc = async () => {
+    setCelescMode("loading");
+    try {
+      const { data } = await supabase
+        .from("energy_readings")
+        .select("reading_current, reading_previous, consumption_kwh, amount_to_charge, tariff_per_kwh")
+        .eq("kitnet_id", kitnet.id)
+        .eq("reference_month", form.reference_month)
+        .maybeSingle();
+
+      if (data && data.amount_to_charge != null) {
+        setCelescFoundInfo({
+          kwh: data.consumption_kwh ?? 0,
+          amount: data.amount_to_charge,
+          tariff: data.tariff_per_kwh ?? tariff,
+        });
+        setForm(f => ({ ...f, celesc: data.amount_to_charge!.toFixed(2) }));
+        setCelescMode("found");
+      } else {
+        setCelescMode("manual");
+      }
+    } catch {
+      setCelescMode("manual");
+    }
+  };
+
   const applyCelescCalc = () => {
     setForm(f => ({ ...f, celesc: celescCalc.toFixed(2) }));
-    setShowCelescCalc(false);
+    setCelescMode("idle");
   };
 
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
@@ -371,17 +398,40 @@ function FechamentoForm({ kitnet, onSaved }: { kitnet: Tables<"kitnets">; onSave
       <div>
         <div className="flex items-center justify-between mb-1">
           <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">CELESC (R$)</label>
-          <button
-            onClick={() => setShowCelescCalc(v => !v)}
-            className="flex items-center gap-1 text-xs text-[#E8C97A] hover:underline"
-          >
-            <Zap className="w-3 h-3" /> Calcular pela leitura
-          </button>
+          {celescMode === "idle" && (
+            <button onClick={handleCelescCalc} className="flex items-center gap-1 text-xs text-[#E8C97A] hover:underline">
+              <Zap className="w-3 h-3" /> Calcular pela leitura
+            </button>
+          )}
+          {celescMode === "loading" && (
+            <span className="text-xs text-muted-foreground animate-pulse">Buscando leitura...</span>
+          )}
+          {(celescMode === "found" || celescMode === "manual") && (
+            <button onClick={() => setCelescMode("idle")} className="text-xs text-muted-foreground hover:underline">
+              ✕ Fechar
+            </button>
+          )}
         </div>
         <Input type="number" value={form.celesc} onChange={e => set("celesc", e.target.value)} className="bg-background border-border text-foreground" />
 
-        {showCelescCalc && (
+        {/* Leitura encontrada automaticamente */}
+        {celescMode === "found" && celescFoundInfo && (
+          <div className="mt-2 rounded-lg border border-green-500/30 bg-green-500/10 p-3 space-y-1">
+            <p className="text-xs font-medium" style={{ color: '#4ADE80' }}>✓ Leitura encontrada no sistema</p>
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>Consumo: <span className="font-mono text-foreground">{celescFoundInfo.kwh.toFixed(2)} kWh</span></span>
+              <span>Tarifa: <span className="font-mono text-foreground">R$ {celescFoundInfo.tariff.toFixed(4)}</span></span>
+            </div>
+            <p className="text-sm font-bold" style={{ color: '#E8C97A' }}>
+              {formatCurrency(celescFoundInfo.amount)} aplicado automaticamente
+            </p>
+          </div>
+        )}
+
+        {/* Leitura manual — não encontrada */}
+        {celescMode === "manual" && (
           <div className="mt-2 rounded-lg border border-border bg-secondary/20 p-3 space-y-2">
+            <p className="text-xs text-muted-foreground">Nenhuma leitura registrada para este mês. Informe abaixo:</p>
             <div className="flex justify-between text-xs text-muted-foreground">
               <span>Leitura anterior:</span>
               <span className="font-mono">{prevReading.toFixed(2)} kWh</span>
