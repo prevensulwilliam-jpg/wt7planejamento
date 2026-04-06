@@ -12,14 +12,16 @@ import { KpiCard } from "@/components/wt7/KpiCard";
 import { WtBadge } from "@/components/wt7/WtBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { KitnetModal } from "@/components/wt7/KitnetModal";
-import { useKitnets, useKitnetEntries, useKitnetSummary, useCreateKitnetEntry, useEnergyReadings, useCelescInvoices, useSaveEnergyReadings } from "@/hooks/useKitnets";
+import { useKitnets, useKitnetEntries, useKitnetSummary, useCreateKitnetEntry, useEnergyReadings, useCelescInvoices, useSaveEnergyReadings, useUnreconciledEntries, useReconcileKitnetEntry } from "@/hooks/useKitnets";
 import { formatCurrency, formatMonth, getCurrentMonth, formatDate } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Plus, Download, Save, Printer } from "lucide-react";
+import { Plus, Download, Save, Printer, CheckCircle, XCircle, AlertCircle, ArrowLeftRight } from "lucide-react";
 import { abrirReciboConsolidado } from "@/lib/relatorioFechamento";
 import type { Tables } from "@/integrations/supabase/types";
-import { useMemo } from "react";
+import { useMemo, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
+import { useBankTransactions } from "@/hooks/useBankReconciliation";
 
 const statusLabels: Record<string, { label: string; variant: "green" | "gold" | "red" }> = {
   occupied: { label: "Ocupada", variant: "green" },
@@ -29,22 +31,28 @@ const statusLabels: Record<string, { label: string; variant: "green" | "gold" | 
 
 export default function KitnetsPage() {
   const [month, setMonth] = useState(getCurrentMonth());
+  const [searchParams] = useSearchParams();
+  const defaultTab = searchParams.get("tab") ?? "overview";
 
   return (
     <div className="space-y-6">
       <h1 className="font-display font-bold text-2xl text-foreground">Kitnets</h1>
-      <Tabs defaultValue="overview">
+      <Tabs defaultValue={defaultTab}>
         <TabsList className="bg-card border border-border">
           <TabsTrigger value="overview">Visão Geral</TabsTrigger>
           <TabsTrigger value="entries">Lançamentos</TabsTrigger>
           <TabsTrigger value="report">Relatório Mensal</TabsTrigger>
           <TabsTrigger value="energia">Energia Solar</TabsTrigger>
+          <TabsTrigger value="conciliacao" className="gap-1.5">
+            <ArrowLeftRight className="w-3.5 h-3.5" /> Conciliação
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview"><OverviewTab month={month} setMonth={setMonth} /></TabsContent>
         <TabsContent value="entries"><EntriesTab month={month} setMonth={setMonth} /></TabsContent>
         <TabsContent value="report"><ReportTab month={month} setMonth={setMonth} /></TabsContent>
         <TabsContent value="energia"><EnergiaTab month={month} /></TabsContent>
+        <TabsContent value="conciliacao"><ConciliacaoTab /></TabsContent>
       </Tabs>
     </div>
   );
@@ -522,6 +530,183 @@ function EnergiaTab({ month }: { month: string }) {
           <KpiCard label="Total Cobrado Inquilinos" value={totals.totalCharged} color="gold" />
           <KpiCard label="Fatura CELESC Paga" value={totals.invoicePaid} color="red" />
           <KpiCard label="Margem Solar" value={totals.margin} color="green" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════
+//  ABA CONCILIAÇÃO DE KITNETS
+// ═══════════════════════════════════════════════════
+function ConciliacaoTab() {
+  const [month, setMonth] = useState(getCurrentMonth());
+  const { data: entries = [], isLoading } = useUnreconciledEntries(month);
+  const { data: txRaw = [] } = useBankTransactions({ month });
+  const reconcileMut = useReconcileKitnetEntry();
+  const { toast } = useToast();
+
+  // Apenas créditos não-matched do extrato
+  const credits = useMemo(
+    () => (txRaw as any[]).filter(t => t.type === "credit" && t.status !== "ignored"),
+    [txRaw]
+  );
+
+  // Sugestão automática por valor exato
+  const suggestions = useMemo(() => {
+    const map: Record<string, any> = {};
+    entries.forEach((e: any) => {
+      const match = credits.find(
+        t => Math.abs(Number(t.amount) - Number(e.total_liquid)) < 0.02
+      );
+      map[e.id] = match ?? null;
+    });
+    return map;
+  }, [entries, credits]);
+
+  const [selected, setSelected] = useState<Record<string, string | null>>({});
+
+  const txForEntry = (entryId: string): any | null =>
+    selected[entryId] !== undefined
+      ? credits.find(t => t.id === selected[entryId]) ?? null
+      : suggestions[entryId];
+
+  const handleReconcile = async (entry: any) => {
+    const tx = txForEntry(entry.id);
+    try {
+      await reconcileMut.mutateAsync({
+        entryId: entry.id,
+        bankTransactionId: tx?.id ?? null,
+      });
+      toast({ title: `${entry.kitnets?.code} conciliado!` });
+    } catch (e: any) {
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    }
+  };
+
+  const handleIgnore = async (entry: any) => {
+    try {
+      await reconcileMut.mutateAsync({ entryId: entry.id, bankTransactionId: null });
+      toast({ title: `${entry.kitnets?.code} marcado sem extrato` });
+    } catch (e: any) {
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    }
+  };
+
+  return (
+    <div className="space-y-5 mt-4">
+      {/* Filtro de mês */}
+      <div className="flex items-center gap-3">
+        <span className="text-xs font-mono uppercase tracking-widest" style={{ color: '#4A5568' }}>Mês</span>
+        <MonthPicker value={month} onChange={setMonth} className="w-40" />
+        {entries.length > 0 && (
+          <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: 'rgba(232,201,122,0.15)', color: '#E8C97A' }}>
+            {entries.length} {entries.length === 1 ? "pendente" : "pendentes"}
+          </span>
+        )}
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-3">{[1,2,3].map(i => <Skeleton key={i} className="h-28 rounded-xl" style={{ background: '#131B22' }} />)}</div>
+      ) : entries.length === 0 ? (
+        <PremiumCard className="py-12 text-center">
+          <CheckCircle className="w-10 h-10 mx-auto mb-3" style={{ color: '#10B981' }} />
+          <p className="font-medium text-foreground">Todos os repasses estão conciliados</p>
+          <p className="text-xs text-muted-foreground mt-1">Nenhum fechamento pendente em {formatMonth(month)}</p>
+        </PremiumCard>
+      ) : (
+        <div className="space-y-3">
+          {entries.map((entry: any) => {
+            const tx = txForEntry(entry.id);
+            const diff = tx ? Math.abs(Number(tx.amount) - Number(entry.total_liquid)) : null;
+            const exactMatch = diff !== null && diff < 0.02;
+
+            return (
+              <PremiumCard key={entry.id} className="p-4 space-y-3">
+                {/* Cabeçalho */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="font-mono font-bold text-sm" style={{ color: '#E8C97A' }}>
+                      {entry.kitnets?.code}
+                    </span>
+                    <span className="text-xs text-muted-foreground ml-2">
+                      {entry.kitnets?.tenant_name ?? "—"} · {formatMonth(entry.reference_month)}
+                    </span>
+                  </div>
+                  <span className="font-mono font-bold text-lg text-foreground">
+                    {formatCurrency(entry.total_liquid ?? 0)}
+                  </span>
+                </div>
+
+                {/* Match sugerido / selecionado */}
+                <div className="rounded-lg p-3 space-y-2" style={{ background: '#080C10', border: '1px solid #1A2535' }}>
+                  <p className="text-xs font-mono uppercase tracking-wider" style={{ color: '#4A5568' }}>
+                    Transação do extrato
+                  </p>
+
+                  {tx ? (
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">{tx.description}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {tx.date ? formatDate(tx.date) : "—"} · {formatCurrency(tx.amount)}
+                        </p>
+                      </div>
+                      {exactMatch ? (
+                        <span className="flex items-center gap-1 text-xs font-medium" style={{ color: '#10B981' }}>
+                          <CheckCircle className="w-3.5 h-3.5" /> Valor exato
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1 text-xs font-medium" style={{ color: '#F59E0B' }}>
+                          <AlertCircle className="w-3.5 h-3.5" /> Difere {formatCurrency(diff ?? 0)}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground italic">Nenhuma transação encontrada com este valor</p>
+                  )}
+
+                  {/* Seleção manual */}
+                  <Select
+                    value={selected[entry.id] ?? (suggestions[entry.id]?.id ?? "__none")}
+                    onValueChange={v => setSelected(s => ({ ...s, [entry.id]: v === "__none" ? null : v }))}
+                  >
+                    <SelectTrigger className="w-full text-xs bg-background border-border text-foreground h-8">
+                      <SelectValue placeholder="Selecionar outra transação..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none">— Sem vínculo —</SelectItem>
+                      {credits.map((t: any) => (
+                        <SelectItem key={t.id} value={t.id}>
+                          {t.date ? formatDate(t.date) : "?"} · {formatCurrency(t.amount)} · {t.description?.slice(0, 40)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Ações */}
+                <div className="flex gap-2 justify-end">
+                  <button
+                    onClick={() => handleIgnore(entry)}
+                    disabled={reconcileMut.isPending}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all"
+                    style={{ color: '#64748B', border: '1px solid #1A2535' }}
+                  >
+                    <XCircle className="w-3.5 h-3.5" /> Sem extrato
+                  </button>
+                  <GoldButton
+                    onClick={() => handleReconcile(entry)}
+                    disabled={reconcileMut.isPending}
+                    className="text-xs px-4"
+                  >
+                    <CheckCircle className="w-3.5 h-3.5 mr-1" />
+                    {tx ? "Confirmar vínculo" : "Marcar conciliado"}
+                  </GoldButton>
+                </div>
+              </PremiumCard>
+            );
+          })}
         </div>
       )}
     </div>

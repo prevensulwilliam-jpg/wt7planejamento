@@ -262,6 +262,74 @@ export function useUpdateEnergyTariff() {
   });
 }
 
+// ─── Conciliação de Kitnets ───
+
+/** Todos os fechamentos não conciliados, opcionalmente filtrados por mês */
+export function useUnreconciledEntries(month?: string) {
+  return useQuery({
+    queryKey: ["kitnet_entries_unreconciled", month],
+    queryFn: async () => {
+      let q = supabase
+        .from("kitnet_entries")
+        .select("*, kitnets(code, residencial_code, tenant_name)")
+        .eq("reconciled" as any, false)
+        .order("reference_month", { ascending: false });
+      if (month) q = q.eq("reference_month", month);
+      const { data, error } = await q;
+      if (error) throw error;
+      return data as any[];
+    },
+  });
+}
+
+/** Conta total de fechamentos não conciliados (para widget do Dashboard) */
+export function useUnreconciledCount() {
+  return useQuery({
+    queryKey: ["kitnet_entries_unreconciled_count"],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("kitnet_entries")
+        .select("id", { count: "exact", head: true })
+        .eq("reconciled" as any, false);
+      if (error) throw error;
+      return count ?? 0;
+    },
+    refetchInterval: 60_000, // atualiza a cada 1 min
+  });
+}
+
+/** Marca um fechamento como conciliado e vincula a uma transação bancária */
+export function useReconcileKitnetEntry() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      entryId,
+      bankTransactionId,
+    }: {
+      entryId: string;
+      bankTransactionId: string | null;
+    }) => {
+      const { error } = await supabase
+        .from("kitnet_entries")
+        .update({ reconciled: true, bank_transaction_id: bankTransactionId } as any)
+        .eq("id", entryId);
+      if (error) throw error;
+      // Marca a transação bancária como matched se vinculada
+      if (bankTransactionId) {
+        await supabase
+          .from("bank_transactions")
+          .update({ status: "matched" })
+          .eq("id", bankTransactionId);
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["kitnet_entries_unreconciled"] });
+      qc.invalidateQueries({ queryKey: ["kitnet_entries_unreconciled_count"] });
+      qc.invalidateQueries({ queryKey: ["bank_transactions"] });
+    },
+  });
+}
+
 // ─── Energy Readings Summary (agrupado por complexo) ───
 export function useEnergyReadingsSummary(month: string) {
   return useQuery({

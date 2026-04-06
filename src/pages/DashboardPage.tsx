@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Plus, RefreshCw } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, RefreshCw, Home, ArrowRight } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { KpiCard } from "@/components/wt7/KpiCard";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
 import { GoldButton } from "@/components/wt7/GoldButton";
@@ -8,7 +9,7 @@ import { WtBadge } from "@/components/wt7/WtBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency, formatMonth, getCurrentMonth } from "@/lib/formatters";
 import { useDashboardKPIs, useRevenueExpenseTrend, useGoals, useNetWorth } from "@/hooks/useFinances";
-import { useKitnets } from "@/hooks/useKitnets";
+import { useKitnets, useUnreconciledCount } from "@/hooks/useKitnets";
 import { useNavalAnalysis } from "@/hooks/useNaval";
 import ReactMarkdown from "react-markdown";
 import {
@@ -126,11 +127,13 @@ function NavalDashboardCard() {
 
 export default function DashboardPage() {
   const [currentMonth, setCurrentMonth] = useState(getCurrentMonth());
+  const navigate = useNavigate();
   const kpis = useDashboardKPIs(currentMonth);
   const trend = useRevenueExpenseTrend();
   const { netWorth } = useNetWorth();
   const goalsQuery = useGoals();
   const kitnetsQuery = useKitnets();
+  const { data: unreconciledCount = 0 } = useUnreconciledCount();
 
   const revenueComposition = Object.entries(kpis.revenueBySource).map(([key, value]) => ({
     name: sourceLabels[key] ?? key,
@@ -163,9 +166,34 @@ export default function DashboardPage() {
         </div>
         <div className="flex items-center gap-3">
           <GoldButton variant="outline"><Plus className="w-4 h-4" /> Lançamento</GoldButton>
-          
         </div>
       </div>
+
+      {/* Widget: repasses pendentes de conciliação */}
+      {unreconciledCount > 0 && (
+        <button
+          onClick={() => navigate("/kitnets?tab=conciliacao")}
+          className="w-full flex items-center justify-between px-5 py-3.5 rounded-xl transition-all hover:brightness-110"
+          style={{ background: 'rgba(232,201,122,0.08)', border: '1px solid rgba(232,201,122,0.35)' }}
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(232,201,122,0.15)' }}>
+              <Home className="w-4 h-4" style={{ color: '#E8C97A' }} />
+            </div>
+            <div className="text-left">
+              <p className="text-sm font-bold" style={{ color: '#E8C97A' }}>
+                {unreconciledCount} {unreconciledCount === 1 ? "repasse pendente" : "repasses pendentes"} de conciliação
+              </p>
+              <p className="text-xs" style={{ color: '#94A3B8' }}>
+                Fechamentos do Cláudio aguardando confirmação no extrato bancário
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 text-sm font-medium" style={{ color: '#E8C97A' }}>
+            Conciliar agora <ArrowRight className="w-4 h-4" />
+          </div>
+        </button>
+      )}
 
       {/* Meta R$100k card */}
       <div
