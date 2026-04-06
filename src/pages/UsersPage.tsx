@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Users, Link as LinkIcon, Trash2, AlertTriangle, Clock, CheckCircle, XCircle, Bell, Copy, Check } from "lucide-react";
-import { usePendingUsers, useApproveUser, useRejectUser, useLoginHistory } from "@/hooks/useUsers";
+import { usePendingUsers, useApproveUser, useRejectUser, useLoginHistory, useDeleteUser } from "@/hooks/useUsers";
 
 const roleBadge: Record<string, { variant: 'gold' | 'green' | 'cyan' | 'gray'; label: string }> = {
   admin: { variant: 'gold', label: 'Admin' },
@@ -69,6 +69,8 @@ export default function UsersPage() {
   };
   const approveMut = useApproveUser();
   const rejectMut = useRejectUser();
+  const deleteMut = useDeleteUser();
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [historyUserId, setHistoryUserId] = useState<string>("");
   const { data: loginHistory = [] } = useLoginHistory(historyUserId || undefined);
   const [cleaning, setCleaning] = useState(false);
@@ -314,42 +316,94 @@ export default function UsersPage() {
         </div>
       </PremiumCard>
 
-      {/* Users table */}
-      <PremiumCard>
-        <h3 className="font-display font-bold text-sm mb-4" style={{ color: '#F0F4F8' }}>Usuários do Sistema</h3>
-        {isLoading ? (
-          <div className="space-y-3">
-            {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-12 rounded-lg" style={{ background: '#131B22' }} />)}
-          </div>
-        ) : data.length === 0 ? (
-          <div className="text-center py-12" style={{ color: '#4A5568' }}>
-            <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
-            <p className="text-sm">Nenhum usuário encontrado</p>
-          </div>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow style={{ borderColor: '#1A2535' }}>
-                <TableHead style={{ color: '#94A3B8' }}>Nome</TableHead>
-                <TableHead style={{ color: '#94A3B8' }}>Perfil</TableHead>
-                <TableHead style={{ color: '#94A3B8' }}>Data Criação</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.map((u, i) => {
-                const badge = roleBadge[u.role] ?? { variant: 'gray' as const, label: u.role };
-                return (
-                  <TableRow key={`${u.user_id}-${i}`} style={{ borderColor: '#1A2535' }}>
-                    <TableCell style={{ color: '#F0F4F8' }}>{u.name}</TableCell>
-                    <TableCell><WtBadge variant={badge.variant}>{badge.label}</WtBadge></TableCell>
-                    <TableCell className="font-mono text-xs" style={{ color: '#94A3B8' }}>{u.created_at ? formatDate(u.created_at) : '—'}</TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        )}
-      </PremiumCard>
+      {/* Users by role */}
+      {isLoading ? (
+        <div className="space-y-3">
+          {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-12 rounded-lg" style={{ background: '#131B22' }} />)}
+        </div>
+      ) : (
+        <>
+          {[
+            { role: "admin", icon: "👑", title: "Administradores", color: "#E8C97A" },
+            { role: "kitnet_manager", icon: "🏠", title: "Portal Manager", color: "#2DD4BF" },
+            { role: "partner", icon: "🤝", title: "Sócios", color: "#94A3B8" },
+            { role: "financial", icon: "💰", title: "Financeiro", color: "#22C55E" },
+          ].map(group => {
+            const users = data.filter(u => u.role === group.role);
+            if (users.length === 0) return null;
+            return (
+              <PremiumCard key={group.role}>
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-base">{group.icon}</span>
+                  <h3 className="font-display font-bold text-sm" style={{ color: group.color }}>{group.title}</h3>
+                  <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(148,163,184,0.1)', color: '#64748B' }}>{users.length}</span>
+                </div>
+                <div className="space-y-2">
+                  {users.map((u, i) => {
+                    const badge = roleBadge[u.role] ?? { variant: 'gray' as const, label: u.role };
+                    const isAdmin = u.role === "admin";
+                    return (
+                      <div key={`${u.user_id}-${i}`} className="flex items-center justify-between rounded-xl px-4 py-3" style={{ background: '#080C10', border: '1px solid #1A2535' }}>
+                        <div className="flex items-center gap-3">
+                          <div>
+                            <p className="text-sm font-medium" style={{ color: '#F0F4F8' }}>{u.name}</p>
+                            <p className="text-xs font-mono mt-0.5" style={{ color: '#64748B' }}>
+                              Desde {u.created_at ? formatDate(u.created_at) : '—'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <WtBadge variant={badge.variant}>{badge.label}</WtBadge>
+                          {!isAdmin && (
+                            confirmDelete === u.user_id ? (
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  onClick={() => {
+                                    deleteMut.mutate(u.user_id, {
+                                      onSuccess: () => {
+                                        toast({ title: "Usuário excluído" });
+                                        setConfirmDelete(null);
+                                      },
+                                      onError: (err: any) => {
+                                        toast({ title: "Erro", description: err.message, variant: "destructive" });
+                                      },
+                                    });
+                                  }}
+                                  disabled={deleteMut.isPending}
+                                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all"
+                                  style={{ background: '#F43F5E', color: '#fff' }}
+                                >
+                                  {deleteMut.isPending ? "..." : "Confirmar"}
+                                </button>
+                                <button
+                                  onClick={() => setConfirmDelete(null)}
+                                  className="px-2.5 py-1 rounded-lg text-xs transition-all"
+                                  style={{ color: '#94A3B8', border: '1px solid #1A2535' }}
+                                >
+                                  Não
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setConfirmDelete(u.user_id)}
+                                className="flex items-center gap-1 px-2 py-1 rounded-md text-xs transition-all hover:opacity-80"
+                                style={{ background: 'rgba(244,63,94,0.1)', color: '#F43F5E', border: '1px solid rgba(244,63,94,0.2)' }}
+                                title="Excluir usuário"
+                              >
+                                <Trash2 className="w-3 h-3" /> Excluir
+                              </button>
+                            )
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </PremiumCard>
+            );
+          })}
+        </>
+      )}
 
       {/* Zona de Perigo */}
       <PremiumCard glowColor="rgba(244,63,94,0.15)">

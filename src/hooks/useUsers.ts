@@ -88,6 +88,38 @@ export function useLoginHistory(userId?: string) {
   });
 }
 
+// ─── Delete user (remove role + auth user) ───
+export function useDeleteUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (userId: string) => {
+      // Remove da tabela user_roles
+      const { error } = await (supabase as any)
+        .from("user_roles")
+        .delete()
+        .eq("user_id", userId);
+      if (error) throw error;
+
+      // Remove login_history
+      await (supabase as any)
+        .from("login_history")
+        .delete()
+        .eq("user_id", userId);
+
+      // Remove do auth via função SECURITY DEFINER
+      const { error: delError } = await supabase
+        .rpc("delete_user_by_admin" as any, { p_user_id: userId });
+      if (delError) throw delError;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["users_with_roles"] });
+      qc.invalidateQueries({ queryKey: ["users_pending"] });
+      qc.invalidateQueries({ queryKey: ["users_pending_count"] });
+      qc.invalidateQueries({ queryKey: ["login_history"] });
+    },
+  });
+}
+
 // ─── Pending count (for badge) ───
 export function usePendingCount() {
   return useQuery({
