@@ -189,6 +189,7 @@ function KitnetsTab({ month }: { month: string }) {
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
               {units.map(k => {
                 const s = statusLabels[k.status ?? "vacant"] ?? statusLabels.vacant;
+                const fechamento = (entries as any[] ?? []).find(e => e.kitnet_id === k.id);
                 return (
                   <PremiumCard key={k.id} className="p-4 space-y-2">
                     <div className="flex items-center justify-between">
@@ -200,6 +201,21 @@ function KitnetsTab({ month }: { month: string }) {
                       <p className="text-xs text-muted-foreground">{k.tenant_phone}</p>
                     )}
                     <p className="font-mono text-lg text-foreground">{formatCurrency(k.rent_value ?? 0)}</p>
+
+                    {/* Badge de fechamento */}
+                    {fechamento ? (
+                      <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg" style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)' }}>
+                        <span style={{ color: '#10B981' }}>✓</span>
+                        <span className="text-xs font-medium" style={{ color: '#10B981' }}>
+                          Fechado · {formatCurrency(fechamento.total_liquid ?? 0)}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg" style={{ background: 'rgba(148,163,184,0.08)', border: '1px solid rgba(148,163,184,0.2)' }}>
+                        <span className="text-xs" style={{ color: '#64748B' }}>— Sem fechamento</span>
+                      </div>
+                    )}
+
                     <GoldButton className="w-full text-xs justify-center" onClick={() => setSelected(k)}>
                       Gerenciar
                     </GoldButton>
@@ -210,36 +226,6 @@ function KitnetsTab({ month }: { month: string }) {
           </div>
         ))
       )}
-
-      {entries?.length ? (
-        <div>
-          <h2 className="font-display font-bold text-lg text-foreground mb-3">Fechamentos — {formatMonth(month)}</h2>
-          <div className="rounded-xl overflow-hidden border border-border">
-            <Table>
-              <TableHeader>
-                <TableRow className="border-border">
-                  <TableHead className="text-muted-foreground">Kitnet</TableHead>
-                  <TableHead className="text-muted-foreground">Inquilino</TableHead>
-                  <TableHead className="text-muted-foreground">Bruto</TableHead>
-                  <TableHead className="text-muted-foreground">ADM</TableHead>
-                  <TableHead className="text-muted-foreground">Líquido</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {entries.map((e: any) => (
-                  <TableRow key={e.id} className="border-border">
-                    <TableCell className="font-mono text-foreground">{e.kitnets?.code}</TableCell>
-                    <TableCell className="text-muted-foreground">{e.kitnets?.tenant_name || "—"}</TableCell>
-                    <TableCell className="font-mono text-foreground">{formatCurrency(e.rent_gross ?? 0)}</TableCell>
-                    <TableCell className="font-mono text-foreground">{formatCurrency(e.adm_fee ?? 0)}</TableCell>
-                    <TableCell className="font-mono font-bold" style={{ color: '#E8C97A' }}>{formatCurrency(e.total_liquid ?? 0)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </div>
-      ) : null}
 
       {selected && (
         <KitnetModal
