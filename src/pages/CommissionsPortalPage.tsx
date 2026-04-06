@@ -2,12 +2,10 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { MonthPicker } from "@/components/wt7/MonthPicker";
-import { DatePicker } from "@/components/wt7/DatePicker";
 import { GoldButton } from "@/components/wt7/GoldButton";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
 import { KpiCard } from "@/components/wt7/KpiCard";
@@ -151,23 +149,25 @@ function PrevensulForm({ month, userId }: { month: string; userId: string }) {
   const { toast } = useToast();
   const createBilling = useCreateBilling();
   const [form, setForm] = useState({
-    client_name: "", contract_total: "", contract_nf: "",
+    client_name: "", contract_total: "", balance_remaining: "", contract_nf: "",
     installment_current: "", installment_total: "",
-    closing_date: "", amount_paid: "", status: "Pendente", notes: "",
+    closing_date: "", amount_paid: "", status: "Pendente",
   });
 
   const commission = useMemo(() => (parseFloat(form.amount_paid) || 0) * 0.03, [form.amount_paid]);
 
   const handleSubmit = async () => {
     if (!form.client_name || !form.amount_paid) {
-      toast({ title: "Preencha os campos obrigatórios", variant: "destructive" }); return;
+      toast({ title: "Preencha Cliente e Pago", variant: "destructive" }); return;
     }
     const paid = parseFloat(form.amount_paid) || 0;
     const contractTotal = parseFloat(form.contract_total) || 0;
+    const saldo = parseFloat(form.balance_remaining) || 0;
     try {
       await createBilling.mutateAsync({
         client_name: form.client_name,
         contract_total: contractTotal,
+        balance_remaining: saldo,
         contract_nf: form.contract_nf || null,
         installment_current: parseInt(form.installment_current) || null,
         installment_total: parseInt(form.installment_total) || null,
@@ -175,14 +175,12 @@ function PrevensulForm({ month, userId }: { month: string; userId: string }) {
         amount_paid: paid,
         commission_rate: 0.03,
         commission_value: paid * 0.03,
-        balance_remaining: contractTotal - paid > 0 ? contractTotal - paid : 0,
         status: form.status,
         reference_month: month,
-        notes: form.notes || null,
         created_by: userId,
       });
       toast({ title: "Faturamento registrado!" });
-      setForm({ client_name: "", contract_total: "", contract_nf: "", installment_current: "", installment_total: "", closing_date: "", amount_paid: "", status: "Pendente", notes: "" });
+      setForm({ client_name: "", contract_total: "", balance_remaining: "", contract_nf: "", installment_current: "", installment_total: "", closing_date: "", amount_paid: "", status: "Pendente" });
     } catch (e: any) {
       toast({ title: "Erro", description: e.message, variant: "destructive" });
     }
@@ -193,35 +191,41 @@ function PrevensulForm({ month, userId }: { month: string; userId: string }) {
   return (
     <PremiumCard>
       <h2 className="font-display font-semibold text-lg mb-4" style={{ color: '#F0F4F8' }}>Registrar Faturamento</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Linha 1: Cliente (2 cols) + Valor */}
+        <div className="md:col-span-2">
           <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Cliente *</label>
           <Input value={form.client_name} onChange={e => setForm(p => ({ ...p, client_name: e.target.value }))} style={inputStyle} placeholder="Nome do cliente" />
         </div>
         <div>
-          <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Valor total contrato (R$)</label>
+          <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Valor (R$)</label>
           <Input type="number" value={form.contract_total} onChange={e => setForm(p => ({ ...p, contract_total: e.target.value }))} style={inputStyle} placeholder="0,00" />
         </div>
+
+        {/* Linha 2: Saldo + Contr/NF + Parcela */}
         <div>
-          <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Contrato / NF</label>
+          <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Saldo (R$)</label>
+          <Input type="number" value={form.balance_remaining} onChange={e => setForm(p => ({ ...p, balance_remaining: e.target.value }))} style={inputStyle} placeholder="0,00" />
+        </div>
+        <div>
+          <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Contr/NF</label>
           <Input value={form.contract_nf} onChange={e => setForm(p => ({ ...p, contract_nf: e.target.value }))} style={inputStyle} />
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Parcela atual</label>
-            <Input type="number" value={form.installment_current} onChange={e => setForm(p => ({ ...p, installment_current: e.target.value }))} style={inputStyle} />
-          </div>
-          <div>
-            <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Total parcelas</label>
-            <Input type="number" value={form.installment_total} onChange={e => setForm(p => ({ ...p, installment_total: e.target.value }))} style={inputStyle} />
+        <div>
+          <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Parcela</label>
+          <div className="grid grid-cols-2 gap-2">
+            <Input type="number" value={form.installment_current} onChange={e => setForm(p => ({ ...p, installment_current: e.target.value }))} style={inputStyle} placeholder="Atual" />
+            <Input type="number" value={form.installment_total} onChange={e => setForm(p => ({ ...p, installment_total: e.target.value }))} style={inputStyle} placeholder="Total" />
           </div>
         </div>
+
+        {/* Linha 3: Data Fech. + Pago + Status */}
         <div>
-          <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Data fechamento</label>
-          <DatePicker value={form.closing_date} onChange={v => setForm(p => ({ ...p, closing_date: v }))} />
+          <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Data Fech.</label>
+          <Input value={form.closing_date} onChange={e => setForm(p => ({ ...p, closing_date: e.target.value }))} style={inputStyle} placeholder="ex: mar/26, MENSAL" />
         </div>
         <div>
-          <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Valor recebido (R$) *</label>
+          <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Pago (R$) *</label>
           <Input type="number" value={form.amount_paid} onChange={e => setForm(p => ({ ...p, amount_paid: e.target.value }))} style={inputStyle} placeholder="0,00" />
         </div>
         <div>
@@ -233,16 +237,14 @@ function PrevensulForm({ month, userId }: { month: string; userId: string }) {
             </SelectContent>
           </Select>
         </div>
-        <div className="md:col-span-2">
-          <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Observações</label>
-          <Textarea value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} style={inputStyle} rows={2} />
+      </div>
+
+      {/* Comissão + Botão */}
+      <div className="mt-4 flex items-center justify-between">
+        <div className="rounded-xl px-4 py-3 flex items-center gap-3" style={{ background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.3)' }}>
+          <span className="font-mono text-sm" style={{ color: '#E8C97A' }}>Comissão (3%)</span>
+          <span className="font-mono text-xl font-bold" style={{ color: '#C9A84C' }}>{formatCurrency(commission)}</span>
         </div>
-      </div>
-      <div className="mt-4 rounded-xl p-4 flex items-center justify-between" style={{ background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.3)' }}>
-        <span className="font-mono text-sm" style={{ color: '#E8C97A' }}>Comissão William (3%)</span>
-        <span className="font-mono text-xl font-bold" style={{ color: '#C9A84C' }}>{formatCurrency(commission)}</span>
-      </div>
-      <div className="mt-4 flex justify-end">
         <GoldButton onClick={handleSubmit} disabled={createBilling.isPending}>
           {createBilling.isPending ? "Salvando..." : "Registrar Faturamento"}
         </GoldButton>
@@ -403,6 +405,8 @@ function PrevensulHistory({ month }: { month: string }) {
   const { data = [], isLoading } = usePrevensulBilling(month);
   const deleteBilling = useDeleteBilling();
   const { toast } = useToast();
+  const totalPago = useMemo(() => data.reduce((s, r) => s + (r.amount_paid ?? 0), 0), [data]);
+  const totalComissao = useMemo(() => data.reduce((s, r) => s + (r.commission_value ?? 0), 0), [data]);
 
   if (isLoading) return <Skeleton className="h-64 rounded-2xl" />;
   if (data.length === 0) return (
@@ -465,6 +469,14 @@ function PrevensulHistory({ month }: { month: string }) {
               </TableRow>
             ))}
           </TableBody>
+          <TableFooter>
+            <TableRow style={{ borderColor: '#1A2535', background: 'rgba(201,168,76,0.05)' }}>
+              <TableCell colSpan={6} className="font-semibold" style={{ color: '#E8C97A' }}>TOTAL</TableCell>
+              <TableCell className="font-mono font-semibold" style={{ color: '#10B981' }}>{formatCurrency(totalPago)}</TableCell>
+              <TableCell className="font-mono font-semibold" style={{ color: '#E8C97A' }}>{formatCurrency(totalComissao)}</TableCell>
+              <TableCell colSpan={2} />
+            </TableRow>
+          </TableFooter>
         </Table>
       </div>
     </PremiumCard>
