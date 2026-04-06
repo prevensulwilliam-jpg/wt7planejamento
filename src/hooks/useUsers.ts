@@ -6,10 +6,10 @@ export function usePendingUsers() {
   return useQuery({
     queryKey: ["users_pending"],
     queryFn: async () => {
-      const { data: roles, error } = await supabase
+      const { data: roles, error } = await (supabase as any)
         .from("user_roles")
         .select("user_id, role, status, created_at")
-        .eq("status", "pending" as any)
+        .eq("status", "pending")
         .order("created_at", { ascending: false });
       if (error) throw error;
 
