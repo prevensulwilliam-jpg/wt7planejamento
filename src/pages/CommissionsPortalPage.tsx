@@ -294,8 +294,15 @@ function PrevensulForm({ month, userId, editRecord, onClearEdit }: { month: stri
 
         {/* Linha 4: Observações — full width */}
         <div className="md:col-span-3">
-          <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Observações</label>
-          <Input value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} style={inputStyle} placeholder="Observações opcionais sobre este cliente..." />
+          <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Observações <span style={{ color: '#4A5568', textTransform: 'none', fontStyle: 'italic' }}>(Shift+Enter para nova linha)</span></label>
+          <textarea
+            value={form.notes}
+            onChange={e => setForm(p => ({ ...p, notes: e.target.value }))}
+            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) e.preventDefault(); }}
+            rows={3}
+            placeholder="Observações opcionais sobre este cliente..."
+            style={{ ...inputStyle, width: '100%', resize: 'vertical', borderRadius: 8, padding: '8px 12px', fontSize: 14, fontFamily: 'inherit', outline: 'none', lineHeight: 1.5 }}
+          />
         </div>
       </div>
 
@@ -641,7 +648,9 @@ function PrevensulHistory({ month, userId, onLoadRecord }: { month: string; user
                       </TooltipTrigger>
                       <TooltipContent side="right" className="max-w-xs" style={{ background: '#0D1318', border: '1px solid #1A2535', padding: '10px 12px' }}>
                         <p className="font-semibold text-sm mb-1" style={{ color: '#F0F4F8' }}>{r.client_name}</p>
-                        {r.notes && <p className="text-xs mb-1" style={{ color: '#94A3B8' }}>{r.notes}</p>}
+                        {r.notes && (
+                          <p className="text-xs mb-1" style={{ color: '#94A3B8', whiteSpace: 'pre-wrap' }}>{r.notes}</p>
+                        )}
                         <p className="text-xs" style={{ color: '#4A5568' }}>Clique para editar no formulário</p>
                       </TooltipContent>
                     </Tooltip>
