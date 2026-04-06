@@ -131,6 +131,37 @@ export function NavalChat() {
   const inputRef = useRef<HTMLInputElement>(null);
   const location = useLocation();
 
+  // ── Drag ──
+  const [pos, setPos] = useState({ bottom: 24, right: 24 });
+  const dragState = useRef({ active: false, startX: 0, startY: 0, origBottom: 24, origRight: 24, moved: false });
+  const btnRef = useRef<HTMLButtonElement>(null);
+
+  const onPointerDown = useCallback((e: React.PointerEvent) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragState.current = { active: true, startX: e.clientX, startY: e.clientY, origBottom: pos.bottom, origRight: pos.right, moved: false };
+  }, [pos]);
+
+  const onPointerMove = useCallback((e: React.PointerEvent) => {
+    const d = dragState.current;
+    if (!d.active) return;
+    const dx = e.clientX - d.startX;
+    const dy = e.clientY - d.startY;
+    if (!d.moved && Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
+    d.moved = true;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const newRight = Math.max(8, Math.min(vw - 60, d.origRight - dx));
+    const newBottom = Math.max(8, Math.min(vh - 60, d.origBottom + dy));
+    setPos({ bottom: newBottom, right: newRight });
+  }, []);
+
+  const onPointerUp = useCallback((e: React.PointerEvent) => {
+    const d = dragState.current;
+    d.active = false;
+    if (!d.moved) setOpen(true);
+    e.currentTarget.releasePointerCapture(e.pointerId);
+  }, []);
+
   useEffect(() => {
     if (!open) return;
     setLoadingContext(true);
@@ -216,12 +247,18 @@ export function NavalChat() {
   if (!open) {
     return (
       <button
-        onClick={() => setOpen(true)}
-        className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 rounded-2xl shadow-2xl transition-all hover:scale-105 active:scale-95"
+        ref={btnRef}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        className="fixed z-50 flex items-center gap-2 px-4 py-3 rounded-2xl shadow-2xl transition-shadow select-none touch-none"
         style={{
+          bottom: pos.bottom,
+          right: pos.right,
           background: "linear-gradient(135deg, #C9A84C, #E8C97A)",
           color: "#080C10",
           boxShadow: "0 8px 32px rgba(201,168,76,0.4)",
+          cursor: dragState.current.active ? "grabbing" : "grab",
         }}
       >
         <Sparkles className="w-5 h-5" />
@@ -232,8 +269,10 @@ export function NavalChat() {
 
   return (
     <div
-      className="fixed bottom-6 right-6 z-50 flex flex-col rounded-2xl shadow-2xl overflow-hidden"
+      className="fixed z-50 flex flex-col rounded-2xl shadow-2xl overflow-hidden"
       style={{
+        bottom: pos.bottom,
+        right: pos.right,
         width: minimized ? 260 : 380,
         maxHeight: minimized ? "auto" : "min(600px, calc(100vh - 100px))",
         background: "#0D1117",
