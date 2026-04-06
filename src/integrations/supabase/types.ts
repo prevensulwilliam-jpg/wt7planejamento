@@ -1385,6 +1385,7 @@ export type Database = {
       }
       clean_duplicate_expenses: { Args: never; Returns: undefined }
       clean_duplicate_revenues: { Args: never; Returns: undefined }
+      delete_user_by_admin: { Args: { p_user_id: string }; Returns: undefined }
       get_user_role: {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]
@@ -1396,6 +1397,9 @@ export type Database = {
         }
         Returns: boolean
       }
+      request_manager_access:
+        | { Args: { p_user_id: string }; Returns: undefined }
+        | { Args: { p_role?: string; p_user_id: string }; Returns: undefined }
     }
     Enums: {
       app_role: "admin" | "kitnet_manager" | "financial" | "partner"
