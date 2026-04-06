@@ -14,7 +14,7 @@ import { useKitnets, useCelescInvoices, useCreateCelescInvoice, useUpdateCelescI
 import { formatCurrency, formatMonth, getCurrentMonth } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Plus, Save, Upload, Pencil, Sparkles, Loader2, X } from "lucide-react";
+import { Plus, Save, Upload, Pencil, Sparkles, Loader2, X, Download } from "lucide-react";
 
 export default function EnergyPage() {
   return (
@@ -50,7 +50,8 @@ const EMPTY_FORM = {
 
 // ─── Invoices Tab ───
 function InvoicesTab() {
-  const { data: invoices, isLoading } = useCelescInvoices();
+  const [month, setMonth] = useState(getCurrentMonth());
+  const { data: invoices, isLoading } = useCelescInvoices(month);
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [mode, setMode] = useState<"upload" | "manual">("upload");
@@ -193,7 +194,8 @@ function InvoicesTab() {
 
   return (
     <div className="space-y-4 mt-4">
-      <div className="flex justify-end">
+      <div className="flex items-center justify-between">
+        <MonthPicker value={month} onChange={v => setMonth(v)} className="w-44" />
         <GoldButton onClick={handleOpen}><Plus className="w-4 h-4 mr-1" />Nova Fatura</GoldButton>
       </div>
 
@@ -497,7 +499,26 @@ function ReadingsTab() {
           </GoldButton>
         </div>
 
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={() => {
+              const header = ["Unidade", "Inquilino", "Anterior", "Atual", "kWh", "Valor"].join(";");
+              const rows = units.map(u => {
+                const { previous, kwh, amount } = calculateRow(u.id);
+                return [u.code, u.tenant_name || "—", previous, readings[u.id] ?? "", kwh, amount.toFixed(2).replace(".", ",")].join(";");
+              });
+              const blob = new Blob(["\uFEFF" + [header, ...rows].join("\n")], { type: "text/csv;charset=utf-8;" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a"); a.href = url; a.download = `energia_${complex}_${month}.csv`; a.click();
+              URL.revokeObjectURL(url);
+            }}
+            disabled={!units.length}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-40"
+            style={{ background: 'rgba(232,201,122,0.1)', color: '#E8C97A', border: '1px solid rgba(232,201,122,0.3)' }}
+            title="Baixar CSV"
+          >
+            <Download className="w-4 h-4" />CSV
+          </button>
           <GoldButton onClick={handleSave} disabled={saveMut.isPending}>
             <Save className="w-4 h-4 mr-1" />{saveMut.isPending ? "Salvando..." : "Salvar Leituras"}
           </GoldButton>

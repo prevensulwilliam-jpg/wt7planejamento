@@ -330,6 +330,24 @@ export function useReconcileKitnetEntry() {
   });
 }
 
+// ─── Delete Kitnet Entry ───
+export function useDeleteKitnetEntry() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (entryId: string) => {
+      const { error } = await supabase.from("kitnet_entries").delete().eq("id", entryId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["kitnet_entries"] });
+      qc.invalidateQueries({ queryKey: ["kitnet_entries_unreconciled"] });
+      qc.invalidateQueries({ queryKey: ["kitnet_entries_unreconciled_count"] });
+      qc.invalidateQueries({ queryKey: ["kitnet_fechamentos"] });
+      qc.invalidateQueries({ queryKey: ["kitnet_entries_for"] });
+    },
+  });
+}
+
 // ─── Energy Readings Summary (agrupado por complexo) ───
 export function useEnergyReadingsSummary(month: string) {
   return useQuery({

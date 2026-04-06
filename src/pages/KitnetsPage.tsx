@@ -19,7 +19,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Plus, Download, Save, Printer, CheckCircle, XCircle, AlertCircle, ArrowLeftRight } from "lucide-react";
 import { abrirReciboConsolidado } from "@/lib/relatorioFechamento";
 import type { Tables } from "@/integrations/supabase/types";
-import { useMemo, useEffect } from "react";
+import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useBankTransactions } from "@/hooks/useBankReconciliation";
 
