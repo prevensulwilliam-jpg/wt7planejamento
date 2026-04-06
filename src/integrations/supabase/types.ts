@@ -862,6 +862,27 @@ export type Database = {
         }
         Relationships: []
       }
+      login_history: {
+        Row: {
+          id: string
+          logged_at: string | null
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          logged_at?: string | null
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          id?: string
+          logged_at?: string | null
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       pluggy_connections: {
         Row: {
           account_id: string | null
@@ -1133,16 +1154,19 @@ export type Database = {
         Row: {
           id: string
           role: Database["public"]["Enums"]["app_role"]
+          status: string | null
           user_id: string
         }
         Insert: {
           id?: string
           role: Database["public"]["Enums"]["app_role"]
+          status?: string | null
           user_id: string
         }
         Update: {
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
+          status?: string | null
           user_id?: string
         }
         Relationships: []
