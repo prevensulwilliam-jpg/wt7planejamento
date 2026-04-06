@@ -93,10 +93,10 @@ export function usePendingCount() {
   return useQuery({
     queryKey: ["users_pending_count"],
     queryFn: async () => {
-      const { count, error } = await supabase
+      const { count, error } = await (supabase as any)
         .from("user_roles")
         .select("*", { count: "exact", head: true })
-        .eq("status", "pending" as any);
+        .eq("status", "pending");
       if (error) throw error;
       return count ?? 0;
     },
