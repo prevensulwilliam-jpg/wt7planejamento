@@ -30,9 +30,10 @@ function useUsersWithRoles() {
   return useQuery({
     queryKey: ["users_with_roles"],
     queryFn: async () => {
-      const { data: roles, error: rolesErr } = await supabase
+      const { data: roles, error: rolesErr } = await (supabase as any)
         .from("user_roles")
-        .select("user_id, role");
+        .select("user_id, role, status")
+        .eq("status", "active");
       if (rolesErr) throw rolesErr;
 
       const userIds = [...new Set((roles ?? []).map(r => r.user_id))];
