@@ -31,7 +31,6 @@ const navGroups = [
       { label: "Kitnets", icon: Home, href: "/kitnets" },
       { label: "Energia Solar", icon: Zap, href: "/energy" },
       { label: "Portal Manager", icon: KeyRound, href: "/manager/kitnets" },
-      { label: "Portal Comissões", icon: Coins, href: "/commissions/portal" },
       { label: "Obras & Terrenos", icon: HardHat, href: "/constructions" },
       { label: "Patrimônio", icon: Building2, href: "/assets" },
     ],
@@ -42,6 +41,12 @@ const navGroups = [
       { label: "Aplicações", icon: BarChart3, href: "/assets?tab=investimentos" },
       { label: "Consórcios", icon: RefreshCw, href: "/assets?tab=consorcios" },
       { label: "Casamento 2027", icon: Heart, href: "/wedding" },
+    ],
+  },
+  {
+    label: "COMISSÕES",
+    items: [
+      { label: "Portal Comissões", icon: Coins, href: "/commissions/portal" },
     ],
   },
   {
