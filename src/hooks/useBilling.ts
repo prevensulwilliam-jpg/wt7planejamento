@@ -9,7 +9,7 @@ export function usePrevensulBilling(month?: string) {
       let q = supabase
         .from("prevensul_billing")
         .select("*")
-        .order("created_at", { ascending: false });
+        .order("client_name", { ascending: true });
       if (month) q = q.eq("reference_month", month);
       const { data, error } = await q;
       if (error) throw error;
