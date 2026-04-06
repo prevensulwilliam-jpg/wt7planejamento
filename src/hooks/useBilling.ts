@@ -151,18 +151,37 @@ export function useCreateImportHistory() {
 }
 
 export function exportCSV(data: any[], filename: string) {
-  const headers = ["Cliente", "Contrato/NF", "Parcela", "Valor Contrato", "Recebido", "Comissão", "Status", "Mês"];
+  // Formata número como R$ 1.234,56 (padrão brasileiro — abre correto no Excel PT-BR)
+  const brl = (v: number | null | undefined): string => {
+    if (v == null || v === 0) return "R$ -";
+    return "R$ " + v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  // Escapa campo CSV: se contiver ; ou " ou quebra de linha, envolve em aspas
+  const esc = (v: any): string => {
+    const s = v == null ? "" : String(v);
+    return s.includes(";") || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+
+  // Colunas na mesma ordem do template Excel
+  const headers = ["CLIENTE", "VALOR", "SALDO", "CONTR/NF", "PARCELA", "DATA FECH.", "PAGO", "COMISSÃO", "STATUS", "ASSINATURA"];
+
   const rows = data.map((r) => [
-    r.client_name,
-    r.contract_nf,
-    `${r.installment_current ?? ""}/${r.installment_total ?? ""}`,
-    r.contract_total,
-    r.amount_paid,
-    r.commission_value,
-    r.status,
-    r.reference_month,
+    r.client_name ?? "",
+    brl(r.contract_total),
+    brl(r.balance_remaining),
+    r.contract_nf ?? "-",
+    r.installment_current != null || r.installment_total != null
+      ? `${r.installment_current ?? "-"}/${r.installment_total ?? "-"}`
+      : "-",
+    r.closing_date ?? "-",
+    brl(r.amount_paid),
+    brl(r.commission_value),
+    r.status ?? "",
+    "", // ASSINATURA — coluna reservada para assinatura física
   ]);
-  const csv = [headers, ...rows].map((r) => r.join(";")).join("\n");
+
+  const csv = [headers, ...rows].map((row) => row.map(esc).join(";")).join("\r\n");
   const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
