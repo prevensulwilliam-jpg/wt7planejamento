@@ -256,16 +256,12 @@ function PrevensulForm({ month, userId, editRecord, onClearEdit }: { month: stri
           <Input type="number" value={form.contract_total} onChange={e => setForm(p => ({ ...p, contract_total: e.target.value }))} style={inputStyle} placeholder="0,00" />
         </div>
 
-        {/* Linha 2: Saldo + Contr/NF + Parcela */}
+        {/* Linha 2: Saldo + Parcela */}
         <div>
           <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Saldo (R$)</label>
           <Input type="number" value={form.balance_remaining} onChange={e => setForm(p => ({ ...p, balance_remaining: e.target.value }))} style={inputStyle} placeholder="0,00" />
         </div>
-        <div>
-          <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Contr/NF</label>
-          <Input value={form.contract_nf} onChange={e => setForm(p => ({ ...p, contract_nf: e.target.value }))} style={inputStyle} />
-        </div>
-        <div>
+        <div className="md:col-span-2">
           <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Parcela</label>
           <div className="grid grid-cols-2 gap-2">
             <Input type="number" value={form.installment_current} onChange={e => setForm(p => ({ ...p, installment_current: e.target.value }))} style={inputStyle} placeholder="Atual" />
@@ -306,12 +302,7 @@ function PrevensulForm({ month, userId, editRecord, onClearEdit }: { month: stri
         </div>
       </div>
 
-      {/* Comissão + Botão */}
-      <div className="mt-4 flex items-center justify-between">
-        <div className="rounded-xl px-4 py-3 flex items-center gap-3" style={{ background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.3)' }}>
-          <span className="font-mono text-sm" style={{ color: '#E8C97A' }}>Comissão (3%)</span>
-          <span className="font-mono text-xl font-bold" style={{ color: '#C9A84C' }}>{formatCurrency(commission)}</span>
-        </div>
+      <div className="mt-4 flex justify-end">
         <GoldButton onClick={handleSubmit} disabled={isPending}>
           {isPending ? "Salvando..." : isEditing ? "Atualizar Faturamento" : "Registrar Faturamento"}
         </GoldButton>
