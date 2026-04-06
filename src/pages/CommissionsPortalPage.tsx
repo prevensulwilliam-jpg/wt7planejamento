@@ -570,13 +570,12 @@ function PrevensulHistory({ month, userId, onLoadRecord }: { month: string; user
         </button>
       </div>
       <div className="overflow-x-auto rounded-xl" style={{ border: '1px solid #1A2535' }}>
-        <Table style={{ minWidth: 980 }}>
+        <Table style={{ minWidth: 880 }}>
           <TableHeader>
             <TableRow style={{ borderColor: '#1A2535' }}>
               <TableHead className="whitespace-nowrap" style={{ color: '#94A3B8', width: 180 }}>Cliente</TableHead>
               <TableHead className="whitespace-nowrap" style={{ color: '#94A3B8', width: 110 }}>Valor</TableHead>
               <TableHead className="whitespace-nowrap" style={{ color: '#94A3B8', width: 110 }}>Saldo</TableHead>
-              <TableHead className="whitespace-nowrap" style={{ color: '#94A3B8', width: 90 }}>Contr/NF</TableHead>
               <TableHead className="whitespace-nowrap" style={{ color: '#94A3B8', width: 80 }}>Parcela</TableHead>
               <TableHead className="whitespace-nowrap" style={{ color: '#94A3B8', width: 90 }}>Data Fech.</TableHead>
               <TableHead className="whitespace-nowrap" style={{ color: '#94A3B8', width: 110 }}>Pago</TableHead>
@@ -595,7 +594,6 @@ function PrevensulHistory({ month, userId, onLoadRecord }: { month: string; user
                     <TableCell><input value={editForm.client_name} onChange={e => setEditForm(p => ({ ...p, client_name: e.target.value }))} style={{ ...inputStyle, width: '100%' }} /></TableCell>
                     <TableCell><input type="number" value={editForm.contract_total} onChange={e => setEditForm(p => ({ ...p, contract_total: e.target.value }))} style={{ ...inputStyle, width: '100%' }} /></TableCell>
                     <TableCell><input type="number" value={editForm.balance_remaining} onChange={e => setEditForm(p => ({ ...p, balance_remaining: e.target.value }))} style={{ ...inputStyle, width: '100%' }} /></TableCell>
-                    <TableCell><input value={editForm.contract_nf} onChange={e => setEditForm(p => ({ ...p, contract_nf: e.target.value }))} style={{ ...inputStyle, width: '100%' }} /></TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
                         <input type="number" value={editForm.installment_current} onChange={e => setEditForm(p => ({ ...p, installment_current: e.target.value }))} style={{ ...inputStyle, width: 36, textAlign: 'center', padding: '4px 2px' }} />
@@ -648,7 +646,6 @@ function PrevensulHistory({ month, userId, onLoadRecord }: { month: string; user
                   </TableCell>
                   <TableCell className="font-mono text-xs whitespace-nowrap" style={{ color: '#94A3B8' }}>{formatCurrency(r.contract_total ?? 0)}</TableCell>
                   <TableCell className="font-mono text-xs whitespace-nowrap" style={{ color: '#F43F5E' }}>{formatCurrency(r.balance_remaining ?? 0)}</TableCell>
-                  <TableCell className="font-mono text-xs whitespace-nowrap" style={{ color: '#94A3B8' }}>{r.contract_nf || "—"}</TableCell>
                   <TableCell className="font-mono text-xs whitespace-nowrap" style={{ color: '#94A3B8' }}>{r.installment_current ?? "—"}/{r.installment_total ?? "—"}</TableCell>
                   <TableCell className="font-mono text-xs whitespace-nowrap" style={{ color: '#94A3B8' }}>{r.closing_date || "—"}</TableCell>
                   <TableCell className="font-mono text-xs whitespace-nowrap" style={{ color: '#10B981' }}>{formatCurrency(r.amount_paid ?? 0)}</TableCell>
@@ -680,7 +677,7 @@ function PrevensulHistory({ month, userId, onLoadRecord }: { month: string; user
           </TableBody>
           <TableFooter>
             <TableRow style={{ borderColor: '#1A2535', background: 'rgba(201,168,76,0.05)' }}>
-              <TableCell colSpan={6} className="font-semibold whitespace-nowrap" style={{ color: '#E8C97A' }}>TOTAL</TableCell>
+              <TableCell colSpan={5} className="font-semibold whitespace-nowrap" style={{ color: '#E8C97A' }}>TOTAL</TableCell>
               <TableCell className="font-mono text-xs font-semibold whitespace-nowrap" style={{ color: '#10B981' }}>{formatCurrency(totalPago)}</TableCell>
               <TableCell className="font-mono text-xs font-semibold whitespace-nowrap" style={{ color: '#E8C97A' }}>{formatCurrency(totalComissao)}</TableCell>
               <TableCell colSpan={2} />
