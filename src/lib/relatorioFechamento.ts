@@ -97,32 +97,31 @@ const CSS = `
     border: 1.5px solid #111;
     padding: 9px 16px;
     font-weight: 600;
+    vertical-align: middle;
   }
-  td:first-child {
+  td.col-label {
     text-transform: uppercase;
     letter-spacing: 0.4px;
-    width: 56%;
+    width: 58%;
     text-align: center;
   }
-  td:last-child { text-align: right; }
-  td.sinal {
-    width: 32px;
+  td.col-sinal {
+    width: 40px;
     text-align: center;
     font-weight: 700;
-    font-size: 14px;
-    padding: 9px 4px;
-    border-right: none;
+    font-size: 13px;
+    padding: 9px 6px;
   }
-  td.valor-cell {
-    border-left: none;
+  td.col-valor {
+    text-align: right;
   }
   tr.subtotal-row td {
-    background: #f9f9f9;
+    background: #f5f5f5;
     font-style: italic;
-    font-size: 12px;
+    font-size: 12.5px;
   }
   tr.adm-row td {
-    color: #b00;
+    color: #aa0000;
   }
   tr.total-row td {
     font-size: 14px;
@@ -237,14 +236,46 @@ function reciboBlock(kitnet: any, f: any): string {
 </p>
 
 <table>
-  <tr><td colspan="3">Período</td>                       <td>${periodo}</td></tr>
-  <tr><td colspan="3">Aluguéis</td>                      <td>${fmt(bruto)}</td></tr>
-  <tr><td colspan="2">IPTU e Tx. de Lixo</td>            <td class="sinal">+</td><td class="valor-cell">${fmt(iptu)}</td></tr>
-  <tr><td colspan="2">CELESC</td>                        <td class="sinal">+</td><td class="valor-cell">${fmt(celesc)}</td></tr>
-  <tr><td colspan="2">SEMASA</td>                        <td class="sinal">+</td><td class="valor-cell">${fmt(semasa)}</td></tr>
-  <tr class="subtotal-row"><td colspan="3">Subtotal bruto</td><td>${fmt(bruto + iptu + celesc + semasa)}</td></tr>
-  <tr class="adm-row"><td colspan="2">ADM. 10% aluguel</td><td class="sinal" style="color:#b00">−</td><td class="valor-cell">${fmt(adm)}</td></tr>
-  <tr class="total-row"><td colspan="3">Total Líquido</td><td>${fmt(total)}</td></tr>
+  <tr>
+    <td class="col-label">Período</td>
+    <td class="col-sinal"></td>
+    <td class="col-valor">${periodo}</td>
+  </tr>
+  <tr>
+    <td class="col-label">Aluguéis</td>
+    <td class="col-sinal"></td>
+    <td class="col-valor">${fmt(bruto)}</td>
+  </tr>
+  <tr>
+    <td class="col-label">IPTU e Tx. de Lixo</td>
+    <td class="col-sinal">+</td>
+    <td class="col-valor">${fmt(iptu)}</td>
+  </tr>
+  <tr>
+    <td class="col-label">CELESC</td>
+    <td class="col-sinal">+</td>
+    <td class="col-valor">${fmt(celesc)}</td>
+  </tr>
+  <tr>
+    <td class="col-label">SEMASA</td>
+    <td class="col-sinal">+</td>
+    <td class="col-valor">${fmt(semasa)}</td>
+  </tr>
+  <tr class="subtotal-row">
+    <td class="col-label">Subtotal Bruto</td>
+    <td class="col-sinal"></td>
+    <td class="col-valor">${fmt(bruto + iptu + celesc + semasa)}</td>
+  </tr>
+  <tr class="adm-row">
+    <td class="col-label">ADM. 10% Aluguel</td>
+    <td class="col-sinal">−</td>
+    <td class="col-valor">${fmt(adm)}</td>
+  </tr>
+  <tr class="total-row">
+    <td class="col-label">Total Líquido</td>
+    <td class="col-sinal"></td>
+    <td class="col-valor">${fmt(total)}</td>
+  </tr>
 </table>
 
 <div class="footer">
