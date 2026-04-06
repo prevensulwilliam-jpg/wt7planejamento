@@ -9,7 +9,7 @@ import { formatDate } from "@/lib/formatters";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Users, Link as LinkIcon, Trash2, AlertTriangle, Clock, CheckCircle, XCircle, Bell } from "lucide-react";
+import { Users, Link as LinkIcon, Trash2, AlertTriangle, Clock, CheckCircle, XCircle, Bell, Copy, Check } from "lucide-react";
 import { usePendingUsers, useApproveUser, useRejectUser, useLoginHistory } from "@/hooks/useUsers";
 
 const roleBadge: Record<string, { variant: 'gold' | 'green' | 'cyan' | 'gray'; label: string }> = {
@@ -60,6 +60,13 @@ function useUsersWithRoles() {
 export default function UsersPage() {
   const { data = [], isLoading } = useUsersWithRoles();
   const { data: pending = [] } = usePendingUsers();
+  const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
+
+  const handleCopy = (url: string) => {
+    navigator.clipboard.writeText("https://" + url);
+    setCopiedUrl(url);
+    setTimeout(() => setCopiedUrl(null), 2000);
+  };
   const approveMut = useApproveUser();
   const rejectMut = useRejectUser();
   const [historyUserId, setHistoryUserId] = useState<string>("");
@@ -287,24 +294,24 @@ export default function UsersPage() {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {accessLinks.map(l => (
-            <div key={l.role} className="flex items-center justify-between rounded-lg px-4 py-2.5" style={{ background: '#080C10', border: '1px solid #1A2535' }}>
-              <span className="text-sm font-medium" style={{ color: '#F0F4F8' }}>{l.role}</span>
-              <span className="text-xs font-mono" style={{ color: '#94A3B8' }}>{l.url}</span>
+            <div key={l.role} className="flex items-center justify-between rounded-lg px-4 py-2.5 gap-3" style={{ background: '#080C10', border: '1px solid #1A2535' }}>
+              <span className="text-sm font-medium shrink-0" style={{ color: '#F0F4F8' }}>{l.role}</span>
+              <span className="text-xs font-mono truncate" style={{ color: '#94A3B8' }}>{l.url}</span>
+              <button
+                onClick={() => handleCopy(l.url)}
+                className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-md text-xs transition-all"
+                style={{
+                  background: copiedUrl === l.url ? 'rgba(34,197,94,0.15)' : 'rgba(232,201,122,0.1)',
+                  color: copiedUrl === l.url ? '#22C55E' : '#E8C97A',
+                  border: `1px solid ${copiedUrl === l.url ? 'rgba(34,197,94,0.3)' : 'rgba(232,201,122,0.25)'}`,
+                }}
+                title="Copiar link"
+              >
+                {copiedUrl === l.url ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+              </button>
             </div>
           ))}
         </div>
-      </PremiumCard>
-
-      {/* Info card */}
-      <PremiumCard>
-        <div className="flex items-center gap-2 mb-2">
-          <Users className="w-4 h-4" style={{ color: '#2DD4BF' }} />
-          <h3 className="font-display font-bold text-sm" style={{ color: '#2DD4BF' }}>Criar Novo Acesso</h3>
-        </div>
-        <p className="text-sm" style={{ color: '#94A3B8' }}>
-          Para criar novos usuários, acesse o painel de gerenciamento do backend → Authentication → Users → Add User.
-          Após criar o usuário, defina o perfil (role) na tabela <code className="font-mono text-xs" style={{ color: '#E8C97A' }}>user_roles</code>.
-        </p>
       </PremiumCard>
 
       {/* Users table */}
