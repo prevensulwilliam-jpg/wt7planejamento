@@ -24,7 +24,8 @@ import {
 } from "@/hooks/useKitnets";
 import { formatCurrency, formatMonth, getCurrentMonth } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
-import { LogOut, Home, Zap, Save, ArrowLeft, Download } from "lucide-react";
+import { LogOut, Home, Zap, Save, ArrowLeft, Download, Printer } from "lucide-react";
+import { abrirReciboConsolidado } from "@/lib/relatorioFechamento";
 import type { Tables } from "@/integrations/supabase/types";
 
 const statusLabels: Record<string, { label: string; variant: "green" | "gold" | "red" }> = {
@@ -133,6 +134,14 @@ function KitnetsTab({ month }: { month: string }) {
   const { data: entries } = useKitnetEntries(month);
   const [selected, setSelected] = useState<Tables<"kitnets"> | null>(null);
 
+  const handleRelatorio = () => {
+    if (!entries?.length) return;
+    const data = (entries as any[])
+      .filter(e => e.kitnets)
+      .map(e => ({ kitnet: e.kitnets, fechamento: e }));
+    abrirReciboConsolidado(data, month);
+  };
+
   const grouped = useMemo(() => {
     const map: Record<string, Tables<"kitnets">[]> = {};
     (kitnets ?? []).forEach(k => {
@@ -145,11 +154,23 @@ function KitnetsTab({ month }: { month: string }) {
 
   return (
     <div className="space-y-6 mt-4">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard label="Total Recebido" value={summary.totalReceived} color="gold" compact />
-        <KpiCard label="Ocupadas" value={summary.occupied} color="green" compact formatAs="number" />
-        <KpiCard label="Manutenção" value={summary.maintenance} color="cyan" compact formatAs="number" />
-        <KpiCard label="Vacâncias" value={summary.vacant} color="red" compact formatAs="number" />
+      <div className="flex items-start gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 flex-1">
+          <KpiCard label="Total Recebido" value={summary.totalReceived} color="gold" compact />
+          <KpiCard label="Ocupadas" value={summary.occupied} color="green" compact formatAs="number" />
+          <KpiCard label="Manutenção" value={summary.maintenance} color="cyan" compact formatAs="number" />
+          <KpiCard label="Vacâncias" value={summary.vacant} color="red" compact formatAs="number" />
+        </div>
+        <button
+          onClick={handleRelatorio}
+          disabled={!entries?.length}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-40 shrink-0"
+          style={{ background: 'rgba(232,201,122,0.1)', color: '#E8C97A', border: '1px solid rgba(232,201,122,0.3)' }}
+          title={entries?.length ? `Gerar relatório com ${entries.length} fechamentos` : "Nenhum fechamento neste mês"}
+        >
+          <Printer className="w-4 h-4" />
+          Relatório do Mês
+        </button>
       </div>
 
       {isLoading ? (
