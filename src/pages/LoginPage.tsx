@@ -44,7 +44,7 @@ export default function LoginPage() {
       const userId = authData.user?.id;
 
       // Verifica role e status
-      const { data: roleData } = await supabase
+      const { data: roleData } = await (supabase as any)
         .from("user_roles")
         .select("role, status")
         .eq("user_id", userId)
