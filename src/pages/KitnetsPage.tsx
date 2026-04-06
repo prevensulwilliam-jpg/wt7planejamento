@@ -116,13 +116,13 @@ function OverviewTab({ month, setMonth }: { month: string; setMonth: (v: string)
       {/* RWT02 */}
       <div>
         <h2 className="font-display font-bold text-lg text-foreground mb-3">RWT02 — Rua Amauri de Souza, 08</h2>
-        <KitnetGrid kitnets={rwt02} onManage={setSelected} />
+        <KitnetGrid kitnets={rwt02} onManage={setSelected} entries={entries ?? []} />
       </div>
 
       {/* RWT03 */}
       <div>
         <h2 className="font-display font-bold text-lg text-foreground mb-3">RWT03 — Rua Manoel Corrêa, 125</h2>
-        <KitnetGrid kitnets={rwt03} onManage={setSelected} />
+        <KitnetGrid kitnets={rwt03} onManage={setSelected} entries={entries ?? []} />
       </div>
 
       {selected && (
@@ -136,7 +136,7 @@ function OverviewTab({ month, setMonth }: { month: string; setMonth: (v: string)
   );
 }
 
-function KitnetGrid({ kitnets, onManage }: { kitnets: Tables<"kitnets">[]; onManage: (k: Tables<"kitnets">) => void }) {
+function KitnetGrid({ kitnets, onManage, entries }: { kitnets: Tables<"kitnets">[]; onManage: (k: Tables<"kitnets">) => void; entries: any[] }) {
   if (!kitnets.length) {
     return <p className="text-muted-foreground text-sm">Nenhuma kitnet cadastrada.</p>;
   }
@@ -144,6 +144,7 @@ function KitnetGrid({ kitnets, onManage }: { kitnets: Tables<"kitnets">[]; onMan
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
       {kitnets.map(k => {
         const s = statusLabels[k.status ?? "vacant"] ?? statusLabels.vacant;
+        const fechamento = entries.find(e => e.kitnet_id === k.id);
         return (
           <PremiumCard key={k.id} className="relative p-4">
             <div className="flex items-center justify-between mb-2">
@@ -153,6 +154,21 @@ function KitnetGrid({ kitnets, onManage }: { kitnets: Tables<"kitnets">[]; onMan
             <p className="text-sm text-muted-foreground truncate">{k.tenant_name || "—"}</p>
             {k.tenant_phone && <p className="text-xs text-muted-foreground">{k.tenant_phone}</p>}
             <p className="font-mono text-lg text-foreground mt-1">{formatCurrency(k.rent_value ?? 0)}</p>
+
+            {/* Badge de fechamento */}
+            {fechamento ? (
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg mt-1" style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)' }}>
+                <span style={{ color: '#10B981' }}>✓</span>
+                <span className="text-xs font-medium" style={{ color: '#10B981' }}>
+                  Fechado · {formatCurrency(fechamento.total_liquid ?? 0)}
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg mt-1" style={{ background: 'rgba(148,163,184,0.08)', border: '1px solid rgba(148,163,184,0.2)' }}>
+                <span className="text-xs" style={{ color: '#64748B' }}>— Sem fechamento</span>
+              </div>
+            )}
+
             <GoldButton className="w-full text-xs justify-center mt-2" onClick={() => onManage(k)}>
               Gerenciar
             </GoldButton>
