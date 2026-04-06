@@ -151,7 +151,7 @@ export function NavalChat() {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     const newRight = Math.max(8, Math.min(vw - 60, d.origRight - dx));
-    const newBottom = Math.max(8, Math.min(vh - 60, d.origBottom + dy));
+    const newBottom = Math.max(8, Math.min(vh - 60, d.origBottom - dy));
     setPos({ bottom: newBottom, right: newRight });
   }, []);
 
