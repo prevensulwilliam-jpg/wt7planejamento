@@ -745,6 +745,7 @@ export type Database = {
       kitnet_entries: {
         Row: {
           adm_fee: number | null
+          bank_transaction_id: string | null
           broker_creci: string | null
           broker_name: string | null
           celesc: number | null
@@ -755,6 +756,7 @@ export type Database = {
           kitnet_id: string | null
           period_end: string | null
           period_start: string | null
+          reconciled: boolean | null
           reference_month: string | null
           rent_gross: number | null
           semasa: number | null
@@ -762,6 +764,7 @@ export type Database = {
         }
         Insert: {
           adm_fee?: number | null
+          bank_transaction_id?: string | null
           broker_creci?: string | null
           broker_name?: string | null
           celesc?: number | null
@@ -772,6 +775,7 @@ export type Database = {
           kitnet_id?: string | null
           period_end?: string | null
           period_start?: string | null
+          reconciled?: boolean | null
           reference_month?: string | null
           rent_gross?: number | null
           semasa?: number | null
@@ -779,6 +783,7 @@ export type Database = {
         }
         Update: {
           adm_fee?: number | null
+          bank_transaction_id?: string | null
           broker_creci?: string | null
           broker_name?: string | null
           celesc?: number | null
@@ -789,12 +794,20 @@ export type Database = {
           kitnet_id?: string | null
           period_end?: string | null
           period_start?: string | null
+          reconciled?: boolean | null
           reference_month?: string | null
           rent_gross?: number | null
           semasa?: number | null
           total_liquid?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "kitnet_entries_bank_transaction_id_fkey"
+            columns: ["bank_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "bank_transactions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "kitnet_entries_kitnet_id_fkey"
             columns: ["kitnet_id"]

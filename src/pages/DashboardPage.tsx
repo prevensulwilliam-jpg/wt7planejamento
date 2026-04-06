@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronLeft, ChevronRight, Plus, RefreshCw, Home, ArrowRight } from "lucide-react";
-import { useNavigate } from "react-router-dom";
 import { KpiCard } from "@/components/wt7/KpiCard";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
 import { GoldButton } from "@/components/wt7/GoldButton";
