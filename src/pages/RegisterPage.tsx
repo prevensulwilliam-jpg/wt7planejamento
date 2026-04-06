@@ -40,10 +40,9 @@ export default function RegisterPage() {
       const userId = authData.user?.id;
       if (!userId) throw new Error("Usuário não criado.");
 
-      // 2. Insere role como kitnet_manager com status pending
+      // 2. Insere role via função SECURITY DEFINER (bypassa RLS)
       const { error: roleError } = await supabase
-        .from("user_roles")
-        .insert({ user_id: userId, role: "kitnet_manager", status: "pending" } as any);
+        .rpc("request_manager_access", { p_user_id: userId });
       if (roleError) throw roleError;
 
       // 3. Garante logout — não deve ficar autenticado enquanto pendente
