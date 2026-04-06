@@ -16,6 +16,7 @@ import ManagerKitnetsPage from "@/pages/ManagerKitnetsPage";
 import FinancialBillingPage from "@/pages/FinancialBillingPage";
 import CommissionsPage from "@/pages/CommissionsPage";
 import CommissionsPortalPage from "@/pages/CommissionsPortalPage";
+import ExternalCommissionsPage from "@/pages/ExternalCommissionsPage";
 import RevenuesPage from "@/pages/RevenuesPage";
 import ExpensesPage from "@/pages/ExpensesPage";
 import BanksPage from "@/pages/BanksPage";
@@ -105,6 +106,7 @@ const App = () => (
             <Route path="/projections" element={<ProjectionsPage />} />
             <Route path="/reports/kitnets" element={<KitnetsReportPage />} />
             <Route path="/reports/commissions" element={<CommissionsPage />} />
+            <Route path="/commissions/external" element={<ExternalCommissionsPage />} />
             <Route path="/users" element={<UsersPage />} />
           </Route>
 
