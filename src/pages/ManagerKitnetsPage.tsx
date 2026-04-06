@@ -66,6 +66,15 @@ function ManagerContent() {
   const [month, setMonth] = useState(getCurrentMonth());
   const [isAdmin, setIsAdmin] = useState(false);
   const navigate = useNavigate();
+  const { data: entriesForReport } = useKitnetEntries(month);
+
+  const handleRelatorio = () => {
+    if (!entriesForReport?.length) return;
+    const data = (entriesForReport as any[])
+      .filter(e => e.kitnets)
+      .map(e => ({ kitnet: e.kitnets, fechamento: e }));
+    abrirReciboConsolidado(data, month);
+  };
 
   useEffect(() => {
     (async () => {
@@ -109,14 +118,26 @@ function ManagerContent() {
         </div>
 
         <Tabs defaultValue="kitnets">
-          <TabsList className="bg-card border border-border">
-            <TabsTrigger value="kitnets" className="gap-2">
-              <Home className="w-4 h-4" /> Kitnets
-            </TabsTrigger>
-            <TabsTrigger value="energia" className="gap-2">
-              <Zap className="w-4 h-4" /> Energia Solar
-            </TabsTrigger>
-          </TabsList>
+          <div className="flex items-center justify-between gap-3">
+            <TabsList className="bg-card border border-border">
+              <TabsTrigger value="kitnets" className="gap-2">
+                <Home className="w-4 h-4" /> Kitnets
+              </TabsTrigger>
+              <TabsTrigger value="energia" className="gap-2">
+                <Zap className="w-4 h-4" /> Energia Solar
+              </TabsTrigger>
+            </TabsList>
+            <button
+              onClick={handleRelatorio}
+              disabled={!entriesForReport?.length}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-40"
+              style={{ background: 'rgba(232,201,122,0.1)', color: '#E8C97A', border: '1px solid rgba(232,201,122,0.3)' }}
+              title={entriesForReport?.length ? `Gerar relatório com ${entriesForReport.length} fechamentos` : "Nenhum fechamento neste mês"}
+            >
+              <Printer className="w-4 h-4" />
+              Relatório do Mês
+            </button>
+          </div>
           <TabsContent value="kitnets"><KitnetsTab month={month} /></TabsContent>
           <TabsContent value="energia"><EnergiaTab month={month} /></TabsContent>
         </Tabs>
@@ -134,13 +155,6 @@ function KitnetsTab({ month }: { month: string }) {
   const { data: entries } = useKitnetEntries(month);
   const [selected, setSelected] = useState<Tables<"kitnets"> | null>(null);
 
-  const handleRelatorio = () => {
-    if (!entries?.length) return;
-    const data = (entries as any[])
-      .filter(e => e.kitnets)
-      .map(e => ({ kitnet: e.kitnets, fechamento: e }));
-    abrirReciboConsolidado(data, month);
-  };
 
   const grouped = useMemo(() => {
     const map: Record<string, Tables<"kitnets">[]> = {};
@@ -154,23 +168,11 @@ function KitnetsTab({ month }: { month: string }) {
 
   return (
     <div className="space-y-6 mt-4">
-      <div className="flex items-start gap-4">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 flex-1">
-          <KpiCard label="Total Recebido" value={summary.totalReceived} color="gold" compact />
-          <KpiCard label="Ocupadas" value={summary.occupied} color="green" compact formatAs="number" />
-          <KpiCard label="Manutenção" value={summary.maintenance} color="cyan" compact formatAs="number" />
-          <KpiCard label="Vacâncias" value={summary.vacant} color="red" compact formatAs="number" />
-        </div>
-        <button
-          onClick={handleRelatorio}
-          disabled={!entries?.length}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-40 shrink-0"
-          style={{ background: 'rgba(232,201,122,0.1)', color: '#E8C97A', border: '1px solid rgba(232,201,122,0.3)' }}
-          title={entries?.length ? `Gerar relatório com ${entries.length} fechamentos` : "Nenhum fechamento neste mês"}
-        >
-          <Printer className="w-4 h-4" />
-          Relatório do Mês
-        </button>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiCard label="Total Recebido" value={summary.totalReceived} color="gold" compact />
+        <KpiCard label="Ocupadas" value={summary.occupied} color="green" compact formatAs="number" />
+        <KpiCard label="Manutenção" value={summary.maintenance} color="cyan" compact formatAs="number" />
+        <KpiCard label="Vacâncias" value={summary.vacant} color="red" compact formatAs="number" />
       </div>
 
       {isLoading ? (
