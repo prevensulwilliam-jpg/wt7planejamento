@@ -6,10 +6,10 @@ export function usePendingUsers() {
   return useQuery({
     queryKey: ["users_pending"],
     queryFn: async () => {
-      const { data: roles, error } = await supabase
+      const { data: roles, error } = await (supabase as any)
         .from("user_roles")
         .select("user_id, role, status, created_at")
-        .eq("status", "pending" as any)
+        .eq("status", "pending")
         .order("created_at", { ascending: false });
       if (error) throw error;
 
@@ -38,9 +38,9 @@ export function useApproveUser() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (userId: string) => {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from("user_roles")
-        .update({ status: "active" } as any)
+        .update({ status: "active" })
         .eq("user_id", userId);
       if (error) throw error;
     },
@@ -56,9 +56,9 @@ export function useRejectUser() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (userId: string) => {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from("user_roles")
-        .update({ status: "rejected" } as any)
+        .update({ status: "rejected" })
         .eq("user_id", userId);
       if (error) throw error;
     },
@@ -74,8 +74,8 @@ export function useLoginHistory(userId?: string) {
   return useQuery({
     queryKey: ["login_history", userId],
     queryFn: async () => {
-      let q = supabase
-        .from("login_history" as any)
+      let q = (supabase as any)
+        .from("login_history")
         .select("id, user_id, logged_at, user_agent")
         .order("logged_at", { ascending: false })
         .limit(100);
@@ -93,10 +93,10 @@ export function usePendingCount() {
   return useQuery({
     queryKey: ["users_pending_count"],
     queryFn: async () => {
-      const { count, error } = await supabase
+      const { count, error } = await (supabase as any)
         .from("user_roles")
         .select("*", { count: "exact", head: true })
-        .eq("status", "pending" as any);
+        .eq("status", "pending");
       if (error) throw error;
       return count ?? 0;
     },

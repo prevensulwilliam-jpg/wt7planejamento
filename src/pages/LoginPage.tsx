@@ -44,7 +44,7 @@ export default function LoginPage() {
       const userId = authData.user?.id;
 
       // Verifica role e status
-      const { data: roleData } = await supabase
+      const { data: roleData } = await (supabase as any)
         .from("user_roles")
         .select("role, status")
         .eq("user_id", userId)
@@ -65,7 +65,7 @@ export default function LoginPage() {
       }
 
       // Grava histórico de login
-      await supabase.from("login_history" as any).insert({
+      await (supabase as any).from("login_history").insert({
         user_id: userId,
         user_agent: navigator.userAgent,
       });

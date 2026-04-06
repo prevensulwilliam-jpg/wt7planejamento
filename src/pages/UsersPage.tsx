@@ -232,12 +232,12 @@ export default function UsersPage() {
           <h3 className="font-display font-bold text-sm" style={{ color: '#2DD4BF' }}>Histórico de Acessos</h3>
         </div>
         <div className="flex items-center gap-3 mb-4">
-          <Select value={historyUserId} onValueChange={setHistoryUserId}>
+          <Select value={historyUserId || "__all__"} onValueChange={v => setHistoryUserId(v === "__all__" ? "" : v)}>
             <SelectTrigger className="w-56 bg-background border-border text-foreground">
               <SelectValue placeholder="Selecionar usuário..." />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Todos os usuários</SelectItem>
+              <SelectItem value="__all__">Todos os usuários</SelectItem>
               {data.filter(u => u.role !== "admin").map((u, i) => (
                 <SelectItem key={`${u.user_id}-${i}`} value={u.user_id}>{u.name || u.user_id.slice(0, 8)}</SelectItem>
               ))}
