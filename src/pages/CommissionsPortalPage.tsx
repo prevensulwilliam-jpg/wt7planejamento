@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
@@ -15,7 +15,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { usePrevensulBilling, useBillingSummary, useCreateBilling, useUpdateBilling, useDeleteBilling, useReplicateMonth, useImportHistory, useCreateImportHistory, exportCSV } from "@/hooks/useBilling";
 import { formatCurrency, formatMonth, getCurrentMonth, formatDate } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
-import { LogOut, Upload, Trash2, FileSpreadsheet, Download, ArrowLeft, Pencil, Check, X, Copy } from "lucide-react";
+import { LogOut, Upload, Trash2, FileSpreadsheet, Download, ArrowLeft, Pencil, Check, X, Copy, RotateCcw } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import * as XLSX from "xlsx";
 
 const statusOptions = [
@@ -122,12 +123,22 @@ function Header({ isAdmin }: { isAdmin: boolean }) {
 // ═══════════════════════════════════════
 
 function PrevensulTab({ month, userId }: { month: string; userId: string }) {
+  const [editRecord, setEditRecord] = useState<any | null>(null);
+  const formRef = useRef<HTMLDivElement>(null);
+
+  const handleLoadRecord = (r: any) => {
+    setEditRecord(r);
+    setTimeout(() => formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+  };
+
   return (
     <div className="space-y-6 mt-4">
       <PrevensulKPIs month={month} />
-      <PrevensulForm month={month} userId={userId} />
+      <div ref={formRef}>
+        <PrevensulForm month={month} userId={userId} editRecord={editRecord} onClearEdit={() => setEditRecord(null)} />
+      </div>
       <PrevensulExcelImport month={month} userId={userId} />
-      <PrevensulHistory month={month} userId={userId} />
+      <PrevensulHistory month={month} userId={userId} onLoadRecord={handleLoadRecord} />
     </div>
   );
 }
@@ -145,51 +156,95 @@ function PrevensulKPIs({ month }: { month: string }) {
   );
 }
 
-function PrevensulForm({ month, userId }: { month: string; userId: string }) {
+const EMPTY_FORM = { client_name: "", contract_total: "", balance_remaining: "", contract_nf: "", installment_current: "", installment_total: "", closing_date: "", amount_paid: "", status: "Pendente", notes: "" };
+
+function PrevensulForm({ month, userId, editRecord, onClearEdit }: { month: string; userId: string; editRecord: any | null; onClearEdit: () => void }) {
   const { toast } = useToast();
   const createBilling = useCreateBilling();
-  const [form, setForm] = useState({
-    client_name: "", contract_total: "", balance_remaining: "", contract_nf: "",
-    installment_current: "", installment_total: "",
-    closing_date: "", amount_paid: "", status: "Pendente",
-  });
+  const updateBillingForm = useUpdateBilling();
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [editingRecordId, setEditingRecordId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!editRecord) return;
+    setForm({
+      client_name: editRecord.client_name ?? "",
+      contract_total: String(editRecord.contract_total ?? ""),
+      balance_remaining: String(editRecord.balance_remaining ?? ""),
+      contract_nf: editRecord.contract_nf ?? "",
+      installment_current: String(editRecord.installment_current ?? ""),
+      installment_total: String(editRecord.installment_total ?? ""),
+      closing_date: editRecord.closing_date ?? "",
+      amount_paid: String(editRecord.amount_paid ?? ""),
+      status: editRecord.status ?? "Pendente",
+      notes: editRecord.notes ?? "",
+    });
+    setEditingRecordId(editRecord.id);
+  }, [editRecord]);
 
   const commission = useMemo(() => (parseFloat(form.amount_paid) || 0) * 0.03, [form.amount_paid]);
+  const isEditing = editingRecordId !== null;
+
+  const handleCancel = () => {
+    setForm(EMPTY_FORM);
+    setEditingRecordId(null);
+    onClearEdit();
+  };
 
   const handleSubmit = async () => {
     if (!form.client_name || !form.amount_paid) {
       toast({ title: "Preencha Cliente e Pago", variant: "destructive" }); return;
     }
     const paid = parseFloat(form.amount_paid) || 0;
-    const contractTotal = parseFloat(form.contract_total) || 0;
-    const saldo = parseFloat(form.balance_remaining) || 0;
+    const payload = {
+      client_name: form.client_name,
+      contract_total: parseFloat(form.contract_total) || 0,
+      balance_remaining: parseFloat(form.balance_remaining) || 0,
+      contract_nf: form.contract_nf || null,
+      installment_current: parseInt(form.installment_current) || null,
+      installment_total: parseInt(form.installment_total) || null,
+      closing_date: form.closing_date || null,
+      amount_paid: paid,
+      commission_rate: 0.03,
+      status: form.status,
+      notes: form.notes || null,
+    };
     try {
-      await createBilling.mutateAsync({
-        client_name: form.client_name,
-        contract_total: contractTotal,
-        balance_remaining: saldo,
-        contract_nf: form.contract_nf || null,
-        installment_current: parseInt(form.installment_current) || null,
-        installment_total: parseInt(form.installment_total) || null,
-        closing_date: form.closing_date || null,
-        amount_paid: paid,
-        commission_rate: 0.03,
-        status: form.status,
-        reference_month: month,
-        created_by: userId,
-      });
-      toast({ title: "Faturamento registrado!" });
-      setForm({ client_name: "", contract_total: "", balance_remaining: "", contract_nf: "", installment_current: "", installment_total: "", closing_date: "", amount_paid: "", status: "Pendente" });
+      if (isEditing) {
+        await updateBillingForm.mutateAsync({ id: editingRecordId!, ...payload });
+        toast({ title: "Registro atualizado!" });
+      } else {
+        await createBilling.mutateAsync({ ...payload, reference_month: month, created_by: userId });
+        toast({ title: "Faturamento registrado!" });
+      }
+      handleCancel();
     } catch (e: any) {
       toast({ title: "Erro", description: e.message, variant: "destructive" });
     }
   };
 
+  const isPending = createBilling.isPending || updateBillingForm.isPending;
   const inputStyle = { background: '#0D1318', border: '1px solid #1A2535', color: '#F0F4F8' };
 
   return (
-    <PremiumCard>
-      <h2 className="font-display font-semibold text-lg mb-4" style={{ color: '#F0F4F8' }}>Registrar Faturamento</h2>
+    <PremiumCard glowColor={isEditing ? "rgba(245,158,11,0.15)" : undefined}>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <h2 className="font-display font-semibold text-lg" style={{ color: '#F0F4F8' }}>
+            {isEditing ? `Editar — ${form.client_name || "cliente"}` : "Registrar Faturamento"}
+          </h2>
+          {isEditing && (
+            <span className="text-xs px-2 py-0.5 rounded-full font-mono" style={{ background: 'rgba(245,158,11,0.15)', color: '#F59E0B', border: '1px solid rgba(245,158,11,0.3)' }}>
+              modo edição
+            </span>
+          )}
+        </div>
+        {isEditing && (
+          <button onClick={handleCancel} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-colors" style={{ color: '#94A3B8', border: '1px solid #1A2535' }}>
+            <RotateCcw className="w-3 h-3" /> Cancelar
+          </button>
+        )}
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Linha 1: Cliente (2 cols) + Valor */}
         <div className="md:col-span-2">
@@ -236,6 +291,12 @@ function PrevensulForm({ month, userId }: { month: string; userId: string }) {
             </SelectContent>
           </Select>
         </div>
+
+        {/* Linha 4: Observações — full width */}
+        <div className="md:col-span-3">
+          <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Observações</label>
+          <Input value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} style={inputStyle} placeholder="Observações opcionais sobre este cliente..." />
+        </div>
       </div>
 
       {/* Comissão + Botão */}
@@ -244,8 +305,8 @@ function PrevensulForm({ month, userId }: { month: string; userId: string }) {
           <span className="font-mono text-sm" style={{ color: '#E8C97A' }}>Comissão (3%)</span>
           <span className="font-mono text-xl font-bold" style={{ color: '#C9A84C' }}>{formatCurrency(commission)}</span>
         </div>
-        <GoldButton onClick={handleSubmit} disabled={createBilling.isPending}>
-          {createBilling.isPending ? "Salvando..." : "Registrar Faturamento"}
+        <GoldButton onClick={handleSubmit} disabled={isPending}>
+          {isPending ? "Salvando..." : isEditing ? "Atualizar Faturamento" : "Registrar Faturamento"}
         </GoldButton>
       </div>
     </PremiumCard>
@@ -406,7 +467,7 @@ function getPreviousMonth(month: string): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function PrevensulHistory({ month, userId }: { month: string; userId: string }) {
+function PrevensulHistory({ month, userId, onLoadRecord }: { month: string; userId: string; onLoadRecord: (r: any) => void }) {
   const { data = [], isLoading } = usePrevensulBilling(month);
   const deleteBilling = useDeleteBilling();
   const updateBilling = useUpdateBilling();
@@ -566,7 +627,25 @@ function PrevensulHistory({ month, userId }: { month: string; userId: string }) 
               }
               return (
                 <TableRow key={r.id} style={{ borderColor: '#1A2535' }}>
-                  <TableCell className="font-medium" style={{ color: '#F0F4F8', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.client_name}</TableCell>
+                  <TableCell style={{ maxWidth: 180, overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          onClick={() => onLoadRecord(r)}
+                          className="font-medium text-left w-full truncate transition-colors hover:underline"
+                          style={{ color: '#F0F4F8', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+                          title={r.client_name}
+                        >
+                          {r.client_name}
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="right" className="max-w-xs" style={{ background: '#0D1318', border: '1px solid #1A2535', padding: '10px 12px' }}>
+                        <p className="font-semibold text-sm mb-1" style={{ color: '#F0F4F8' }}>{r.client_name}</p>
+                        {r.notes && <p className="text-xs mb-1" style={{ color: '#94A3B8' }}>{r.notes}</p>}
+                        <p className="text-xs" style={{ color: '#4A5568' }}>Clique para editar no formulário</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TableCell>
                   <TableCell className="font-mono text-xs whitespace-nowrap" style={{ color: '#94A3B8' }}>{formatCurrency(r.contract_total ?? 0)}</TableCell>
                   <TableCell className="font-mono text-xs whitespace-nowrap" style={{ color: '#F43F5E' }}>{formatCurrency(r.balance_remaining ?? 0)}</TableCell>
                   <TableCell className="font-mono text-xs whitespace-nowrap" style={{ color: '#94A3B8' }}>{r.contract_nf || "—"}</TableCell>
