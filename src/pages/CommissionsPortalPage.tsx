@@ -422,10 +422,12 @@ function PrevensulHistory({ month }: { month: string }) {
           <TableHeader>
             <TableRow style={{ borderColor: '#1A2535' }}>
               <TableHead style={{ color: '#94A3B8' }}>Cliente</TableHead>
-              <TableHead style={{ color: '#94A3B8' }}>NF</TableHead>
+              <TableHead style={{ color: '#94A3B8' }}>Valor</TableHead>
+              <TableHead style={{ color: '#94A3B8' }}>Saldo</TableHead>
+              <TableHead style={{ color: '#94A3B8' }}>Contr/NF</TableHead>
               <TableHead style={{ color: '#94A3B8' }}>Parcela</TableHead>
-              <TableHead style={{ color: '#94A3B8' }}>Contrato</TableHead>
-              <TableHead style={{ color: '#94A3B8' }}>Recebido</TableHead>
+              <TableHead style={{ color: '#94A3B8' }}>Data Fech.</TableHead>
+              <TableHead style={{ color: '#94A3B8' }}>Pago</TableHead>
               <TableHead style={{ color: '#94A3B8' }}>Comissão</TableHead>
               <TableHead style={{ color: '#94A3B8' }}>Status</TableHead>
               <TableHead style={{ color: '#94A3B8' }}>Ações</TableHead>
@@ -435,12 +437,14 @@ function PrevensulHistory({ month }: { month: string }) {
             {data.map(r => (
               <TableRow key={r.id} style={{ borderColor: '#1A2535' }}>
                 <TableCell style={{ color: '#F0F4F8' }}>{r.client_name}</TableCell>
+                <TableCell className="font-mono" style={{ color: '#94A3B8' }}>{formatCurrency(r.contract_total ?? 0)}</TableCell>
+                <TableCell className="font-mono" style={{ color: '#F43F5E' }}>{formatCurrency(r.balance_remaining ?? 0)}</TableCell>
                 <TableCell className="font-mono" style={{ color: '#94A3B8' }}>{r.contract_nf || "—"}</TableCell>
                 <TableCell className="font-mono" style={{ color: '#94A3B8' }}>{r.installment_current ?? "—"}/{r.installment_total ?? "—"}</TableCell>
-                <TableCell className="font-mono" style={{ color: '#94A3B8' }}>{formatCurrency(r.contract_total ?? 0)}</TableCell>
+                <TableCell className="font-mono text-xs" style={{ color: '#94A3B8' }}>{r.closing_date || "—"}</TableCell>
                 <TableCell className="font-mono" style={{ color: '#10B981' }}>{formatCurrency(r.amount_paid ?? 0)}</TableCell>
                 <TableCell className="font-mono" style={{ color: '#E8C97A' }}>{formatCurrency(r.commission_value ?? 0)}</TableCell>
-                <TableCell><WtBadge variant={statusBadge[r.status ?? ""] || "gray"}>{r.status}</WtBadge></TableCell>
+                <TableCell><WtBadge variant={statusBadge[r.status ?? ""] || "gray"}>{r.status ?? "—"}</WtBadge></TableCell>
                 <TableCell>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
