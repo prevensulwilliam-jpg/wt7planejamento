@@ -47,8 +47,8 @@ const CSS = `
     font-size: 13px;
     color: #111;
     background: #fff;
-    padding: 48px 56px;
-    max-width: 720px;
+    padding: 40px 48px;
+    max-width: 680px;
     margin: 0 auto;
   }
 
@@ -157,9 +157,24 @@ const CSS = `
   }
 
   @media print {
-    body { padding: 16px 24px; }
-    @page { margin: 1.5cm; size: A4 portrait; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    html, body {
+      width: 210mm;
+      margin: 0 !important;
+      padding: 0 !important;
+      max-width: 100% !important;
+    }
+    body > * {
+      padding: 0 12mm;
+    }
+    @page {
+      size: A4 portrait;
+      margin: 14mm 12mm;
+    }
     .page-break { page-break-after: always; border: none; margin: 0; }
+    table { font-size: 11px; }
+    .sum-table th, .sum-table td { padding: 7px 8px; font-size: 10.5px; }
+    td { padding: 7px 12px; }
   }
 `;
 
