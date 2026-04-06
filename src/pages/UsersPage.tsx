@@ -208,7 +208,7 @@ export default function UsersPage() {
                 <div>
                   <p className="text-sm font-medium" style={{ color: '#F0F4F8' }}>{u.name}</p>
                   <p className="text-xs font-mono mt-0.5" style={{ color: '#64748B' }}>
-                    Adm Kitnets · Solicitado em {u.requested_at ? new Date(u.requested_at).toLocaleDateString("pt-BR") : "—"}
+                    {roleBadge[u.role]?.label ?? u.role} · Solicitado em {u.requested_at ? new Date(u.requested_at).toLocaleDateString("pt-BR") : "—"}
                   </p>
                 </div>
                 <div className="flex gap-2">
