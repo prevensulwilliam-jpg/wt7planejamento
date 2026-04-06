@@ -74,8 +74,8 @@ export function useLoginHistory(userId?: string) {
   return useQuery({
     queryKey: ["login_history", userId],
     queryFn: async () => {
-      let q = supabase
-        .from("login_history" as any)
+      let q = (supabase as any)
+        .from("login_history")
         .select("id, user_id, logged_at, user_agent")
         .order("logged_at", { ascending: false })
         .limit(100);
