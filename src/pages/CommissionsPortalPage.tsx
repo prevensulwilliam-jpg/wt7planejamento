@@ -174,7 +174,6 @@ function PrevensulForm({ month, userId }: { month: string; userId: string }) {
         closing_date: form.closing_date || null,
         amount_paid: paid,
         commission_rate: 0.03,
-        commission_value: paid * 0.03,
         status: form.status,
         reference_month: month,
         created_by: userId,
@@ -333,8 +332,8 @@ function PrevensulExcelImport({ month, userId }: { month: string; userId: string
       for (const row of preview) {
         const isDuplicate = existing.some(e => e.client_name === row.client_name && e.installment_current === row.installment_current);
         if (isDuplicate) continue;
-        const commValue = row.commission_value || row.amount_paid * 0.03;
-        await createBilling.mutateAsync({ ...row, commission_rate: 0.03, commission_value: commValue, reference_month: month, created_by: userId });
+        const { commission_value: _cv, ...rowWithoutCommission } = row;
+        await createBilling.mutateAsync({ ...rowWithoutCommission, commission_rate: 0.03, reference_month: month, created_by: userId });
         imported++;
         totalPaid += row.amount_paid;
         totalComm += commValue;
@@ -450,7 +449,6 @@ function PrevensulHistory({ month, userId }: { month: string; userId: string }) 
         installment_total: parseInt(editForm.installment_total) || null,
         closing_date: editForm.closing_date || null,
         amount_paid: paid,
-        commission_value: paid * 0.03,
         status: editForm.status,
       });
       toast({ title: "Atualizado!" });

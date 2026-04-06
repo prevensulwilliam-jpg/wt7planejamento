@@ -91,7 +91,6 @@ export function useReplicateMonth() {
         closing_date: r.closing_date,
         amount_paid: r.amount_paid,
         commission_rate: r.commission_rate,
-        commission_value: r.commission_value,
         status: r.status,
         reference_month: targetMonth,
         created_by: userId,
