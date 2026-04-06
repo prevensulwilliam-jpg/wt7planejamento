@@ -12,10 +12,10 @@ import { KpiCard } from "@/components/wt7/KpiCard";
 import { WtBadge } from "@/components/wt7/WtBadge";
 import { WT7Logo } from "@/components/wt7/WT7Logo";
 import { Skeleton } from "@/components/ui/skeleton";
-import { usePrevensulBilling, useBillingSummary, useCreateBilling, useDeleteBilling, useImportHistory, useCreateImportHistory, exportCSV } from "@/hooks/useBilling";
+import { usePrevensulBilling, useBillingSummary, useCreateBilling, useUpdateBilling, useDeleteBilling, useReplicateMonth, useImportHistory, useCreateImportHistory, exportCSV } from "@/hooks/useBilling";
 import { formatCurrency, formatMonth, getCurrentMonth, formatDate } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
-import { LogOut, Upload, Trash2, FileSpreadsheet, Download, ArrowLeft } from "lucide-react";
+import { LogOut, Upload, Trash2, FileSpreadsheet, Download, ArrowLeft, Pencil, Check, X, Copy } from "lucide-react";
 import * as XLSX from "xlsx";
 
 const statusOptions = [
@@ -127,7 +127,7 @@ function PrevensulTab({ month, userId }: { month: string; userId: string }) {
       <PrevensulKPIs month={month} />
       <PrevensulForm month={month} userId={userId} />
       <PrevensulExcelImport month={month} userId={userId} />
-      <PrevensulHistory month={month} />
+      <PrevensulHistory month={month} userId={userId} />
     </div>
   );
 }
@@ -401,16 +401,107 @@ function PrevensulExcelImport({ month, userId }: { month: string; userId: string
   );
 }
 
-function PrevensulHistory({ month }: { month: string }) {
+function getPreviousMonth(month: string): string {
+  const [y, m] = month.split("-").map(Number);
+  const d = new Date(y, m - 2, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function PrevensulHistory({ month, userId }: { month: string; userId: string }) {
   const { data = [], isLoading } = usePrevensulBilling(month);
   const deleteBilling = useDeleteBilling();
+  const updateBilling = useUpdateBilling();
+  const replicateMonth = useReplicateMonth();
   const { toast } = useToast();
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<Record<string, any>>({});
+
   const totalPago = useMemo(() => data.reduce((s, r) => s + (r.amount_paid ?? 0), 0), [data]);
   const totalComissao = useMemo(() => data.reduce((s, r) => s + (r.commission_value ?? 0), 0), [data]);
 
+  const startEdit = (r: any) => {
+    setEditingId(r.id);
+    setEditForm({
+      client_name: r.client_name ?? "",
+      contract_total: r.contract_total ?? "",
+      balance_remaining: r.balance_remaining ?? "",
+      contract_nf: r.contract_nf ?? "",
+      installment_current: r.installment_current ?? "",
+      installment_total: r.installment_total ?? "",
+      closing_date: r.closing_date ?? "",
+      amount_paid: r.amount_paid ?? "",
+      status: r.status ?? "Pendente",
+    });
+  };
+
+  const cancelEdit = () => { setEditingId(null); setEditForm({}); };
+
+  const saveEdit = async () => {
+    if (!editingId) return;
+    const paid = parseFloat(editForm.amount_paid) || 0;
+    try {
+      await updateBilling.mutateAsync({
+        id: editingId,
+        client_name: editForm.client_name,
+        contract_total: parseFloat(editForm.contract_total) || 0,
+        balance_remaining: parseFloat(editForm.balance_remaining) || 0,
+        contract_nf: editForm.contract_nf || null,
+        installment_current: parseInt(editForm.installment_current) || null,
+        installment_total: parseInt(editForm.installment_total) || null,
+        closing_date: editForm.closing_date || null,
+        amount_paid: paid,
+        commission_value: paid * 0.03,
+        status: editForm.status,
+      });
+      toast({ title: "Atualizado!" });
+      cancelEdit();
+    } catch (e: any) {
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    }
+  };
+
+  const prevMonth = getPreviousMonth(month);
+
+  const handleReplicate = async () => {
+    try {
+      const count = await replicateMonth.mutateAsync({ sourceMonth: prevMonth, targetMonth: month, userId });
+      toast({ title: `${count} registros copiados de ${formatMonth(prevMonth)}!` });
+    } catch (e: any) {
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    }
+  };
+
+  const inputStyle: React.CSSProperties = { background: '#0D1318', border: '1px solid #1A2535', color: '#F0F4F8', padding: '4px 8px', height: '32px', fontSize: '13px' };
+
   if (isLoading) return <Skeleton className="h-64 rounded-2xl" />;
+
   if (data.length === 0) return (
-    <PremiumCard><p className="text-center py-8 font-mono text-sm" style={{ color: '#4A5568' }}>Nenhum faturamento neste mês</p></PremiumCard>
+    <PremiumCard>
+      <div className="text-center py-8 space-y-4">
+        <p className="font-mono text-sm" style={{ color: '#4A5568' }}>Nenhum faturamento neste mês</p>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <button className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium text-sm transition-colors" style={{ background: 'rgba(245,158,11,0.15)', color: '#F59E0B', border: '1px solid rgba(245,158,11,0.3)' }}>
+              <Copy className="w-4 h-4" /> Replicar Mês Anterior ({formatMonth(prevMonth)})
+            </button>
+          </AlertDialogTrigger>
+          <AlertDialogContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+            <AlertDialogHeader>
+              <AlertDialogTitle style={{ color: '#F0F4F8' }}>Replicar mês anterior?</AlertDialogTitle>
+              <AlertDialogDescription style={{ color: '#94A3B8' }}>
+                Todos os registros de {formatMonth(prevMonth)} serão copiados para {formatMonth(month)}. A parcela será incrementada automaticamente (+1). Você poderá editar os valores depois.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel style={{ background: '#1A2535', color: '#F0F4F8', border: 'none' }}>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={handleReplicate} style={{ background: '#F59E0B', color: '#080C10' }}>
+                {replicateMonth.isPending ? "Copiando..." : "Replicar"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+    </PremiumCard>
   );
 
   return (
@@ -438,36 +529,77 @@ function PrevensulHistory({ month }: { month: string }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data.map(r => (
-              <TableRow key={r.id} style={{ borderColor: '#1A2535' }}>
-                <TableCell style={{ color: '#F0F4F8' }}>{r.client_name}</TableCell>
-                <TableCell className="font-mono" style={{ color: '#94A3B8' }}>{formatCurrency(r.contract_total ?? 0)}</TableCell>
-                <TableCell className="font-mono" style={{ color: '#F43F5E' }}>{formatCurrency(r.balance_remaining ?? 0)}</TableCell>
-                <TableCell className="font-mono" style={{ color: '#94A3B8' }}>{r.contract_nf || "—"}</TableCell>
-                <TableCell className="font-mono" style={{ color: '#94A3B8' }}>{r.installment_current ?? "—"}/{r.installment_total ?? "—"}</TableCell>
-                <TableCell className="font-mono text-xs" style={{ color: '#94A3B8' }}>{r.closing_date || "—"}</TableCell>
-                <TableCell className="font-mono" style={{ color: '#10B981' }}>{formatCurrency(r.amount_paid ?? 0)}</TableCell>
-                <TableCell className="font-mono" style={{ color: '#E8C97A' }}>{formatCurrency(r.commission_value ?? 0)}</TableCell>
-                <TableCell><WtBadge variant={statusBadge[r.status ?? ""] || "gray"}>{r.status ?? "—"}</WtBadge></TableCell>
-                <TableCell>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <button className="p-1.5 rounded-lg transition-colors hover:bg-red-500/10"><Trash2 className="w-4 h-4" style={{ color: '#F43F5E' }} /></button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle style={{ color: '#F0F4F8' }}>Excluir registro?</AlertDialogTitle>
-                        <AlertDialogDescription style={{ color: '#94A3B8' }}>Registro de {r.client_name} será removido permanentemente.</AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel style={{ background: '#1A2535', color: '#F0F4F8', border: 'none' }}>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction onClick={async () => { try { await deleteBilling.mutateAsync(r.id); toast({ title: "Excluído" }); } catch (e: any) { toast({ title: "Erro", description: e.message, variant: "destructive" }); } }} style={{ background: '#F43F5E', color: '#fff' }}>Excluir</AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </TableCell>
-              </TableRow>
-            ))}
+            {data.map(r => {
+              const isEditing = editingId === r.id;
+              if (isEditing) {
+                const editCommission = (parseFloat(editForm.amount_paid) || 0) * 0.03;
+                return (
+                  <TableRow key={r.id} style={{ borderColor: '#1A2535', background: 'rgba(245,158,11,0.04)' }}>
+                    <TableCell><input value={editForm.client_name} onChange={e => setEditForm(p => ({ ...p, client_name: e.target.value }))} style={{ ...inputStyle, width: '100%', minWidth: 120 }} /></TableCell>
+                    <TableCell><input type="number" value={editForm.contract_total} onChange={e => setEditForm(p => ({ ...p, contract_total: e.target.value }))} style={{ ...inputStyle, width: 90 }} /></TableCell>
+                    <TableCell><input type="number" value={editForm.balance_remaining} onChange={e => setEditForm(p => ({ ...p, balance_remaining: e.target.value }))} style={{ ...inputStyle, width: 90 }} /></TableCell>
+                    <TableCell><input value={editForm.contract_nf} onChange={e => setEditForm(p => ({ ...p, contract_nf: e.target.value }))} style={{ ...inputStyle, width: 80 }} /></TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        <input type="number" value={editForm.installment_current} onChange={e => setEditForm(p => ({ ...p, installment_current: e.target.value }))} style={{ ...inputStyle, width: 40, textAlign: 'center' }} />
+                        <span style={{ color: '#4A5568' }}>/</span>
+                        <input type="number" value={editForm.installment_total} onChange={e => setEditForm(p => ({ ...p, installment_total: e.target.value }))} style={{ ...inputStyle, width: 40, textAlign: 'center' }} />
+                      </div>
+                    </TableCell>
+                    <TableCell><input value={editForm.closing_date} onChange={e => setEditForm(p => ({ ...p, closing_date: e.target.value }))} style={{ ...inputStyle, width: 90 }} /></TableCell>
+                    <TableCell><input type="number" value={editForm.amount_paid} onChange={e => setEditForm(p => ({ ...p, amount_paid: e.target.value }))} style={{ ...inputStyle, width: 90 }} /></TableCell>
+                    <TableCell className="font-mono" style={{ color: '#E8C97A' }}>{formatCurrency(editCommission)}</TableCell>
+                    <TableCell>
+                      <Select value={editForm.status} onValueChange={v => setEditForm(p => ({ ...p, status: v }))}>
+                        <SelectTrigger style={{ ...inputStyle, width: 110 }}><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {statusOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        <button onClick={saveEdit} disabled={updateBilling.isPending} className="p-1.5 rounded-lg transition-colors hover:bg-green-500/10"><Check className="w-4 h-4" style={{ color: '#10B981' }} /></button>
+                        <button onClick={cancelEdit} className="p-1.5 rounded-lg transition-colors hover:bg-red-500/10"><X className="w-4 h-4" style={{ color: '#F43F5E' }} /></button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              }
+              return (
+                <TableRow key={r.id} style={{ borderColor: '#1A2535' }}>
+                  <TableCell style={{ color: '#F0F4F8' }}>{r.client_name}</TableCell>
+                  <TableCell className="font-mono" style={{ color: '#94A3B8' }}>{formatCurrency(r.contract_total ?? 0)}</TableCell>
+                  <TableCell className="font-mono" style={{ color: '#F43F5E' }}>{formatCurrency(r.balance_remaining ?? 0)}</TableCell>
+                  <TableCell className="font-mono" style={{ color: '#94A3B8' }}>{r.contract_nf || "—"}</TableCell>
+                  <TableCell className="font-mono" style={{ color: '#94A3B8' }}>{r.installment_current ?? "—"}/{r.installment_total ?? "—"}</TableCell>
+                  <TableCell className="font-mono text-xs" style={{ color: '#94A3B8' }}>{r.closing_date || "—"}</TableCell>
+                  <TableCell className="font-mono" style={{ color: '#10B981' }}>{formatCurrency(r.amount_paid ?? 0)}</TableCell>
+                  <TableCell className="font-mono" style={{ color: '#E8C97A' }}>{formatCurrency(r.commission_value ?? 0)}</TableCell>
+                  <TableCell><WtBadge variant={statusBadge[r.status ?? ""] || "gray"}>{r.status ?? "—"}</WtBadge></TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => startEdit(r)} className="p-1.5 rounded-lg transition-colors hover:bg-amber-500/10"><Pencil className="w-4 h-4" style={{ color: '#F59E0B' }} /></button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <button className="p-1.5 rounded-lg transition-colors hover:bg-red-500/10"><Trash2 className="w-4 h-4" style={{ color: '#F43F5E' }} /></button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle style={{ color: '#F0F4F8' }}>Excluir registro?</AlertDialogTitle>
+                            <AlertDialogDescription style={{ color: '#94A3B8' }}>Registro de {r.client_name} será removido permanentemente.</AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel style={{ background: '#1A2535', color: '#F0F4F8', border: 'none' }}>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction onClick={async () => { try { await deleteBilling.mutateAsync(r.id); toast({ title: "Excluído" }); } catch (e: any) { toast({ title: "Erro", description: e.message, variant: "destructive" }); } }} style={{ background: '#F43F5E', color: '#fff' }}>Excluir</AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
           <TableFooter>
             <TableRow style={{ borderColor: '#1A2535', background: 'rgba(201,168,76,0.05)' }}>

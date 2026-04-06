@@ -56,6 +56,54 @@ export function useCreateBilling() {
   });
 }
 
+export function useUpdateBilling() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...updates }: { id: string } & Record<string, any>) => {
+      const { error } = await supabase.from("prevensul_billing").update(updates).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["prevensul_billing"] });
+      qc.invalidateQueries({ queryKey: ["prevensul_billing_range"] });
+    },
+  });
+}
+
+export function useReplicateMonth() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ sourceMonth, targetMonth, userId }: { sourceMonth: string; targetMonth: string; userId: string }) => {
+      const { data: sourceData, error: fetchErr } = await supabase
+        .from("prevensul_billing")
+        .select("*")
+        .eq("reference_month", sourceMonth);
+      if (fetchErr) throw fetchErr;
+      if (!sourceData || sourceData.length === 0) throw new Error("Mês anterior sem registros");
+
+      const copies = sourceData.map(r => ({
+        client_name: r.client_name,
+        contract_total: r.contract_total,
+        balance_remaining: r.balance_remaining,
+        contract_nf: r.contract_nf,
+        installment_current: r.installment_current ? r.installment_current + 1 : null,
+        installment_total: r.installment_total,
+        closing_date: r.closing_date,
+        amount_paid: r.amount_paid,
+        commission_rate: r.commission_rate,
+        commission_value: r.commission_value,
+        status: r.status,
+        reference_month: targetMonth,
+        created_by: userId,
+      }));
+      const { error: insertErr } = await supabase.from("prevensul_billing").insert(copies);
+      if (insertErr) throw insertErr;
+      return copies.length;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["prevensul_billing"] }),
+  });
+}
+
 export function useDeleteBilling() {
   const qc = useQueryClient();
   return useMutation({
