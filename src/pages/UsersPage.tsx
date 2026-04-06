@@ -237,7 +237,7 @@ export default function UsersPage() {
               <SelectValue placeholder="Selecionar usuário..." />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Todos os usuários</SelectItem>
+              <SelectItem value="__all__">Todos os usuários</SelectItem>
               {data.filter(u => u.role !== "admin").map((u, i) => (
                 <SelectItem key={`${u.user_id}-${i}`} value={u.user_id}>{u.name || u.user_id.slice(0, 8)}</SelectItem>
               ))}
