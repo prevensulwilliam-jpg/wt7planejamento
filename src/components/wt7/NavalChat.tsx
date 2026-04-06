@@ -267,12 +267,19 @@ export function NavalChat() {
     );
   }
 
+  // Garante que o painel nunca saia da viewport por cima
+  const panelMaxH = minimized ? 200 : 600;
+  const safeBottom = Math.min(pos.bottom, window.innerHeight - panelMaxH - 16);
+  const safeRight = Math.min(pos.right, window.innerWidth - (minimized ? 260 : 380) - 8);
+  const clampedBottom = Math.max(8, safeBottom);
+  const clampedRight = Math.max(8, safeRight);
+
   return (
     <div
       className="fixed z-50 flex flex-col rounded-2xl shadow-2xl overflow-hidden"
       style={{
-        bottom: pos.bottom,
-        right: pos.right,
+        bottom: clampedBottom,
+        right: clampedRight,
         width: minimized ? 260 : 380,
         maxHeight: minimized ? "auto" : "min(600px, calc(100vh - 100px))",
         background: "#0D1117",
