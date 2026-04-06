@@ -883,6 +883,45 @@ export type Database = {
         }
         Relationships: []
       }
+      other_commissions: {
+        Row: {
+          amount: number
+          commission_rate: number | null
+          commission_value: number
+          created_at: string | null
+          created_by: string | null
+          description: string
+          id: string
+          notes: string | null
+          reference_month: string
+          source: string | null
+        }
+        Insert: {
+          amount?: number
+          commission_rate?: number | null
+          commission_value?: number
+          created_at?: string | null
+          created_by?: string | null
+          description: string
+          id?: string
+          notes?: string | null
+          reference_month: string
+          source?: string | null
+        }
+        Update: {
+          amount?: number
+          commission_rate?: number | null
+          commission_value?: number
+          created_at?: string | null
+          created_by?: string | null
+          description?: string
+          id?: string
+          notes?: string | null
+          reference_month?: string
+          source?: string | null
+        }
+        Relationships: []
+      }
       pluggy_connections: {
         Row: {
           account_id: string | null
@@ -1402,7 +1441,12 @@ export type Database = {
         | { Args: { p_role?: string; p_user_id: string }; Returns: undefined }
     }
     Enums: {
-      app_role: "admin" | "kitnet_manager" | "financial" | "partner"
+      app_role:
+        | "admin"
+        | "kitnet_manager"
+        | "financial"
+        | "partner"
+        | "commissions"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1530,7 +1574,13 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "kitnet_manager", "financial", "partner"],
+      app_role: [
+        "admin",
+        "kitnet_manager",
+        "financial",
+        "partner",
+        "commissions",
+      ],
     },
   },
 } as const
