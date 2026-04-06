@@ -19,7 +19,8 @@ import {
   useCelescInvoices,
 } from "@/hooks/useKitnets";
 import { formatCurrency, formatMonth, getCurrentMonth } from "@/lib/formatters";
-import { Upload, FileText, Trash2, Plus, Zap } from "lucide-react";
+import { Upload, FileText, Trash2, Plus, Zap, Printer } from "lucide-react";
+import { abrirReciboIndividual } from "@/lib/relatorioFechamento";
 import type { Tables } from "@/integrations/supabase/types";
 
 const statusLabels: Record<string, { label: string; variant: "green" | "gold" | "red" }> = {
@@ -274,11 +275,21 @@ function FechamentosTab({ kitnet }: { kitnet: Tables<"kitnets"> }) {
         <PremiumCard className="p-4 space-y-3">
           <div className="flex items-center justify-between">
             <p className="text-sm font-medium text-foreground">{formatMonth(displayed.reference_month ?? "")}</p>
-            {selectedMonth === null && (
-              <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(232,201,122,0.15)', color: '#E8C97A' }}>
-                Último fechamento
-              </span>
-            )}
+            <div className="flex items-center gap-2">
+              {selectedMonth === null && (
+                <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(232,201,122,0.15)', color: '#E8C97A' }}>
+                  Último fechamento
+                </span>
+              )}
+              <button
+                onClick={() => abrirReciboIndividual(kitnet, displayed)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                style={{ background: 'rgba(232,201,122,0.12)', color: '#E8C97A', border: '1px solid rgba(232,201,122,0.3)' }}
+                title="Gerar recibo de repasse"
+              >
+                <Printer className="w-3.5 h-3.5" /> Gerar Recibo
+              </button>
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
             <span>Aluguel bruto: <span className="text-foreground font-mono">{formatCurrency((displayed as any).rent_gross ?? 0)}</span></span>

@@ -16,7 +16,8 @@ import { useKitnets, useKitnetEntries, useKitnetSummary, useCreateKitnetEntry, u
 import { formatCurrency, formatMonth, getCurrentMonth, formatDate } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Plus, Download, Save } from "lucide-react";
+import { Plus, Download, Save, Printer } from "lucide-react";
+import { abrirReciboConsolidado } from "@/lib/relatorioFechamento";
 import type { Tables } from "@/integrations/supabase/types";
 import { useMemo } from "react";
 
@@ -53,7 +54,16 @@ export default function KitnetsPage() {
 function OverviewTab({ month, setMonth }: { month: string; setMonth: (v: string) => void }) {
   const { data: kitnets, isLoading, refetch } = useKitnets();
   const summary = useKitnetSummary(month);
+  const { data: entries } = useKitnetEntries(month);
   const [selected, setSelected] = useState<Tables<"kitnets"> | null>(null);
+
+  const handleRelatorioConsolidado = () => {
+    if (!entries?.length) return;
+    const data = entries
+      .filter((e: any) => e.kitnets)
+      .map((e: any) => ({ kitnet: e.kitnets, fechamento: e }));
+    abrirReciboConsolidado(data, month);
+  };
 
   const rwt02 = (kitnets ?? []).filter(k => k.residencial_code === "RWT02");
   const rwt03 = (kitnets ?? []).filter(k => k.residencial_code === "RWT03");
@@ -73,10 +83,20 @@ function OverviewTab({ month, setMonth }: { month: string; setMonth: (v: string)
 
   return (
     <div className="space-y-6 mt-4">
-      {/* Seletor de mês + KPIs */}
+      {/* Seletor de mês + botão relatório */}
       <div className="flex items-center gap-3 flex-wrap">
         <span className="text-xs font-mono uppercase tracking-widest" style={{ color: '#4A5568' }}>Mês de referência</span>
         <MonthPicker value={month} onChange={setMonth} className="w-40" />
+        <button
+          onClick={handleRelatorioConsolidado}
+          disabled={!entries?.length}
+          className="ml-auto flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-40"
+          style={{ background: 'rgba(232,201,122,0.1)', color: '#E8C97A', border: '1px solid rgba(232,201,122,0.3)' }}
+          title={entries?.length ? `Gerar relatório com ${entries.length} fechamentos` : "Nenhum fechamento neste mês"}
+        >
+          <Printer className="w-4 h-4" />
+          Relatório do Mês
+        </button>
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard label="Total Recebido" value={summary.totalReceived} color="gold" compact />
