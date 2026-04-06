@@ -8,24 +8,23 @@ export function usePendingUsers() {
     queryFn: async () => {
       const { data: roles, error } = await (supabase as any)
         .from("user_roles")
-        .select("user_id, role, status, created_at")
-        .eq("status", "pending")
-        .order("created_at", { ascending: false });
+        .select("user_id, role, status")
+        .eq("status", "pending");
       if (error) throw error;
 
-      const userIds = (roles ?? []).map(r => r.user_id);
+      const userIds = (roles ?? []).map((r: any) => r.user_id);
       if (userIds.length === 0) return [];
 
       const { data: profiles } = await supabase
         .from("profiles")
-        .select("id, name")
+        .select("id, name, created_at")
         .in("id", userIds);
 
-      return (roles ?? []).map(r => ({
+      return (roles ?? []).map((r: any) => ({
         user_id: r.user_id,
         role: r.role,
-        status: (r as any).status,
-        requested_at: (r as any).created_at,
+        status: r.status,
+        requested_at: (profiles ?? []).find(p => p.id === r.user_id)?.created_at ?? null,
         name: (profiles ?? []).find(p => p.id === r.user_id)?.name ?? "—",
       }));
     },
@@ -125,12 +124,12 @@ export function usePendingCount() {
   return useQuery({
     queryKey: ["users_pending_count"],
     queryFn: async () => {
-      const { count, error } = await (supabase as any)
+      const { data, error } = await (supabase as any)
         .from("user_roles")
-        .select("*", { count: "exact", head: true })
+        .select("user_id")
         .eq("status", "pending");
       if (error) throw error;
-      return count ?? 0;
+      return (data ?? []).length;
     },
     refetchInterval: 30_000,
   });
