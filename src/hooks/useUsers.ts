@@ -38,9 +38,9 @@ export function useApproveUser() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (userId: string) => {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from("user_roles")
-        .update({ status: "active" } as any)
+        .update({ status: "active" })
         .eq("user_id", userId);
       if (error) throw error;
     },
@@ -56,9 +56,9 @@ export function useRejectUser() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (userId: string) => {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from("user_roles")
-        .update({ status: "rejected" } as any)
+        .update({ status: "rejected" })
         .eq("user_id", userId);
       if (error) throw error;
     },
