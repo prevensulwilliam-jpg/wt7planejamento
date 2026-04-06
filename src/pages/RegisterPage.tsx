@@ -9,6 +9,7 @@ import { CheckCircle } from "lucide-react";
 
 const ROLES = [
   { value: "kitnet_manager", label: "🏠 Portal Manager", description: "Gestão de kitnets e repasses" },
+  { value: "commissions", label: "📊 Portal Comissões", description: "Lançamento e visualização de comissões" },
   { value: "partner", label: "🤝 Sócio", description: "Acompanhamento de projetos e participações" },
   { value: "financial", label: "💰 Financeiro", description: "Visualização de faturamento" },
 ];

@@ -31,6 +31,7 @@ const navGroups = [
       { label: "Kitnets", icon: Home, href: "/kitnets" },
       { label: "Energia Solar", icon: Zap, href: "/energy" },
       { label: "Portal Manager", icon: KeyRound, href: "/manager/kitnets" },
+      { label: "Portal Comissões", icon: Coins, href: "/commissions/portal" },
       { label: "Obras & Terrenos", icon: HardHat, href: "/constructions" },
       { label: "Patrimônio", icon: Building2, href: "/assets" },
     ],

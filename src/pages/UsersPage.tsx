@@ -15,6 +15,7 @@ import { usePendingUsers, useApproveUser, useRejectUser, useLoginHistory, useDel
 const roleBadge: Record<string, { variant: 'gold' | 'green' | 'cyan' | 'gray'; label: string }> = {
   admin: { variant: 'gold', label: 'Admin' },
   kitnet_manager: { variant: 'cyan', label: 'Adm Kitnets' },
+  commissions: { variant: 'cyan', label: 'Comissões' },
   financial: { variant: 'green', label: 'Financeiro' },
   partner: { variant: 'gray', label: 'Sócio' },
 };
@@ -22,6 +23,7 @@ const roleBadge: Record<string, { variant: 'gold' | 'green' | 'cyan' | 'gray'; l
 const accessLinks = [
   { role: 'Admin', url: 'wt7planejamento.lovable.app/dashboard' },
   { role: 'Adm Kitnets', url: 'wt7planejamento.lovable.app/manager/kitnets' },
+  { role: 'Comissões', url: 'wt7planejamento.lovable.app/commissions/portal' },
   { role: 'Financeiro', url: 'wt7planejamento.lovable.app/financial/billing' },
   { role: 'Sócio', url: 'wt7planejamento.lovable.app/partner/projects' },
 ];
@@ -327,6 +329,7 @@ export default function UsersPage() {
           {[
             { role: "admin", icon: "👑", title: "Administradores", color: "#E8C97A" },
             { role: "kitnet_manager", icon: "🏠", title: "Portal Manager", color: "#2DD4BF" },
+            { role: "commissions", icon: "📊", title: "Portal Comissões", color: "#F59E0B" },
             { role: "partner", icon: "🤝", title: "Sócios", color: "#94A3B8" },
             { role: "financial", icon: "💰", title: "Financeiro", color: "#22C55E" },
           ].map(group => {

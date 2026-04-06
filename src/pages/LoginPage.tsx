@@ -78,6 +78,8 @@ export default function LoginPage() {
         navigate("/financial/billing", { replace: true });
       } else if (role === "partner") {
         navigate("/partner/projects", { replace: true });
+      } else if (role === "commissions") {
+        navigate("/commissions/portal", { replace: true });
       } else {
         navigate("/dashboard", { replace: true });
       }
