@@ -42,7 +42,7 @@ function useUsersWithRoles() {
       const { data: profiles, error: profErr } = await supabase
         .from("profiles")
         .select("id, name, created_at")
-        .in("id", userIds);
+        .in("id", userIds as string[]);
       if (profErr) throw profErr;
 
       return (roles ?? []).map(r => {
