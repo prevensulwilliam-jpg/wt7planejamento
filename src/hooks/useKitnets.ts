@@ -269,10 +269,10 @@ export function useUnreconciledEntries(month?: string) {
   return useQuery({
     queryKey: ["kitnet_entries_unreconciled", month],
     queryFn: async () => {
-      let q = supabase
+      let q = (supabase as any)
         .from("kitnet_entries")
         .select("*, kitnets(code, residencial_code, tenant_name)")
-        .eq("reconciled" as any, false)
+        .eq("reconciled", false)
         .order("reference_month", { ascending: false });
       if (month) q = q.eq("reference_month", month);
       const { data, error } = await q;
