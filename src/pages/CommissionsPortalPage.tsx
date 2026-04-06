@@ -15,7 +15,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { usePrevensulBilling, useBillingSummary, useCreateBilling, useUpdateBilling, useDeleteBilling, useReplicateMonth, useImportHistory, useCreateImportHistory, exportCSV } from "@/hooks/useBilling";
 import { formatCurrency, formatMonth, getCurrentMonth, formatDate } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
-import { LogOut, Upload, Trash2, FileSpreadsheet, Download, ArrowLeft, Pencil, Check, X, Copy, RotateCcw } from "lucide-react";
+import { LogOut, Upload, Trash2, FileSpreadsheet, Download, ArrowLeft, Pencil, Check, X, Copy, RotateCcw, FileText } from "lucide-react";
+import { exportPDF } from "@/lib/relatorioComissoes";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import * as XLSX from "xlsx";
 
@@ -565,9 +566,14 @@ function PrevensulHistory({ month, userId, onLoadRecord }: { month: string; user
     <PremiumCard>
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-display font-semibold text-lg" style={{ color: '#F0F4F8' }}>Histórico do Mês</h2>
-        <button onClick={() => exportCSV(data, `comissoes_${month}.csv`)} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium" style={{ background: 'rgba(201,168,76,0.15)', color: '#E8C97A' }}>
-          <Download className="w-3.5 h-3.5" /> CSV
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => exportPDF(data, month)} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium" style={{ background: 'rgba(239,68,68,0.12)', color: '#FCA5A5', border: '1px solid rgba(239,68,68,0.25)' }}>
+            <FileText className="w-3.5 h-3.5" /> PDF
+          </button>
+          <button onClick={() => exportCSV(data, `comissoes_${month}.csv`)} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium" style={{ background: 'rgba(201,168,76,0.15)', color: '#E8C97A' }}>
+            <Download className="w-3.5 h-3.5" /> CSV
+          </button>
+        </div>
       </div>
       <div className="overflow-x-auto rounded-xl" style={{ border: '1px solid #1A2535' }}>
         <Table style={{ minWidth: 880 }}>
