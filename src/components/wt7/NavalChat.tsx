@@ -280,11 +280,18 @@ export function NavalChat() {
         boxShadow: "0 12px 48px rgba(0,0,0,0.6), 0 0 0 1px rgba(201,168,76,0.1)",
       }}
     >
-      {/* Header */}
+      {/* Header — draggable */}
       <div
-        className="flex items-center justify-between px-4 py-3 cursor-pointer select-none"
-        onClick={() => setMinimized(m => !m)}
-        style={{ background: "linear-gradient(135deg, rgba(201,168,76,0.15), rgba(201,168,76,0.05))", borderBottom: "1px solid rgba(201,168,76,0.15)" }}
+        className="flex items-center justify-between px-4 py-3 select-none touch-none"
+        style={{ background: "linear-gradient(135deg, rgba(201,168,76,0.15), rgba(201,168,76,0.05))", borderBottom: "1px solid rgba(201,168,76,0.15)", cursor: "grab" }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={(e) => {
+          const d = dragState.current;
+          d.active = false;
+          if (!d.moved) setMinimized(m => !m);
+          e.currentTarget.releasePointerCapture(e.pointerId);
+        }}
       >
         <div className="flex items-center gap-2.5">
           <Sparkles className="w-4 h-4" style={{ color: "#C9A84C" }} />
