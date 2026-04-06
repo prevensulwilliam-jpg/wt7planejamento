@@ -62,6 +62,20 @@ export function useKitnetEntries(month: string) {
   });
 }
 
+export function useUpdateKitnetEntry() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...updates }: Partial<TablesInsert<"kitnet_entries">> & { id: string }) => {
+      const { error } = await supabase.from("kitnet_entries").update(updates).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["kitnet_entries"] });
+      qc.invalidateQueries({ queryKey: ["kitnet_fechamentos"] });
+    },
+  });
+}
+
 export function useCreateKitnetEntry() {
   const qc = useQueryClient();
   return useMutation({

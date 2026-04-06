@@ -15,11 +15,12 @@ import {
   useUpdateKitnet,
   useKitnetFechamentos,
   useCreateKitnetEntry,
+  useUpdateKitnetEntry,
   useLastEnergyReading,
   useCelescInvoices,
 } from "@/hooks/useKitnets";
 import { formatCurrency, formatMonth, getCurrentMonth } from "@/lib/formatters";
-import { Upload, FileText, Trash2, Plus, Zap, Printer } from "lucide-react";
+import { Upload, FileText, Trash2, Plus, Zap, Printer, Pencil } from "lucide-react";
 import { abrirReciboIndividual } from "@/lib/relatorioFechamento";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -225,6 +226,7 @@ function ContratoTab({ kitnet, onUpdated }: { kitnet: Tables<"kitnets">; onUpdat
 function FechamentosTab({ kitnet }: { kitnet: Tables<"kitnets"> }) {
   const { data: fechamentos, isLoading } = useKitnetFechamentos(kitnet.id);
   const [showForm, setShowForm] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<any | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
 
   // Determina o mês a exibir: selectedMonth ou o mais recente
@@ -237,6 +239,18 @@ function FechamentosTab({ kitnet }: { kitnet: Tables<"kitnets"> }) {
   const displayMonth = selectedMonth ?? latestMonth;
 
   const displayed = fechamentos?.find((f: any) => f.reference_month === displayMonth) ?? null;
+
+  const handleEdit = (entry: any) => {
+    setShowForm(false);
+    setEditingEntry(entry);
+  };
+
+  const handleCancelEdit = () => setEditingEntry(null);
+
+  const handleNewFechamento = () => {
+    setEditingEntry(null);
+    setShowForm(v => !v);
+  };
 
   return (
     <div className="space-y-4 mt-4">
@@ -257,13 +271,22 @@ function FechamentosTab({ kitnet }: { kitnet: Tables<"kitnets"> }) {
             </button>
           )}
         </div>
-        <GoldButton onClick={() => setShowForm(v => !v)}>
+        <GoldButton onClick={handleNewFechamento}>
           <Plus className="w-4 h-4 mr-1" />
           {showForm ? "Cancelar" : "Novo Fechamento"}
         </GoldButton>
       </div>
 
       {showForm && <FechamentoForm kitnet={kitnet} onSaved={() => setShowForm(false)} />}
+      {editingEntry && (
+        <FechamentoForm
+          kitnet={kitnet}
+          onSaved={() => setEditingEntry(null)}
+          onCancel={handleCancelEdit}
+          initialData={editingEntry}
+          entryId={editingEntry.id}
+        />
+      )}
 
       {isLoading ? (
         <Skeleton className="h-24 rounded-xl" />
@@ -281,6 +304,14 @@ function FechamentosTab({ kitnet }: { kitnet: Tables<"kitnets"> }) {
                   Último fechamento
                 </span>
               )}
+              <button
+                onClick={() => handleEdit(displayed)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                style={{ background: 'rgba(99,102,241,0.12)', color: '#A5B4FC', border: '1px solid rgba(99,102,241,0.3)' }}
+                title="Editar fechamento"
+              >
+                <Pencil className="w-3.5 h-3.5" /> Editar
+              </button>
               <button
                 onClick={() => abrirReciboIndividual(kitnet, displayed)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
@@ -312,23 +343,33 @@ function FechamentosTab({ kitnet }: { kitnet: Tables<"kitnets"> }) {
   );
 }
 
-// ─── FORM NOVO FECHAMENTO ───
-function FechamentoForm({ kitnet, onSaved }: { kitnet: Tables<"kitnets">; onSaved: () => void }) {
+// ─── FORM NOVO / EDITAR FECHAMENTO ───
+interface FechamentoFormProps {
+  kitnet: Tables<"kitnets">;
+  onSaved: () => void;
+  onCancel?: () => void;
+  initialData?: any;
+  entryId?: string;
+}
+
+function FechamentoForm({ kitnet, onSaved, onCancel, initialData, entryId }: FechamentoFormProps) {
+  const isEditMode = !!entryId;
   const { toast } = useToast();
   const createMut = useCreateKitnetEntry();
+  const updateMut = useUpdateKitnetEntry();
   const [month] = useState(getCurrentMonth());
   const { data: lastReading } = useLastEnergyReading(kitnet.id);
   const { data: invoices } = useCelescInvoices(month);
 
   const [form, setForm] = useState({
-    period_start: "",
-    period_end: "",
-    rent_gross: String(kitnet.rent_value ?? 0),
-    iptu_taxa: "0",
-    celesc: "0",
-    semasa: "0",
-    adm_fee: String(((kitnet.rent_value ?? 0) * 0.1).toFixed(2)),
-    reference_month: month,
+    period_start: initialData?.period_start ?? "",
+    period_end: initialData?.period_end ?? "",
+    rent_gross: String(initialData?.rent_gross ?? kitnet.rent_value ?? 0),
+    iptu_taxa: String(initialData?.iptu_taxa ?? 0),
+    celesc: String(initialData?.celesc ?? 0),
+    semasa: String(initialData?.semasa ?? 0),
+    adm_fee: String(initialData?.adm_fee ?? ((kitnet.rent_value ?? 0) * 0.1).toFixed(2)),
+    reference_month: initialData?.reference_month ?? month,
   });
   const [celescMode, setCelescMode] = useState<"idle" | "loading" | "found" | "manual">("idle");
   const [celescFoundInfo, setCelescFoundInfo] = useState<{ kwh: number; amount: number; tariff: number } | null>(null);
@@ -385,30 +426,57 @@ function FechamentoForm({ kitnet, onSaved }: { kitnet: Tables<"kitnets">; onSave
 
   const handleSave = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      await createMut.mutateAsync({
-        kitnet_id: kitnet.id,
-        reference_month: form.reference_month,
-        period_start: form.period_start || null,
-        period_end: form.period_end || null,
-        rent_gross: rentGross,
-        iptu_taxa: iptu,
-        celesc: celesc,
-        semasa: semasa,
-        adm_fee: adm,
-        total_liquid: totalLiquid,
-        created_by: user?.id,
-      });
-      toast({ title: "Fechamento salvo!" });
+      if (isEditMode) {
+        await updateMut.mutateAsync({
+          id: entryId!,
+          reference_month: form.reference_month,
+          period_start: form.period_start || null,
+          period_end: form.period_end || null,
+          rent_gross: rentGross,
+          iptu_taxa: iptu,
+          celesc: celesc,
+          semasa: semasa,
+          adm_fee: adm,
+          total_liquid: totalLiquid,
+        });
+        toast({ title: "Fechamento atualizado!" });
+      } else {
+        const { data: { user } } = await supabase.auth.getUser();
+        await createMut.mutateAsync({
+          kitnet_id: kitnet.id,
+          reference_month: form.reference_month,
+          period_start: form.period_start || null,
+          period_end: form.period_end || null,
+          rent_gross: rentGross,
+          iptu_taxa: iptu,
+          celesc: celesc,
+          semasa: semasa,
+          adm_fee: adm,
+          total_liquid: totalLiquid,
+          created_by: user?.id,
+        });
+        toast({ title: "Fechamento salvo!" });
+      }
       onSaved();
     } catch (e: any) {
       toast({ title: "Erro", description: e.message, variant: "destructive" });
     }
   };
 
+  const isSaving = createMut.isPending || updateMut.isPending;
+
   return (
     <PremiumCard className="p-4 space-y-3 border border-[#E8C97A]/20">
-      <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">Novo Fechamento</p>
+      <div className="flex items-center justify-between">
+        <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+          {isEditMode ? "Editar Fechamento" : "Novo Fechamento"}
+        </p>
+        {onCancel && (
+          <button onClick={onCancel} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+            ✕ Cancelar
+          </button>
+        )}
+      </div>
 
       <div>
         <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Mês Referência</label>
@@ -521,8 +589,8 @@ function FechamentoForm({ kitnet, onSaved }: { kitnet: Tables<"kitnets">; onSave
         <p className="font-mono text-2xl font-bold mt-1" style={{ color: '#E8C97A' }}>{formatCurrency(totalLiquid)}</p>
       </PremiumCard>
 
-      <GoldButton onClick={handleSave} disabled={createMut.isPending} className="w-full justify-center">
-        {createMut.isPending ? "Salvando..." : "Salvar Fechamento"}
+      <GoldButton onClick={handleSave} disabled={isSaving} className="w-full justify-center">
+        {isSaving ? "Salvando..." : isEditMode ? "Atualizar Fechamento" : "Salvar Fechamento"}
       </GoldButton>
     </PremiumCard>
   );
