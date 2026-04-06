@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { supabase } from "@/integrations/supabase/client";
 import LoginPage from "@/pages/LoginPage";
 import ResetPasswordPage from "@/pages/ResetPasswordPage";
+import RegisterPage from "@/pages/RegisterPage";
 import AdminLayout from "@/layouts/AdminLayout";
 import DashboardPage from "@/pages/DashboardPage";
 import KitnetsPage from "@/pages/KitnetsPage";
@@ -77,6 +78,7 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
 

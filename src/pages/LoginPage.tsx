@@ -38,9 +38,49 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data: authData, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
-      navigate("/dashboard", { replace: true });
+
+      const userId = authData.user?.id;
+
+      // Verifica role e status
+      const { data: roleData } = await supabase
+        .from("user_roles")
+        .select("role, status")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (roleData) {
+        const status = (roleData as any).status ?? "active";
+        if (status === "pending") {
+          await supabase.auth.signOut();
+          toast({ title: "Acesso pendente", description: "Aguarde a aprovação do administrador.", variant: "destructive" });
+          return;
+        }
+        if (status === "rejected") {
+          await supabase.auth.signOut();
+          toast({ title: "Acesso negado", description: "Entre em contato com o administrador.", variant: "destructive" });
+          return;
+        }
+      }
+
+      // Grava histórico de login
+      await supabase.from("login_history" as any).insert({
+        user_id: userId,
+        user_agent: navigator.userAgent,
+      });
+
+      // Redireciona por role
+      const role = roleData?.role ?? "admin";
+      if (role === "kitnet_manager") {
+        navigate("/manager/kitnets", { replace: true });
+      } else if (role === "financial") {
+        navigate("/financial/billing", { replace: true });
+      } else if (role === "partner") {
+        navigate("/partner/projects", { replace: true });
+      } else {
+        navigate("/dashboard", { replace: true });
+      }
     } catch (err: any) {
       toast({ title: "Erro no login", description: err.message, variant: "destructive" });
     } finally {
@@ -97,7 +137,7 @@ export default function LoginPage() {
           <GoldButton type="submit" className="w-full justify-center" disabled={loading}>
             {loading ? "Entrando..." : "Entrar"}
           </GoldButton>
-          <div className="text-center">
+          <div className="text-center space-y-1">
             <Button
               type="button"
               variant="link"
@@ -107,6 +147,16 @@ export default function LoginPage() {
             >
               {resetting ? "Enviando..." : "Esqueci minha senha"}
             </Button>
+            <div>
+              <button
+                type="button"
+                onClick={() => navigate("/register")}
+                className="text-xs underline underline-offset-4 transition-colors"
+                style={{ color: '#64748B' }}
+              >
+                Solicitar acesso →
+              </button>
+            </div>
           </div>
         </form>
       </div>

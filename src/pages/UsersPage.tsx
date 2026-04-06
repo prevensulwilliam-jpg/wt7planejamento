@@ -7,8 +7,10 @@ import { MonthPicker } from "@/components/wt7/MonthPicker";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDate } from "@/lib/formatters";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Users, Link as LinkIcon, Trash2, AlertTriangle } from "lucide-react";
+import { Users, Link as LinkIcon, Trash2, AlertTriangle, Clock, CheckCircle, XCircle, Bell } from "lucide-react";
+import { usePendingUsers, useApproveUser, useRejectUser, useLoginHistory } from "@/hooks/useUsers";
 
 const roleBadge: Record<string, { variant: 'gold' | 'green' | 'cyan' | 'gray'; label: string }> = {
   admin: { variant: 'gold', label: 'Admin' },
@@ -57,6 +59,11 @@ function useUsersWithRoles() {
 
 export default function UsersPage() {
   const { data = [], isLoading } = useUsersWithRoles();
+  const { data: pending = [] } = usePendingUsers();
+  const approveMut = useApproveUser();
+  const rejectMut = useRejectUser();
+  const [historyUserId, setHistoryUserId] = useState<string>("");
+  const { data: loginHistory = [] } = useLoginHistory(historyUserId || undefined);
   const [cleaning, setCleaning] = useState(false);
   const [confirm2, setConfirm2] = useState(false);
   const [periodOpen, setPeriodOpen] = useState(false);
@@ -170,6 +177,107 @@ export default function UsersPage() {
   return (
     <div className="space-y-6 max-w-[1400px] mx-auto">
       <h1 className="font-display font-bold text-xl text-wt-text-primary">Usuários & Acessos</h1>
+
+      {/* ── Aprovações Pendentes ── */}
+      <PremiumCard glowColor={pending.length > 0 ? "rgba(232,201,122,0.25)" : undefined}>
+        <div className="flex items-center gap-2 mb-4">
+          <Bell className="w-4 h-4" style={{ color: '#E8C97A' }} />
+          <h3 className="font-display font-bold text-sm" style={{ color: '#E8C97A' }}>Aprovações Pendentes</h3>
+          {pending.length > 0 && (
+            <span className="ml-1 px-2 py-0.5 rounded-full text-xs font-bold" style={{ background: 'rgba(232,201,122,0.2)', color: '#E8C97A' }}>
+              {pending.length}
+            </span>
+          )}
+        </div>
+        {pending.length === 0 ? (
+          <p className="text-sm" style={{ color: '#64748B' }}>Nenhuma solicitação pendente.</p>
+        ) : (
+          <div className="space-y-3">
+            {pending.map(u => (
+              <div key={u.user_id} className="flex items-center justify-between rounded-xl px-4 py-3" style={{ background: '#080C10', border: '1px solid rgba(232,201,122,0.2)' }}>
+                <div>
+                  <p className="text-sm font-medium" style={{ color: '#F0F4F8' }}>{u.name}</p>
+                  <p className="text-xs font-mono mt-0.5" style={{ color: '#64748B' }}>
+                    Adm Kitnets · Solicitado em {u.requested_at ? new Date(u.requested_at).toLocaleDateString("pt-BR") : "—"}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => approveMut.mutate(u.user_id)}
+                    disabled={approveMut.isPending}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                    style={{ background: 'rgba(34,197,94,0.15)', color: '#22C55E', border: '1px solid rgba(34,197,94,0.3)' }}
+                  >
+                    <CheckCircle className="w-3.5 h-3.5" /> Aprovar
+                  </button>
+                  <button
+                    onClick={() => rejectMut.mutate(u.user_id)}
+                    disabled={rejectMut.isPending}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                    style={{ background: 'rgba(244,63,94,0.12)', color: '#F43F5E', border: '1px solid rgba(244,63,94,0.25)' }}
+                  >
+                    <XCircle className="w-3.5 h-3.5" /> Rejeitar
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </PremiumCard>
+
+      {/* ── Histórico de Acessos ── */}
+      <PremiumCard>
+        <div className="flex items-center gap-2 mb-4">
+          <Clock className="w-4 h-4" style={{ color: '#2DD4BF' }} />
+          <h3 className="font-display font-bold text-sm" style={{ color: '#2DD4BF' }}>Histórico de Acessos</h3>
+        </div>
+        <div className="flex items-center gap-3 mb-4">
+          <Select value={historyUserId} onValueChange={setHistoryUserId}>
+            <SelectTrigger className="w-56 bg-background border-border text-foreground">
+              <SelectValue placeholder="Selecionar usuário..." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">Todos os usuários</SelectItem>
+              {data.filter(u => u.role !== "admin").map((u, i) => (
+                <SelectItem key={`${u.user_id}-${i}`} value={u.user_id}>{u.name || u.user_id.slice(0, 8)}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <span className="text-xs" style={{ color: '#64748B' }}>{loginHistory.length} registro(s)</span>
+        </div>
+        {loginHistory.length === 0 ? (
+          <p className="text-sm" style={{ color: '#64748B' }}>Nenhum acesso registrado.</p>
+        ) : (
+          <div className="rounded-xl overflow-hidden border border-border">
+            <Table>
+              <TableHeader>
+                <TableRow style={{ borderColor: '#1A2535' }}>
+                  {!historyUserId && <TableHead style={{ color: '#94A3B8' }}>Usuário</TableHead>}
+                  <TableHead style={{ color: '#94A3B8' }}>Data</TableHead>
+                  <TableHead style={{ color: '#94A3B8' }}>Hora</TableHead>
+                  <TableHead style={{ color: '#94A3B8' }}>Navegador</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loginHistory.slice(0, 50).map(h => {
+                  const dt = new Date(h.logged_at);
+                  const user = data.find(u => u.user_id === h.user_id);
+                  const ua = h.user_agent ?? "";
+                  const browser = ua.includes("Chrome") ? "Chrome" : ua.includes("Firefox") ? "Firefox" : ua.includes("Safari") ? "Safari" : ua.includes("Edge") ? "Edge" : "—";
+                  return (
+                    <TableRow key={h.id} style={{ borderColor: '#1A2535' }}>
+                      {!historyUserId && <TableCell style={{ color: '#F0F4F8' }}>{user?.name ?? h.user_id.slice(0, 8)}</TableCell>}
+                      <TableCell className="font-mono text-xs" style={{ color: '#94A3B8' }}>{dt.toLocaleDateString("pt-BR")}</TableCell>
+                      <TableCell className="font-mono text-xs" style={{ color: '#94A3B8' }}>{dt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</TableCell>
+                      <TableCell className="text-xs" style={{ color: '#64748B' }}>{browser}</TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </PremiumCard>
 
       {/* Access links card */}
       <PremiumCard glowColor="rgba(201,168,76,0.2)">

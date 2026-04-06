@@ -42,10 +42,21 @@ export default function ManagerKitnetsPage() {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { navigate("/login", { replace: true }); return; }
-      const { data } = await supabase.rpc("has_role", { _user_id: user.id, _role: "kitnet_manager" });
-      if (!data) {
-        const { data: isAdmin } = await supabase.rpc("has_role", { _user_id: user.id, _role: "admin" });
-        if (!isAdmin) { navigate("/login", { replace: true }); return; }
+
+      // Admin sempre tem acesso
+      const { data: isAdmin } = await supabase.rpc("has_role", { _user_id: user.id, _role: "admin" });
+      if (isAdmin) { setAuthorized(true); return; }
+
+      // Manager: verifica role + status = active
+      const { data: roleData } = await supabase
+        .from("user_roles")
+        .select("status")
+        .eq("user_id", user.id)
+        .eq("role", "kitnet_manager")
+        .maybeSingle();
+
+      if (!roleData || (roleData as any).status !== "active") {
+        navigate("/login", { replace: true }); return;
       }
       setAuthorized(true);
     })();
