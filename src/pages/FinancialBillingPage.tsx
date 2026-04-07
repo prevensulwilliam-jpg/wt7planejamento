@@ -443,33 +443,35 @@ function BillingHistory({ month }: { month: string }) {
   const updateBilling = useUpdateBilling();
   const { toast } = useToast();
   const [editRow, setEditRow] = useState<any | null>(null);
-  const [editForm, setEditForm] = useState({ amount_paid: "", status: "", notes: "" });
+  const [editForm, setEditForm] = useState({ amount_paid: "", balance_remaining: "", status: "", notes: "" });
 
   const openEdit = (r: any) => {
     setEditRow(r);
     setEditForm({
       amount_paid: String(r.amount_paid ?? ""),
+      balance_remaining: String(r.balance_remaining ?? ""),
       status: r.status ?? "Pendente",
       notes: r.notes ?? "",
     });
   };
 
-  // base = saldo_stored + pago_original (saldo antes do pagamento)
-  const editNewBalance = useMemo(() => {
-    if (!editRow) return 0;
-    const base = (editRow.balance_remaining ?? 0) + (editRow.amount_paid ?? 0);
-    const newPaid = parseFloat(editForm.amount_paid) || 0;
-    return Math.max(0, base - newPaid);
-  }, [editRow, editForm.amount_paid]);
+  // Quando o pagamento muda, recalcula saldo: stored_balance - novo_pagamento
+  const handleAmountPaidChange = (val: string) => {
+    const newPaid = parseFloat(val) || 0;
+    const storedBalance = editRow?.balance_remaining ?? 0;
+    const newBalance = Math.max(0, storedBalance - newPaid);
+    setEditForm(p => ({ ...p, amount_paid: val, balance_remaining: String(newBalance) }));
+  };
 
   const handleUpdate = async () => {
     if (!editRow) return;
     const newPaid = parseFloat(editForm.amount_paid) || 0;
+    const newBalance = parseFloat(editForm.balance_remaining) || 0;
     try {
       await updateBilling.mutateAsync({
         id: editRow.id,
         amount_paid: newPaid,
-        balance_remaining: editNewBalance,
+        balance_remaining: newBalance,
         status: editForm.status,
         notes: editForm.notes || null,
       });
@@ -506,15 +508,18 @@ function BillingHistory({ month }: { month: string }) {
             <Input
               type="number"
               value={editForm.amount_paid}
-              onChange={(e) => setEditForm(p => ({ ...p, amount_paid: e.target.value }))}
+              onChange={(e) => handleAmountPaidChange(e.target.value)}
               style={inputStyle}
             />
           </div>
           <div>
-            <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Saldo após pagamento</label>
-            <div className="px-3 py-2 rounded-md font-mono text-sm" style={{ background: '#0D1318', border: '1px solid #1A2535', color: '#F43F5E' }}>
-              {formatCurrency(editNewBalance)}
-            </div>
+            <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Saldo após pagamento (R$)</label>
+            <Input
+              type="number"
+              value={editForm.balance_remaining}
+              onChange={(e) => setEditForm(p => ({ ...p, balance_remaining: e.target.value }))}
+              style={{ ...inputStyle, color: '#F43F5E' }}
+            />
           </div>
           <div>
             <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Status</label>
