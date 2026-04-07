@@ -15,10 +15,10 @@ import { KpiCard } from "@/components/wt7/KpiCard";
 import { WtBadge } from "@/components/wt7/WtBadge";
 import { WT7Logo } from "@/components/wt7/WT7Logo";
 import { Skeleton } from "@/components/ui/skeleton";
-import { usePrevensulBilling, useBillingSummary, useCreateBilling, useDeleteBilling, useImportHistory, useCreateImportHistory } from "@/hooks/useBilling";
+import { usePrevensulBilling, useBillingSummary, useCreateBilling, useUpdateBilling, useDeleteBilling, useImportHistory, useCreateImportHistory } from "@/hooks/useBilling";
 import { formatCurrency, formatMonth, getCurrentMonth, formatDate } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
-import { LogOut, Upload, Trash2, FileSpreadsheet } from "lucide-react";
+import { LogOut, Upload, Trash2, FileSpreadsheet, Pencil } from "lucide-react";
 import * as XLSX from "xlsx";
 
 const statusOptions = [
@@ -440,7 +440,48 @@ function ExcelImport({ month, userId }: { month: string; userId: string }) {
 function BillingHistory({ month }: { month: string }) {
   const { data = [], isLoading } = usePrevensulBilling(month);
   const deleteBilling = useDeleteBilling();
+  const updateBilling = useUpdateBilling();
   const { toast } = useToast();
+  const [editRow, setEditRow] = useState<any | null>(null);
+  const [editForm, setEditForm] = useState({ amount_paid: "", status: "", notes: "" });
+
+  const openEdit = (r: any) => {
+    setEditRow(r);
+    setEditForm({
+      amount_paid: String(r.amount_paid ?? ""),
+      status: r.status ?? "Pendente",
+      notes: r.notes ?? "",
+    });
+  };
+
+  // base = saldo_stored + pago_original (saldo antes do pagamento)
+  const editNewBalance = useMemo(() => {
+    if (!editRow) return 0;
+    const base = (editRow.balance_remaining ?? 0) + (editRow.amount_paid ?? 0);
+    const newPaid = parseFloat(editForm.amount_paid) || 0;
+    return Math.max(0, base - newPaid);
+  }, [editRow, editForm.amount_paid]);
+
+  const handleUpdate = async () => {
+    if (!editRow) return;
+    const newPaid = parseFloat(editForm.amount_paid) || 0;
+    try {
+      await updateBilling.mutateAsync({
+        id: editRow.id,
+        amount_paid: newPaid,
+        commission_value: newPaid * 0.03,
+        balance_remaining: editNewBalance,
+        status: editForm.status,
+        notes: editForm.notes || null,
+      });
+      toast({ title: "Registro atualizado!" });
+      setEditRow(null);
+    } catch (e: any) {
+      toast({ title: "Erro ao atualizar", description: e.message, variant: "destructive" });
+    }
+  };
+
+  const inputStyle = { background: '#0D1318', border: '1px solid #1A2535', color: '#F0F4F8' };
 
   if (isLoading) return <Skeleton className="h-64 rounded-2xl" />;
   if (data.length === 0) {
@@ -454,6 +495,51 @@ function BillingHistory({ month }: { month: string }) {
   }
 
   return (
+    <>
+    <Dialog open={!!editRow} onOpenChange={(open) => { if (!open) setEditRow(null); }}>
+      <DialogContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+        <DialogHeader>
+          <DialogTitle style={{ color: '#F0F4F8' }}>Editar — {editRow?.client_name}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div>
+            <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Valor recebido (R$)</label>
+            <Input
+              type="number"
+              value={editForm.amount_paid}
+              onChange={(e) => setEditForm(p => ({ ...p, amount_paid: e.target.value }))}
+              style={inputStyle}
+            />
+          </div>
+          <div>
+            <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Saldo após pagamento</label>
+            <div className="px-3 py-2 rounded-md font-mono text-sm" style={{ background: '#0D1318', border: '1px solid #1A2535', color: '#F43F5E' }}>
+              {formatCurrency(editNewBalance)}
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Status</label>
+            <Select value={editForm.status} onValueChange={(v) => setEditForm(p => ({ ...p, status: v }))}>
+              <SelectTrigger style={inputStyle}><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {statusOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Observações</label>
+            <Textarea value={editForm.notes} onChange={(e) => setEditForm(p => ({ ...p, notes: e.target.value }))} style={inputStyle} rows={2} />
+          </div>
+        </div>
+        <DialogFooter>
+          <button onClick={() => setEditRow(null)} className="px-4 py-2 rounded-lg text-sm" style={{ background: '#1A2535', color: '#F0F4F8' }}>Cancelar</button>
+          <button onClick={handleUpdate} disabled={updateBilling.isPending} className="px-4 py-2 rounded-lg text-sm font-medium" style={{ background: '#2DD4BF', color: '#080C10' }}>
+            {updateBilling.isPending ? "Salvando..." : "Salvar"}
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
     <PremiumCard>
       <h2 className="font-display font-semibold text-lg mb-4" style={{ color: '#F0F4F8' }}>
         Histórico do Mês
@@ -466,6 +552,7 @@ function BillingHistory({ month }: { month: string }) {
               <TableHead style={{ color: '#94A3B8' }}>Contrato/NF</TableHead>
               <TableHead style={{ color: '#94A3B8' }}>Parcela</TableHead>
               <TableHead style={{ color: '#94A3B8' }}>Valor Contrato</TableHead>
+              <TableHead style={{ color: '#94A3B8' }}>Saldo</TableHead>
               <TableHead style={{ color: '#94A3B8' }}>Recebido</TableHead>
               <TableHead style={{ color: '#94A3B8' }}>Comissão</TableHead>
               <TableHead style={{ color: '#94A3B8' }}>Status</TableHead>
@@ -480,42 +567,48 @@ function BillingHistory({ month }: { month: string }) {
                 <TableCell className="font-mono" style={{ color: '#94A3B8' }}>{r.contract_nf || "—"}</TableCell>
                 <TableCell className="font-mono" style={{ color: '#94A3B8' }}>{r.installment_current ?? "—"}/{r.installment_total ?? "—"}</TableCell>
                 <TableCell className="font-mono" style={{ color: '#94A3B8' }}>{formatCurrency(r.contract_total ?? 0)}</TableCell>
+                <TableCell className="font-mono" style={{ color: '#F43F5E' }}>{formatCurrency(r.balance_remaining ?? 0)}</TableCell>
                 <TableCell className="font-mono" style={{ color: '#10B981' }}>{formatCurrency(r.amount_paid ?? 0)}</TableCell>
                 <TableCell className="font-mono" style={{ color: '#E8C97A' }}>{formatCurrency(r.commission_value ?? 0)}</TableCell>
                 <TableCell><WtBadge variant={statusBadge[r.status ?? ""] || "gray"}>{r.status}</WtBadge></TableCell>
                 <TableCell className="font-mono text-xs" style={{ color: '#94A3B8' }}>{r.closing_date ? formatDate(r.closing_date) : "—"}</TableCell>
                 <TableCell>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <button className="p-1.5 rounded-lg transition-colors hover:bg-red-500/10">
-                        <Trash2 className="w-4 h-4" style={{ color: '#F43F5E' }} />
-                      </button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle style={{ color: '#F0F4F8' }}>Excluir registro?</AlertDialogTitle>
-                        <AlertDialogDescription style={{ color: '#94A3B8' }}>
-                          Essa ação não pode ser desfeita. O registro de {r.client_name} será removido permanentemente.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel style={{ background: '#1A2535', color: '#F0F4F8', border: 'none' }}>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={async () => {
-                            try {
-                              await deleteBilling.mutateAsync(r.id);
-                              toast({ title: "Registro excluído" });
-                            } catch (e: any) {
-                              toast({ title: "Erro ao excluir", description: e.message, variant: "destructive" });
-                            }
-                          }}
-                          style={{ background: '#F43F5E', color: '#fff' }}
-                        >
-                          Excluir
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => openEdit(r)} className="p-1.5 rounded-lg transition-colors hover:bg-teal-500/10">
+                      <Pencil className="w-4 h-4" style={{ color: '#E8C97A' }} />
+                    </button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <button className="p-1.5 rounded-lg transition-colors hover:bg-red-500/10">
+                          <Trash2 className="w-4 h-4" style={{ color: '#F43F5E' }} />
+                        </button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle style={{ color: '#F0F4F8' }}>Excluir registro?</AlertDialogTitle>
+                          <AlertDialogDescription style={{ color: '#94A3B8' }}>
+                            Essa ação não pode ser desfeita. O registro de {r.client_name} será removido permanentemente.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel style={{ background: '#1A2535', color: '#F0F4F8', border: 'none' }}>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={async () => {
+                              try {
+                                await deleteBilling.mutateAsync(r.id);
+                                toast({ title: "Registro excluído" });
+                              } catch (e: any) {
+                                toast({ title: "Erro ao excluir", description: e.message, variant: "destructive" });
+                              }
+                            }}
+                            style={{ background: '#F43F5E', color: '#fff' }}
+                          >
+                            Excluir
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
@@ -523,6 +616,7 @@ function BillingHistory({ month }: { month: string }) {
         </Table>
       </div>
     </PremiumCard>
+    </>
   );
 }
 
