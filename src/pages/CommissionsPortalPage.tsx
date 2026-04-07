@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
@@ -651,6 +652,7 @@ function PrevensulHistory({ month, userId, onLoadRecord }: { month: string; user
   const deleteBilling = useDeleteBilling();
   const updateBilling = useUpdateBilling();
   const replicateMonth = useReplicateMonth();
+  const qc = useQueryClient();
   const { toast } = useToast();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Record<string, any>>({});
@@ -677,25 +679,27 @@ function PrevensulHistory({ month, userId, onLoadRecord }: { month: string; user
 
   const saveEdit = async () => {
     if (!editingId) return;
-    const paid = parseFloat(editForm.amount_paid) || 0;
-    try {
-      await updateBilling.mutateAsync({
-        id: editingId,
+    const paid = parseFloat(String(editForm.amount_paid)) || 0;
+    const { error } = await supabase
+      .from("prevensul_billing")
+      .update({
         client_name: editForm.client_name,
-        contract_total: parseFloat(editForm.contract_total) || 0,
-        balance_remaining: parseFloat(editForm.balance_remaining) || 0,
+        contract_total: parseFloat(String(editForm.contract_total)) || 0,
         contract_nf: editForm.contract_nf || null,
-        installment_current: parseInt(editForm.installment_current) || null,
-        installment_total: parseInt(editForm.installment_total) || null,
+        installment_current: parseInt(String(editForm.installment_current)) || null,
+        installment_total: parseInt(String(editForm.installment_total)) || null,
         closing_date: editForm.closing_date || null,
         amount_paid: paid,
         status: editForm.status,
-      });
-      toast({ title: "Atualizado!" });
-      cancelEdit();
-    } catch (e: any) {
-      toast({ title: "Erro", description: e.message, variant: "destructive" });
+      })
+      .eq("id", editingId);
+    if (error) {
+      toast({ title: "Erro ao salvar", description: error.message + " | " + error.code, variant: "destructive" });
+      return;
     }
+    await qc.invalidateQueries({ queryKey: ["prevensul_billing"] });
+    toast({ title: "Atualizado!" });
+    cancelEdit();
   };
 
   const prevMonth = getPreviousMonth(month);
@@ -779,7 +783,7 @@ function PrevensulHistory({ month, userId, onLoadRecord }: { month: string; user
                   <TableRow key={r.id} style={{ borderColor: '#1A2535', background: 'rgba(245,158,11,0.04)' }}>
                     <TableCell><input value={editForm.client_name} onChange={e => setEditForm(p => ({ ...p, client_name: e.target.value }))} style={{ ...inputStyle, width: '100%' }} /></TableCell>
                     <TableCell><input type="number" value={editForm.contract_total} onChange={e => setEditForm(p => ({ ...p, contract_total: e.target.value }))} style={{ ...inputStyle, width: '100%' }} /></TableCell>
-                    <TableCell><input type="number" value={editForm.balance_remaining} onChange={e => setEditForm(p => ({ ...p, balance_remaining: e.target.value }))} style={{ ...inputStyle, width: '100%' }} /></TableCell>
+                    <TableCell className="font-mono text-xs" style={{ color: '#F43F5E', fontWeight: 600 }}>{formatCurrency(Math.max(0, (parseFloat(String(editForm.balance_remaining)) || 0) - (parseFloat(String(editForm.amount_paid)) || 0)))}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
                         <input type="number" value={editForm.installment_current} onChange={e => setEditForm(p => ({ ...p, installment_current: e.target.value }))} style={{ ...inputStyle, width: 36, textAlign: 'center', padding: '4px 2px' }} />
@@ -831,7 +835,7 @@ function PrevensulHistory({ month, userId, onLoadRecord }: { month: string; user
                     </Tooltip>
                   </TableCell>
                   <TableCell className="font-mono text-xs whitespace-nowrap" style={{ color: '#94A3B8' }}>{formatCurrency(r.contract_total ?? 0)}</TableCell>
-                  <TableCell className="font-mono text-xs whitespace-nowrap" style={{ color: '#F43F5E' }}>{formatCurrency(r.balance_remaining ?? 0)}</TableCell>
+                  <TableCell className="font-mono text-xs whitespace-nowrap" style={{ color: '#F43F5E' }}>{formatCurrency(Math.max(0, (r.balance_remaining ?? 0) - (r.amount_paid ?? 0)))}</TableCell>
                   <TableCell className="font-mono text-xs whitespace-nowrap" style={{ color: '#94A3B8' }}>{r.installment_current ?? "—"}/{r.installment_total ?? "—"}</TableCell>
                   <TableCell className="font-mono text-xs whitespace-nowrap" style={{ color: '#94A3B8' }}>{r.closing_date || "—"}</TableCell>
                   <TableCell className="font-mono text-xs whitespace-nowrap" style={{ color: '#10B981' }}>{formatCurrency(r.amount_paid ?? 0)}</TableCell>
