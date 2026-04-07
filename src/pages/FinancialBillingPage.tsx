@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -441,6 +442,7 @@ function BillingHistory({ month }: { month: string }) {
   const { data = [], isLoading } = usePrevensulBilling(month);
   const deleteBilling = useDeleteBilling();
   const updateBilling = useUpdateBilling();
+  const qc = useQueryClient();
   const { toast } = useToast();
   const [editRow, setEditRow] = useState<any | null>(null);
   const [editForm, setEditForm] = useState({ amount_paid: "", balance_remaining: "", status: "", notes: "" });
@@ -467,19 +469,17 @@ function BillingHistory({ month }: { month: string }) {
     if (!editRow) return;
     const newPaid = parseFloat(editForm.amount_paid) || 0;
     const newBalance = parseFloat(editForm.balance_remaining) || 0;
-    try {
-      await updateBilling.mutateAsync({
-        id: editRow.id,
-        amount_paid: newPaid,
-        balance_remaining: newBalance,
-        status: editForm.status,
-        notes: editForm.notes || null,
-      });
-      toast({ title: "Registro atualizado!" });
-      setEditRow(null);
-    } catch (e: any) {
-      toast({ title: "Erro ao atualizar", description: e.message, variant: "destructive" });
+    const { error } = await supabase
+      .from("prevensul_billing")
+      .update({ amount_paid: newPaid, balance_remaining: newBalance, status: editForm.status, notes: editForm.notes || null })
+      .eq("id", editRow.id);
+    if (error) {
+      toast({ title: "Erro ao atualizar", description: error.message + " | code: " + error.code, variant: "destructive" });
+      return;
     }
+    await qc.invalidateQueries({ queryKey: ["prevensul_billing"] });
+    toast({ title: "Registro atualizado!" });
+    setEditRow(null);
   };
 
   const inputStyle = { background: '#0D1318', border: '1px solid #1A2535', color: '#F0F4F8' };
