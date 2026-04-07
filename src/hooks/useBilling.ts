@@ -60,7 +60,7 @@ export function useUpdateBilling() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, ...updates }: { id: string } & Record<string, any>) => {
-      const { error } = await supabase.from("prevensul_billing").update(updates).eq("id", id);
+      const { error } = await supabase.from("prevensul_billing").update(updates as any).eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
