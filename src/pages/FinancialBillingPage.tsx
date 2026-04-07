@@ -128,16 +128,20 @@ function BillingForm({ month, userId }: { month: string; userId: string }) {
   const { toast } = useToast();
   const createBilling = useCreateBilling();
   const [form, setForm] = useState({
-    client_name: "", contract_total: "", contract_nf: "",
+    client_name: "", contract_total: "", balance_remaining: "", contract_nf: "",
     installment_current: "", installment_total: "",
     closing_date: "", amount_paid: "", status: "Pendente",
     notes: "",
   });
 
-  const commission = useMemo(() => {
+  const { commission, newBalance } = useMemo(() => {
     const paid = parseFloat(form.amount_paid) || 0;
-    return paid * 0.03;
-  }, [form.amount_paid]);
+    const saldo = parseFloat(form.balance_remaining) || parseFloat(form.contract_total) || 0;
+    return {
+      commission: paid * 0.03,
+      newBalance: Math.max(0, saldo - paid),
+    };
+  }, [form.amount_paid, form.balance_remaining, form.contract_total]);
 
   const handleSubmit = async () => {
     if (!form.client_name || !form.amount_paid) {
@@ -157,14 +161,14 @@ function BillingForm({ month, userId }: { month: string; userId: string }) {
         amount_paid: paid,
         commission_rate: 0.03,
         commission_value: paid * 0.03,
-        balance_remaining: contractTotal - paid > 0 ? contractTotal - paid : 0,
+        balance_remaining: newBalance,
         status: form.status,
         reference_month: month,
         notes: form.notes || null,
         created_by: userId,
       });
       toast({ title: "Faturamento registrado com sucesso!" });
-      setForm({ client_name: "", contract_total: "", contract_nf: "", installment_current: "", installment_total: "", closing_date: "", amount_paid: "", status: "Pendente", notes: "" });
+      setForm({ client_name: "", contract_total: "", balance_remaining: "", contract_nf: "", installment_current: "", installment_total: "", closing_date: "", amount_paid: "", status: "Pendente", notes: "" });
     } catch (e: any) {
       toast({ title: "Erro ao registrar", description: e.message, variant: "destructive" });
     }
@@ -185,6 +189,10 @@ function BillingForm({ month, userId }: { month: string; userId: string }) {
         <div>
           <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Valor total contrato (R$)</label>
           <Input type="number" value={form.contract_total} onChange={(e) => setForm(p => ({ ...p, contract_total: e.target.value }))} style={inputStyle} placeholder="0,00" />
+        </div>
+        <div>
+          <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Saldo atual (R$)</label>
+          <Input type="number" value={form.balance_remaining} onChange={(e) => setForm(p => ({ ...p, balance_remaining: e.target.value }))} style={inputStyle} placeholder="Deixe vazio para usar valor total" />
         </div>
         <div>
           <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Contrato / NF</label>
@@ -209,6 +217,12 @@ function BillingForm({ month, userId }: { month: string; userId: string }) {
           <Input type="number" value={form.amount_paid} onChange={(e) => setForm(p => ({ ...p, amount_paid: e.target.value }))} style={inputStyle} placeholder="0,00" />
         </div>
         <div>
+          <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Saldo após pagamento</label>
+          <div className="px-3 py-2 rounded-md font-mono text-sm" style={{ background: '#0D1318', border: '1px solid #1A2535', color: '#F43F5E' }}>
+            {formatCurrency(newBalance)}
+          </div>
+        </div>
+        <div>
           <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Status</label>
           <Select value={form.status} onValueChange={(v) => setForm(p => ({ ...p, status: v }))}>
             <SelectTrigger style={inputStyle}><SelectValue /></SelectTrigger>
@@ -217,7 +231,7 @@ function BillingForm({ month, userId }: { month: string; userId: string }) {
             </SelectContent>
           </Select>
         </div>
-        <div className="md:col-span-2 lg:col-span-2">
+        <div className="md:col-span-2 lg:col-span-3">
           <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Observações</label>
           <Textarea value={form.notes} onChange={(e) => setForm(p => ({ ...p, notes: e.target.value }))} style={inputStyle} rows={2} />
         </div>
@@ -287,7 +301,7 @@ function ExcelImport({ month, userId }: { month: string; userId: string }) {
       rows.push({
         client_name: String(row[0]).trim(),
         contract_total: parseFloat(row[1]) || 0,
-        balance_remaining: parseFloat(row[2]) || 0,
+        balance_remaining: Math.max(0, (parseFloat(row[2]) || 0) - paid),
         contract_nf: row[3] ? String(row[3]).trim() : null,
         installment_current: ic,
         installment_total: it,
