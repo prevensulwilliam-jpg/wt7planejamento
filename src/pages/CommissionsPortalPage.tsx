@@ -323,27 +323,60 @@ function PrevensulExcelImport({ month, userId }: { month: string; userId: string
   const [selectedSheet, setSelectedSheet] = useState("");
   const [sheetNames, setSheetNames] = useState<string[]>([]);
   const [workbookRef, setWorkbookRef] = useState<XLSX.WorkBook | null>(null);
+  const [inputKey, setInputKey] = useState(0);
+  // Multi-sheet state
+  const [allSheetsData, setAllSheetsData] = useState<{ sheetName: string; refMonth: string; rows: any[] }[]>([]);
+  const [showModeDialog, setShowModeDialog] = useState(false);
+  const [existingMonthsSet, setExistingMonthsSet] = useState<Set<string>>(new Set());
 
-  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      const wb = XLSX.read(evt.target?.result, { type: "array" });
-      setWorkbookRef(wb);
-      setSheetNames(wb.SheetNames);
-      const [y, m] = month.split("-");
-      const target = `${m}${y}`;
-      const found = wb.SheetNames.find(n => n.includes(target)) || wb.SheetNames[0];
-      setSelectedSheet(found);
-      parseSheet(wb, found);
+  const detectMonthFromSheet = (name: string): string | null => {
+    const n = name.toLowerCase().trim();
+    const ptMonths: Record<string, string> = {
+      jan: "01", janeiro: "01",
+      fev: "02", fevereiro: "02",
+      mar: "03", marco: "03",
+      abr: "04", abril: "04",
+      mai: "05", maio: "05",
+      jun: "06", junho: "06",
+      jul: "07", julho: "07",
+      ago: "08", agosto: "08",
+      set: "09", setembro: "09",
+      out: "10", outubro: "10",
+      nov: "11", novembro: "11",
+      dez: "12", dezembro: "12",
     };
-    reader.readAsArrayBuffer(file);
+    // MMYYYY e.g. "012026"
+    const m1 = n.match(/^(\d{2})(\d{4})$/);
+    if (m1) return `${m1[2]}-${m1[1]}`;
+    // MM/YYYY or MM-YYYY
+    const m2 = n.match(/(\d{1,2})[\/\-](\d{4})/);
+    if (m2) return `${m2[2]}-${m2[1].padStart(2, "0")}`;
+    // Portuguese month name + year
+    const yearMatch = n.match(/(\d{4})/);
+    const year = yearMatch ? yearMatch[1] : month.split("-")[0];
+    // Check "março" with ç separately
+    if (n.includes("mar\u00e7o") || n.includes("marco")) return `${year}-03`;
+    for (const [key, val] of Object.entries(ptMonths)) {
+      if (n.includes(key)) return `${year}-${val}`;
+    }
+    return null;
   };
 
-  const parseSheet = (wb: XLSX.WorkBook, sheetName: string) => {
+  const parseExcelDate = (val: any): string | null => {
+    if (typeof val === "number") {
+      const d = XLSX.SSF.parse_date_code(val);
+      if (d) return `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`;
+    }
+    if (typeof val === "string") {
+      const parts = val.split("/");
+      if (parts.length === 3) return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    }
+    return null;
+  };
+
+  const parseSheetToRows = (wb: XLSX.WorkBook, sheetName: string): any[] => {
     const ws = wb.Sheets[sheetName];
+    if (!ws) return [];
     const raw: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
     const rows: any[] = [];
     for (let i = 2; i < raw.length; i++) {
@@ -365,59 +398,206 @@ function PrevensulExcelImport({ month, userId }: { month: string; userId: string
         status: row[8] ? String(row[8]).trim() : "Pendente",
       });
     }
-    setPreview(rows);
+    return rows;
   };
 
-  const parseExcelDate = (val: any): string | null => {
-    if (typeof val === "number") {
-      const d = XLSX.SSF.parse_date_code(val);
-      if (d) return `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`;
-    }
-    if (typeof val === "string") {
-      const parts = val.split("/");
-      if (parts.length === 3) return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-    }
-    return null;
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      const wb = XLSX.read(evt.target?.result, { type: "array" });
+      setWorkbookRef(wb);
+      setSheetNames(wb.SheetNames);
+
+      const parsed = wb.SheetNames
+        .map(sheetName => ({
+          sheetName,
+          refMonth: detectMonthFromSheet(sheetName) ?? month,
+          rows: parseSheetToRows(wb, sheetName),
+        }))
+        .filter(s => s.rows.length > 0);
+
+      const detectable = parsed.filter(s => detectMonthFromSheet(s.sheetName) !== null);
+
+      if (detectable.length > 1) {
+        setAllSheetsData(parsed);
+        const months = [...new Set(parsed.map(s => s.refMonth))];
+        const { data: existingData } = await supabase
+          .from("prevensul_billing")
+          .select("reference_month")
+          .in("reference_month", months);
+        setExistingMonthsSet(new Set(existingData?.map(r => r.reference_month) ?? []));
+        const currentSheetData = parsed.find(s => s.refMonth === month) ?? parsed[parsed.length - 1];
+        setSelectedSheet(currentSheetData.sheetName);
+        setPreview(currentSheetData.rows);
+        setShowModeDialog(true);
+      } else {
+        const [y, m] = month.split("-");
+        const target = `${m}${y}`;
+        const found = wb.SheetNames.find(n => n.includes(target)) || wb.SheetNames[0];
+        setSelectedSheet(found);
+        setAllSheetsData([]);
+        setPreview(parseSheetToRows(wb, found));
+      }
+    };
+    reader.readAsArrayBuffer(file);
   };
 
   const handleSheetChange = (name: string) => {
     setSelectedSheet(name);
-    if (workbookRef) parseSheet(workbookRef, name);
+    if (workbookRef) setPreview(parseSheetToRows(workbookRef, name));
   };
 
-  const handleConfirm = async () => {
+  const cancelImport = () => {
+    setShowModeDialog(false);
+    setPreview([]);
+    setFileName("");
+    setAllSheetsData([]);
+    setInputKey(k => k + 1);
+  };
+
+  const doImport = async (mode: "current" | "all") => {
     setImporting(true);
-    let imported = 0, totalPaid = 0, totalComm = 0;
+    setShowModeDialog(false);
+    let totalImported = 0;
+
+    const sheetsToProcess = mode === "all" && allSheetsData.length > 0
+      ? allSheetsData
+      : [{ sheetName: selectedSheet, refMonth: month, rows: preview }];
+
     try {
-      for (const row of preview) {
-        const isDuplicate = existing.some(e => e.client_name === row.client_name && e.installment_current === row.installment_current);
-        if (isDuplicate) continue;
-        const { commission_value: _cv, ...rowWithoutCommission } = row;
-        await createBilling.mutateAsync({ ...rowWithoutCommission, commission_rate: 0.03, reference_month: month, created_by: userId });
-        imported++;
-        totalPaid += row.amount_paid;
-        totalComm += commValue;
+      for (const sheet of sheetsToProcess) {
+        if (mode === "all" && existingMonthsSet.has(sheet.refMonth)) {
+          const { error: delErr } = await supabase
+            .from("prevensul_billing")
+            .delete()
+            .eq("reference_month", sheet.refMonth);
+          if (delErr) throw delErr;
+        }
+
+        let sheetImported = 0, sheetPaid = 0, sheetComm = 0;
+
+        for (const row of sheet.rows) {
+          if (mode === "current") {
+            const isDuplicate = existing.some(
+              e => e.client_name === row.client_name && e.installment_current === row.installment_current
+            );
+            if (isDuplicate) continue;
+          }
+          const { commission_value: _cv, ...rowWithoutCommission } = row;
+          await createBilling.mutateAsync({
+            ...rowWithoutCommission,
+            commission_rate: 0.03,
+            reference_month: sheet.refMonth,
+            created_by: userId,
+          });
+          sheetImported++;
+          sheetPaid += row.amount_paid ?? 0;
+          sheetComm += row.commission_value ?? (row.amount_paid ?? 0) * 0.03;
+        }
+
+        if (sheetImported > 0) {
+          await createImport.mutateAsync({
+            file_name: fileName,
+            reference_month: sheet.refMonth,
+            records_imported: sheetImported,
+            total_paid: sheetPaid,
+            total_commission: sheetComm,
+            imported_by: userId,
+          });
+        }
+        totalImported += sheetImported;
       }
-      await createImport.mutateAsync({ file_name: fileName, reference_month: month, records_imported: imported, total_paid: totalPaid, total_commission: totalComm, imported_by: userId });
-      toast({ title: `${imported} registros importados!` });
-      setPreview([]); setFileName("");
-    } catch (e: any) {
-      toast({ title: "Erro na importação", description: e.message, variant: "destructive" });
-    } finally { setImporting(false); }
+
+      toast({
+        title: mode === "all" && sheetsToProcess.length > 1
+          ? `${sheetsToProcess.length} meses importados — ${totalImported} registros no total!`
+          : `${totalImported} registros importados!`,
+      });
+      setPreview([]);
+      setFileName("");
+      setAllSheetsData([]);
+      setInputKey(k => k + 1);
+    } catch (err: any) {
+      toast({ title: "Erro na importação", description: err.message, variant: "destructive" });
+    } finally {
+      setImporting(false);
+    }
   };
 
   return (
     <PremiumCard>
+      <AlertDialog open={showModeDialog}>
+        <AlertDialogContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+          <AlertDialogHeader>
+            <AlertDialogTitle style={{ color: '#F0F4F8' }}>
+              {allSheetsData.length} abas detectadas no arquivo
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm">
+                <p style={{ color: '#94A3B8' }}>O arquivo contém dados para os seguintes meses:</p>
+                <ul className="space-y-2">
+                  {allSheetsData.map(s => (
+                    <li key={s.sheetName} className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold" style={{ color: s.refMonth === month ? '#E8C97A' : '#F0F4F8' }}>
+                        {formatMonth(s.refMonth)}
+                      </span>
+                      <span style={{ color: '#64748B' }}>{s.rows.length} registros</span>
+                      {s.refMonth === month && (
+                        <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: 'rgba(232,201,122,0.15)', color: '#E8C97A' }}>
+                          mês atual
+                        </span>
+                      )}
+                      {existingMonthsSet.has(s.refMonth) && (
+                        <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: 'rgba(239,68,68,0.12)', color: '#FCA5A5' }}>
+                          já tem dados — será substituído
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                {allSheetsData.some(s => s.refMonth !== month && existingMonthsSet.has(s.refMonth)) && (
+                  <p className="text-xs p-2 rounded" style={{ background: 'rgba(239,68,68,0.08)', color: '#FCA5A5', border: '1px solid rgba(239,68,68,0.2)' }}>
+                    ⚠️ Meses anteriores com dados existentes serão completamente substituídos.
+                  </p>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+            <AlertDialogCancel
+              onClick={cancelImport}
+              style={{ background: 'transparent', border: '1px solid #1A2535', color: '#94A3B8' }}
+            >
+              Cancelar
+            </AlertDialogCancel>
+            <button
+              onClick={() => doImport("current")}
+              disabled={importing}
+              className="flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              style={{ background: 'rgba(232,201,122,0.12)', color: '#E8C97A', border: '1px solid rgba(232,201,122,0.25)' }}
+            >
+              Apenas {formatMonth(month)}
+            </button>
+            <GoldButton onClick={() => doImport("all")} disabled={importing} className="flex-1">
+              Todos os {allSheetsData.length} meses
+            </GoldButton>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <h2 className="font-display font-semibold text-lg mb-4 flex items-center gap-2" style={{ color: '#F0F4F8' }}>
         <FileSpreadsheet className="w-5 h-5" style={{ color: '#F59E0B' }} /> Importar Planilha Excel
       </h2>
       <div className="flex items-center gap-4 flex-wrap">
         <label className="cursor-pointer px-4 py-2.5 rounded-xl font-medium text-sm flex items-center gap-2" style={{ background: '#F59E0B', color: '#080C10' }}>
           <Upload className="w-4 h-4" /> Selecionar .xlsx
-          <input type="file" accept=".xlsx,.xls" onChange={handleFile} className="hidden" />
+          <input key={inputKey} type="file" accept=".xlsx,.xls" onChange={handleFile} className="hidden" />
         </label>
         {fileName && <span className="text-sm font-mono" style={{ color: '#94A3B8' }}>{fileName}</span>}
-        {sheetNames.length > 1 && (
+        {sheetNames.length > 1 && !showModeDialog && (
           <Select value={selectedSheet} onValueChange={handleSheetChange}>
             <SelectTrigger className="w-40" style={{ background: '#0D1318', border: '1px solid #1A2535', color: '#F0F4F8' }}><SelectValue /></SelectTrigger>
             <SelectContent>{sheetNames.map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}</SelectContent>
@@ -451,7 +631,7 @@ function PrevensulExcelImport({ month, userId }: { month: string; userId: string
               </TableBody>
             </Table>
           </div>
-          <GoldButton onClick={handleConfirm} disabled={importing}>
+          <GoldButton onClick={() => doImport("current")} disabled={importing}>
             {importing ? "Importando..." : "Confirmar Import"}
           </GoldButton>
         </div>
