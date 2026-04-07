@@ -1,6 +1,6 @@
 # CLAUDE.md — Projeto WT7
 > Contexto completo para novas sessões Claude Code.
-> Última atualização: 05/04/2026
+> Última atualização: 06/04/2026
 > Gerado a partir do estado real do repositório.
 
 ---
@@ -39,7 +39,13 @@ Uso diário interno. Não é SaaS público.
 | Project ref do token pessoal | `tarvvkgqbtbsysyaduqm` ← ERRADO para o app |
 | Token pessoal William | `sbp_47cb2e4646a9eb9a6838b91c9e015cea73141c79` |
 
-**Regra:** Nunca usar o CLI com o token pessoal para deploy de edge functions — vai no projeto errado. Sempre usar o **dashboard do Lovable → Supabase → Edge Functions** ou **SQL Editor**.
+**🚨 REGRA FUNDAMENTAL:** O WT7 usa **Lovable Cloud** como plataforma. Todo acesso ao Supabase deve ser feito pelo **painel do Lovable** (não pelo supabase.com diretamente).
+- Supabase dashboard: `Lovable → projeto → Supabase`
+- Edge Functions: `Lovable → Supabase → Edge Functions`
+- SQL Editor: `Lovable → Supabase → SQL Editor`
+- Auth settings: `Lovable → Supabase → Authentication`
+- **Nunca** navegar para `supabase.com/dashboard` diretamente
+- **Nunca** usar CLI com token pessoal (projeto errado)
 
 ### Aplicar migrations
 1. Escrever SQL em `supabase/migrations/YYYYMMDD_nome.sql`
