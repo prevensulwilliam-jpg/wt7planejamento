@@ -146,14 +146,15 @@ function PrevensulTab({ month, userId }: { month: string; userId: string }) {
 }
 
 function PrevensulKPIs({ month }: { month: string }) {
-  const { totalBilled, totalReceived, totalCommission, totalRecords, isLoading } = useBillingSummary(month);
-  if (isLoading) return <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">{[...Array(4)].map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)}</div>;
+  const { totalContractAll, totalNewBillings, totalForecast, totalReceived, totalCommission, isLoading } = useBillingSummary(month);
+  if (isLoading) return <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)}</div>;
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-      <KpiCard label="Total Faturado" value={totalBilled} color="cyan" compact />
-      <KpiCard label="Total Recebido" value={totalReceived} color="green" compact />
-      <KpiCard label="Comissão Total" value={totalCommission} color="gold" compact />
-      <KpiCard label="NFs Lançadas" value={totalRecords} color="cyan" compact />
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <KpiCard label="Faturamento Total" value={totalContractAll} color="cyan" compact />
+      <KpiCard label="Faturamentos Novos" value={totalNewBillings} color="cyan" compact />
+      <KpiCard label="Previsão" value={totalForecast} color="cyan" compact />
+      <KpiCard label="Recebidos" value={totalReceived} color="green" compact />
+      <KpiCard label="Comissões" value={totalCommission} color="gold" compact />
     </div>
   );
 }

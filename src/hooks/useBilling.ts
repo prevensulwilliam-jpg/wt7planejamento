@@ -38,11 +38,20 @@ export function usePrevensulBillingRange(startMonth?: string, endMonth?: string)
 
 export function useBillingSummary(month: string) {
   const { data = [], isLoading } = usePrevensulBilling(month);
-  const totalBilled = data.reduce((s, r) => s + (r.contract_total ?? 0), 0);
+  const { data: allData = [], isLoading: isLoadingAll } = usePrevensulBilling();
+
+  // Faturamento Total — soma de todos os contratos (sem filtro de mês)
+  const totalContractAll = allData.reduce((s, r) => s + (r.contract_total ?? 0), 0);
+  // Faturamentos Novos — soma dos contratos do mês selecionado
+  const totalNewBillings = data.reduce((s, r) => s + (r.contract_total ?? 0), 0);
+  // Previsão — saldo devedor total do mês (balance_remaining - amount_paid)
+  const totalForecast = data.reduce((s, r) => s + Math.max(0, (r.balance_remaining ?? 0) - (r.amount_paid ?? 0)), 0);
+  // Recebidos — soma do pago no mês
   const totalReceived = data.reduce((s, r) => s + (r.amount_paid ?? 0), 0);
+  // Comissões — 3% do recebido no mês
   const totalCommission = data.reduce((s, r) => s + (r.commission_value ?? 0), 0);
-  const totalRecords = data.length;
-  return { totalBilled, totalReceived, totalCommission, totalRecords, isLoading };
+
+  return { totalContractAll, totalNewBillings, totalForecast, totalReceived, totalCommission, isLoading: isLoading || isLoadingAll };
 }
 
 export function useCreateBilling() {
