@@ -469,7 +469,6 @@ function BillingHistory({ month }: { month: string }) {
       await updateBilling.mutateAsync({
         id: editRow.id,
         amount_paid: newPaid,
-        commission_value: newPaid * 0.03,
         balance_remaining: editNewBalance,
         status: editForm.status,
         notes: editForm.notes || null,
