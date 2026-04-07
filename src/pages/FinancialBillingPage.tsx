@@ -161,8 +161,7 @@ function BillingForm({ month, userId }: { month: string; userId: string }) {
         closing_date: form.closing_date || null,
         amount_paid: paid,
         commission_rate: 0.03,
-        commission_value: paid * 0.03,
-        balance_remaining: newBalance,
+        balance_remaining: parseFloat(form.balance_remaining) || contractTotal,
         status: form.status,
         reference_month: month,
         notes: form.notes || null,
@@ -302,7 +301,7 @@ function ExcelImport({ month, userId }: { month: string; userId: string }) {
       rows.push({
         client_name: String(row[0]).trim(),
         contract_total: parseFloat(row[1]) || 0,
-        balance_remaining: Math.max(0, (parseFloat(row[2]) || 0) - paid),
+        balance_remaining: parseFloat(row[2]) || 0,
         contract_nf: row[3] ? String(row[3]).trim() : null,
         installment_current: ic,
         installment_total: it,
@@ -445,33 +444,32 @@ function BillingHistory({ month }: { month: string }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [editRow, setEditRow] = useState<any | null>(null);
-  const [editForm, setEditForm] = useState({ amount_paid: "", balance_remaining: "", status: "", notes: "" });
+  const [editForm, setEditForm] = useState({ amount_paid: "", status: "", notes: "" });
 
   const openEdit = (r: any) => {
     setEditRow(r);
     setEditForm({
       amount_paid: String(r.amount_paid ?? ""),
-      balance_remaining: String(r.balance_remaining ?? ""),
       status: r.status ?? "Pendente",
       notes: r.notes ?? "",
     });
   };
 
-  // Quando o pagamento muda, recalcula saldo: stored_balance - novo_pagamento
-  const handleAmountPaidChange = (val: string) => {
-    const newPaid = parseFloat(val) || 0;
-    const storedBalance = editRow?.balance_remaining ?? 0;
-    const newBalance = Math.max(0, storedBalance - newPaid);
-    setEditForm(p => ({ ...p, amount_paid: val, balance_remaining: String(newBalance) }));
-  };
+  // Saldo exibido = balance_remaining (base) - amount_paid (calculado na UI, não no banco)
+  const editSaldoAtual = useMemo(() => {
+    if (!editRow) return 0;
+    const base = editRow.balance_remaining ?? 0;
+    const paid = parseFloat(editForm.amount_paid) || 0;
+    return Math.max(0, base - paid);
+  }, [editRow, editForm.amount_paid]);
 
   const handleUpdate = async () => {
     if (!editRow) return;
     const newPaid = parseFloat(editForm.amount_paid) || 0;
-    const newBalance = parseFloat(editForm.balance_remaining) || 0;
+    // Só atualiza amount_paid — balance_remaining é o saldo base e não muda
     const { error } = await supabase
       .from("prevensul_billing")
-      .update({ amount_paid: newPaid, balance_remaining: newBalance, status: editForm.status, notes: editForm.notes || null })
+      .update({ amount_paid: newPaid, status: editForm.status, notes: editForm.notes || null })
       .eq("id", editRow.id);
     if (error) {
       toast({ title: "Erro ao atualizar", description: error.message + " | code: " + error.code, variant: "destructive" });
@@ -508,18 +506,16 @@ function BillingHistory({ month }: { month: string }) {
             <Input
               type="number"
               value={editForm.amount_paid}
-              onChange={(e) => handleAmountPaidChange(e.target.value)}
+              onChange={(e) => setEditForm(p => ({ ...p, amount_paid: e.target.value }))}
               style={inputStyle}
             />
           </div>
           <div>
-            <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Saldo após pagamento (R$)</label>
-            <Input
-              type="number"
-              value={editForm.balance_remaining}
-              onChange={(e) => setEditForm(p => ({ ...p, balance_remaining: e.target.value }))}
-              style={{ ...inputStyle, color: '#F43F5E' }}
-            />
+            <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Saldo devedor</label>
+            <div className="px-3 py-2 rounded-md font-mono text-sm font-bold" style={{ background: '#0D1318', border: '1px solid #1A2535', color: '#F43F5E' }}>
+              {formatCurrency(editSaldoAtual)}
+            </div>
+            <p className="text-xs mt-1 font-mono" style={{ color: '#4A5568' }}>Saldo base: {formatCurrency(editRow?.balance_remaining ?? 0)} − Pago: {formatCurrency(parseFloat(editForm.amount_paid) || 0)}</p>
           </div>
           <div>
             <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Status</label>
@@ -571,7 +567,7 @@ function BillingHistory({ month }: { month: string }) {
                 <TableCell className="font-mono" style={{ color: '#94A3B8' }}>{r.contract_nf || "—"}</TableCell>
                 <TableCell className="font-mono" style={{ color: '#94A3B8' }}>{r.installment_current ?? "—"}/{r.installment_total ?? "—"}</TableCell>
                 <TableCell className="font-mono" style={{ color: '#94A3B8' }}>{formatCurrency(r.contract_total ?? 0)}</TableCell>
-                <TableCell className="font-mono" style={{ color: '#F43F5E' }}>{formatCurrency(r.balance_remaining ?? 0)}</TableCell>
+                <TableCell className="font-mono" style={{ color: '#F43F5E' }}>{formatCurrency(Math.max(0, (r.balance_remaining ?? 0) - (r.amount_paid ?? 0)))}</TableCell>
                 <TableCell className="font-mono" style={{ color: '#10B981' }}>{formatCurrency(r.amount_paid ?? 0)}</TableCell>
                 <TableCell className="font-mono" style={{ color: '#E8C97A' }}>{formatCurrency(r.commission_value ?? 0)}</TableCell>
                 <TableCell><WtBadge variant={statusBadge[r.status ?? ""] || "gray"}>{r.status}</WtBadge></TableCell>
