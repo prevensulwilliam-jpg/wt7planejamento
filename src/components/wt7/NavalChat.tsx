@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { MessageSquare, X, Send, Sparkles, Minimize2, Maximize2 } from "lucide-react";
 import { getCurrentMonth } from "@/lib/formatters";
 import ReactMarkdown from "react-markdown";
-import { callNaval, getNavalErrorMessage } from "@/lib/naval";
+import { callNaval } from "@/lib/naval";
 
 async function fetchPageContext(pathname: string): Promise<{ label: string; data: any }> {
   const month = getCurrentMonth();
