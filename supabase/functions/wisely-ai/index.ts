@@ -130,22 +130,24 @@ serve(async (req) => {
 
     if (!response.ok) {
       const status = response.status;
+      const t = await response.text();
+      console.error("AI gateway error:", status, t);
+
+      // Return 200 with error payload so supabase.functions.invoke() doesn't throw
       if (status === 429) {
         return new Response(
-          JSON.stringify({ error: "Limite de requisições excedido. Tente novamente em alguns segundos." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          JSON.stringify({ error: "Limite de requisições excedido. Tente novamente em alguns segundos.", rateLimited: true }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
       if (status === 402) {
-        return new Response(JSON.stringify({ error: "Créditos esgotados. Adicione fundos no workspace." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return new Response(
+          JSON.stringify({ error: "Créditos esgotados. Adicione fundos no workspace.", creditsExhausted: true }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
       }
-      const t = await response.text();
-      console.error("AI gateway error:", status, t);
       return new Response(JSON.stringify({ error: "Erro no gateway de IA" }), {
-        status: 500,
+        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
