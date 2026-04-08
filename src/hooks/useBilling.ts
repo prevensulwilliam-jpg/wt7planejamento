@@ -75,9 +75,9 @@ function calcPrevisao(
       );
       return sum + scheduled.reduce((s: number, p: any) => s + (p.amount ?? 0), 0);
     } else {
-      // Parcelas iguais: contract_total / installment_total
-      const total = r.installment_total ?? 1;
-      return sum + (r.contract_total ?? 0) / total;
+      // Parcelas iguais: balance_remaining / parcelas restantes
+      const remaining = Math.max(1, (r.installment_total ?? 1) - (r.installment_current ?? 0));
+      return sum + (r.balance_remaining ?? 0) / remaining;
     }
   }, 0);
 }
@@ -90,9 +90,9 @@ export function useBillingSummary(month: string) {
   // Faturamento Total — todos os contratos do mês selecionado
   const totalBilled = data.reduce((s: number, r: any) => s + (r.contract_total ?? 0), 0);
 
-  // Faturamentos Novos — contratos criados/lançados no mês selecionado (created_at no mês)
+  // Faturamentos Novos — contratos cuja Data de Fechamento cai no mês selecionado
   const totalNew = data
-    .filter((r: any) => r.created_at && String(r.created_at).startsWith(month))
+    .filter((r: any) => r.closing_date && String(r.closing_date).startsWith(month))
     .reduce((s: number, r: any) => s + (r.contract_total ?? 0), 0);
 
   // Previsão — parcela esperada por contrato no mês
