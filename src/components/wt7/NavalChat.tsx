@@ -217,7 +217,7 @@ export function NavalChat() {
         { role: "assistant", content: reply || "Não consegui processar sua pergunta. Tente novamente." }
       ]);
     } catch (e) {
-      const errorMessage = await getNavalErrorMessage(e);
+      const errorMessage = e instanceof Error && e.message ? e.message : "Erro ao conectar com a IA. Tente novamente.";
       setMessages(prev => [
         ...prev.filter(m => !m.loading),
         { role: "assistant", content: errorMessage }
