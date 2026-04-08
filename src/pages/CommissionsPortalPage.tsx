@@ -340,7 +340,7 @@ function PrevensulForm({ month, userId, editRecord, onClearEdit }: { month: stri
         {/* Linha 3: Data Fech. + Pago + Status */}
         <div>
           <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Data Fech.</label>
-          <Input value={form.closing_date} onChange={e => setForm(p => ({ ...p, closing_date: e.target.value }))} style={inputStyle} placeholder="ex: mar/26, MENSAL" />
+          <DatePicker value={form.closing_date} onChange={v => setForm(p => ({ ...p, closing_date: v }))} placeholder="Data de fechamento" />
         </div>
         <div>
           <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Pago (R$)</label>
@@ -1079,7 +1079,7 @@ function PrevensulHistory({ month, userId, onLoadRecord }: { month: string; user
                         <input type="number" value={editForm.installment_total} onChange={e => setEditForm(p => ({ ...p, installment_total: e.target.value }))} style={{ ...inputStyle, width: 36, textAlign: 'center', padding: '4px 2px' }} />
                       </div>
                     </TableCell>
-                    <TableCell><input value={editForm.closing_date} onChange={e => setEditForm(p => ({ ...p, closing_date: e.target.value }))} style={{ ...inputStyle, width: '100%' }} /></TableCell>
+                    <TableCell><DatePicker value={editForm.closing_date} onChange={v => setEditForm(p => ({ ...p, closing_date: v }))} /></TableCell>
                     <TableCell><input type="number" value={editForm.amount_paid} onChange={e => setEditForm(p => ({ ...p, amount_paid: e.target.value }))} style={{ ...inputStyle, width: '100%' }} /></TableCell>
                     <TableCell className="font-mono text-xs whitespace-nowrap" style={{ color: '#E8C97A' }}>{formatCurrency(editCommission)}</TableCell>
                     <TableCell>

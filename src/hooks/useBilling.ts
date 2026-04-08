@@ -82,6 +82,27 @@ function calcPrevisao(
   }, 0);
 }
 
+function parseDateToYearMonth(val: string | null | undefined): string | null {
+  if (!val) return null;
+  const s = String(val).trim();
+  // ISO: "2026-03-31" ou "2026-03"
+  if (/^\d{4}-\d{2}(-\d{2})?$/.test(s)) return s.substring(0, 7);
+  // Brasileiro: "31/03/2026"
+  const br = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(s);
+  if (br) return `${br[3]}-${br[2]}`;
+  // Abreviado PT-BR: "mar/26", "jan/25"
+  const monthMap: Record<string, string> = {
+    jan: '01', fev: '02', mar: '03', abr: '04', mai: '05', jun: '06',
+    jul: '07', ago: '08', set: '09', out: '10', nov: '11', dez: '12',
+  };
+  const abbrev = /^([a-záê]{3})\/(\d{2})$/i.exec(s);
+  if (abbrev) {
+    const m = monthMap[abbrev[1].toLowerCase()];
+    if (m) return `20${abbrev[2]}-${m}`;
+  }
+  return null;
+}
+
 export function useBillingSummary(month: string) {
   const { data = [], isLoading } = usePrevensulBilling(month);
   const { data: ytdData = [], isLoading: isLoadingYtd } = usePrevensulBillingRange("2026-01", month);
@@ -89,7 +110,7 @@ export function useBillingSummary(month: string) {
 
   const totalBilled = data.reduce((s: number, r: any) => s + (r.contract_total ?? 0), 0);
   const totalNew = data
-    .filter((r: any) => r.closing_date && String(r.closing_date).startsWith(month))
+    .filter((r: any) => parseDateToYearMonth(r.closing_date) === month)
     .reduce((s: number, r: any) => s + (r.contract_total ?? 0), 0);
   const totalForecast = calcPrevisao(data, scheduleData, month);
   const totalReceived = data.reduce((s: number, r: any) => s + (r.amount_paid ?? 0), 0);
