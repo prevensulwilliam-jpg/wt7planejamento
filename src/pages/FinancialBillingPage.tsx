@@ -302,12 +302,22 @@ function ExcelImport({ month, userId }: { month: string; userId: string }) {
 
   const parseExcelDate = (val: any): string | null => {
     if (typeof val === "number") {
-      const d = XLSX.SSF.parse_date_code(val);
-      if (d) return `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`;
+      const utc = (val - 25569) * 86400 * 1000;
+      const date = new Date(utc);
+      const y = date.getUTCFullYear();
+      const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+      const d = String(date.getUTCDate()).padStart(2, '0');
+      if (y > 2000 && y < 2100) return `${y}-${m}-${d}`;
+      return null;
     }
     if (typeof val === "string") {
-      const parts = val.split("/");
-      if (parts.length === 3) return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+      const full = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(val.trim());
+      if (full) return `${full[3]}-${full[2].padStart(2, '0')}-${full[1].padStart(2, '0')}`;
+      const short = /^(\d{1,2})\/(\d{1,2})$/.exec(val.trim());
+      if (short) {
+        const year = new Date().getFullYear();
+        return `${year}-${short[2].padStart(2, '0')}-${short[1].padStart(2, '0')}`;
+      }
     }
     return null;
   };
