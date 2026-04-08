@@ -87,25 +87,15 @@ export function useBillingSummary(month: string) {
   const { data: ytdData = [], isLoading: isLoadingYtd } = usePrevensulBillingRange("2026-01", month);
   const { data: scheduleData = [], isLoading: isLoadingSchedule } = useBillingScheduleForMonth(month);
 
-  // Faturamento Total — todos os contratos do mês selecionado
   const totalBilled = data.reduce((s: number, r: any) => s + (r.contract_total ?? 0), 0);
-
-  // Faturamentos Novos — contratos cuja Data de Fechamento cai no mês selecionado
   const totalNew = data
     .filter((r: any) => r.closing_date && String(r.closing_date).startsWith(month))
     .reduce((s: number, r: any) => s + (r.contract_total ?? 0), 0);
-
-  // Previsão — parcela esperada por contrato no mês
   const totalForecast = calcPrevisao(data, scheduleData, month);
-
-  // Recebidos — pago no mês
   const totalReceived = data.reduce((s: number, r: any) => s + (r.amount_paid ?? 0), 0);
-
-  // Comissões — 3% do recebido
   const totalCommission = data.reduce((s: number, r: any) => s + (r.commission_value ?? 0), 0);
-
-  // Faturamento 2026 — YTD: soma do pago de jan/2026 até o mês selecionado
   const total2026 = ytdData.reduce((s: number, r: any) => s + (r.amount_paid ?? 0), 0);
+  const totalRecords = data.length;
 
   return {
     totalBilled,
@@ -114,6 +104,7 @@ export function useBillingSummary(month: string) {
     totalReceived,
     totalCommission,
     total2026,
+    totalRecords,
     isLoading: isLoading || isLoadingYtd || isLoadingSchedule,
   };
 }
