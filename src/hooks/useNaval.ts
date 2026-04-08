@@ -134,11 +134,12 @@ export function useNavalChat() {
         setMessages((prev) => [...prev, { role: "assistant", content: text }]);
       } catch (e) {
         console.error("Naval chat error:", e);
+        const errorMessage = await getNavalErrorMessage(e);
         setMessages((prev) => [
           ...prev,
           {
             role: "assistant",
-            content: await getNavalErrorMessage(e),
+            content: errorMessage,
           },
         ]);
       } finally {
