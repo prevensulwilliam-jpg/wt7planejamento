@@ -108,8 +108,22 @@ export function useBillingSummary(month: string) {
   const { data: ytdData = [], isLoading: isLoadingYtd } = usePrevensulBillingRange("2026-01", month);
   const { data: scheduleData = [], isLoading: isLoadingSchedule } = useBillingScheduleForMonth(month);
 
+  // Busca todos os registros de qualquer reference_month para calcular Faturamentos Novos
+  // pela data real de fechamento do contrato (closing_date), não pelo mês de lançamento
+  const { data: allRecords = [], isLoading: isLoadingAll } = useQuery({
+    queryKey: ["prevensul_billing_all_for_new"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("prevensul_billing")
+        .select("id, contract_total, closing_date");
+      if (error) throw error;
+      return data;
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+
   const totalBilled = data.reduce((s: number, r: any) => s + (r.contract_total ?? 0), 0);
-  const totalNew = data
+  const totalNew = allRecords
     .filter((r: any) => parseDateToYearMonth(r.closing_date) === month)
     .reduce((s: number, r: any) => s + (r.contract_total ?? 0), 0);
   const totalForecast = calcPrevisao(data, scheduleData, month);
@@ -126,7 +140,7 @@ export function useBillingSummary(month: string) {
     totalCommission,
     total2026,
     totalRecords,
-    isLoading: isLoading || isLoadingYtd || isLoadingSchedule,
+    isLoading: isLoading || isLoadingYtd || isLoadingSchedule || isLoadingAll,
   };
 }
 
