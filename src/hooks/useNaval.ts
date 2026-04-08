@@ -3,7 +3,15 @@ import { useDashboardKPIs, useGoals } from "./useFinances";
 import { useKitnets, useKitnetSummary } from "./useKitnets";
 import { usePrevensulBilling } from "./useBilling";
 import { getCurrentMonth, formatMonth } from "@/lib/formatters";
-import { callNaval, getNavalErrorMessage } from "@/lib/naval";
+import { callNaval } from "@/lib/naval";
+
+const NAVAL_FALLBACK_ERROR = "Erro ao conectar com o Naval. Tente novamente.";
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error && error.message
+    ? error.message
+    : NAVAL_FALLBACK_ERROR;
+}
 
 export function useNavalContext() {
   const month = getCurrentMonth();
@@ -91,9 +99,9 @@ export function useNavalAnalysis() {
           `Analise os dados financeiros de ${context.month} e me dê:\n1. Os 2 pontos mais positivos do mês\n2. Os 2 alertas ou oportunidades de melhoria\n3. 1 ação prioritária que devo tomar esta semana\n\nDados do mês:\n${JSON.stringify(context, null, 2)}`;
         const text = await callNaval([{ role: "user", content: prompt }]);
         setAnalysis(text);
-      } catch (e) {
-        console.error("Naval error:", e);
-        setAnalysis(await getNavalErrorMessage(e));
+      } catch (error) {
+        console.error("Naval error:", error);
+        setAnalysis(getErrorMessage(error));
       } finally {
         setLoading(false);
       }
@@ -132,14 +140,13 @@ export function useNavalChat() {
         ];
         const text = await callNaval(allMsgs);
         setMessages((prev) => [...prev, { role: "assistant", content: text }]);
-      } catch (e) {
-        console.error("Naval chat error:", e);
-        const errorMessage = await getNavalErrorMessage(e);
+      } catch (error) {
+        console.error("Naval chat error:", error);
         setMessages((prev) => [
           ...prev,
           {
             role: "assistant",
-            content: errorMessage,
+            content: getErrorMessage(error),
           },
         ]);
       } finally {
@@ -164,8 +171,8 @@ export function useNavalInsight(topic: string, prompt: string) {
     setLoading(true);
     const fullPrompt = `${prompt}\n\nDados: ${JSON.stringify(context, null, 2)}`;
     callNaval([{ role: "user", content: fullPrompt }])
-      .then((t) => setText(t))
-      .catch(async (e) => setText(await getNavalErrorMessage(e)))
+      .then((responseText) => setText(responseText))
+      .catch((error) => setText(getErrorMessage(error)))
       .finally(() => setLoading(false));
   }, [isReady, context, prompt, topic]);
 
