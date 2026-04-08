@@ -1,22 +1,18 @@
 
 
-# Show Ocupadas/Manutenção/Vacâncias as plain numbers
+# Correção do card "Faturamentos Novos" — Deduplicação e Replicação
 
-The three KPI cards (Ocupadas, Manutenção, Vacâncias) currently display as currency (R$) because `formatAs` defaults to `'currency'`. Add `formatAs="number"` to each.
+## Problema
+A replicação de meses copia `closing_date` para os registros novos, causando duplicatas no cálculo de "Faturamentos Novos". O card soma contratos repetidos em múltiplos `reference_month`.
 
-## Changes
+## Mudanças (arquivo único: `src/hooks/useBilling.ts`)
 
-**`src/pages/KitnetsPage.tsx`** (lines 88-90):
-```tsx
-<KpiCard label="Ocupadas" value={summary.occupied} color="green" compact formatAs="number" />
-<KpiCard label="Manutenção" value={summary.maintenance} color="cyan" compact formatAs="number" />
-<KpiCard label="Vacâncias" value={summary.vacant} color="red" compact formatAs="number" />
-```
+### 1. Incluir `client_name` na query `allRecords`
+Alterar o `.select()` da query `prevensul_billing_all_for_new` para incluir `client_name`, necessário para deduplicação.
 
-Same change in **`src/pages/ManagerKitnetsPage.tsx`** (lines 87-89).
+### 2. Deduplicar cálculo de `totalNew`
+Substituir o reduce simples por lógica que usa um `Set<string>` com chave `client_name__closing_date`, contando cada contrato apenas uma vez.
 
-| File | Action |
-|------|--------|
-| `src/pages/KitnetsPage.tsx` | Add `formatAs="number"` to 3 KPI cards |
-| `src/pages/ManagerKitnetsPage.tsx` | Add `formatAs="number"` to 3 KPI cards |
+### 3. Replicação não copia `closing_date`
+No `useReplicateMonth`, trocar `closing_date: r.closing_date` por `closing_date: null` para que meses replicados não herdem a data de fechamento original.
 
