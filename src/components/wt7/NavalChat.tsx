@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { MessageSquare, X, Send, Sparkles, Minimize2, Maximize2 } from "lucide-react";
 import { getCurrentMonth } from "@/lib/formatters";
 import ReactMarkdown from "react-markdown";
+import { callNaval, getNavalErrorMessage } from "@/lib/naval";
 
 async function fetchPageContext(pathname: string): Promise<{ label: string; data: any }> {
   const month = getCurrentMonth();
@@ -71,7 +72,6 @@ async function fetchPageContext(pathname: string): Promise<{ label: string; data
     return { label: "Patrimônio & Investimentos", data: { assets, investments, consortiums, totalAssets, totalInvestments: totalInv } };
   }
 
-  // Dashboard — contexto completo
   const [revRes, expRes, kitRes, goalRes, bilRes] = await Promise.all([
     supabase.from("revenues").select("*").eq("reference_month", month),
     supabase.from("expenses").select("*").eq("reference_month", month),
@@ -131,7 +131,6 @@ export function NavalChat() {
   const inputRef = useRef<HTMLInputElement>(null);
   const location = useLocation();
 
-  // ── Drag ──
   const [pos, setPos] = useState({ bottom: 24, right: 24 });
   const dragState = useRef({ active: false, startX: 0, startY: 0, origBottom: 24, origRight: 24, moved: false });
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -208,27 +207,20 @@ export function NavalChat() {
         .filter(m => !m.loading)
         .map(m => ({ role: m.role, content: m.content }));
 
-      const { data, error } = await supabase.functions.invoke("wisely-ai", {
-        body: {
-          messages: [
-            ...historyForApi,
-            { role: "user", content: userText + contextStr }
-          ],
-          stream: false,
-        },
-      });
-
-      if (error) throw error;
-
-      const reply = data?.text ?? "Não consegui processar sua pergunta. Tente novamente.";
-      setMessages(prev => [
-        ...prev.filter(m => !m.loading),
-        { role: "assistant", content: reply }
+      const reply = await callNaval([
+        ...historyForApi,
+        { role: "user", content: userText + contextStr },
       ]);
-    } catch {
+
       setMessages(prev => [
         ...prev.filter(m => !m.loading),
-        { role: "assistant", content: "Erro ao conectar com a IA. Tente novamente." }
+        { role: "assistant", content: reply || "Não consegui processar sua pergunta. Tente novamente." }
+      ]);
+    } catch (e) {
+      const errorMessage = await getNavalErrorMessage(e);
+      setMessages(prev => [
+        ...prev.filter(m => !m.loading),
+        { role: "assistant", content: errorMessage }
       ]);
     } finally {
       setLoading(false);
