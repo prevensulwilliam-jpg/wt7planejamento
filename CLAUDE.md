@@ -12,7 +12,7 @@ Uso diário interno. Não é SaaS público.
 
 - **URL produção:** https://wt7planejamento.lovable.app
 - **Repositório:** https://github.com/prevensulwilliam-jpg/wt7planejamento.git
-- **Pasta local:** `C:\Users\Usuário\Desktop\wt7`
+- **Pasta local:** `C:\Users\Usuário\Desktop\CLAUDE WILLIAM\wt7`
 - **Branch principal:** `main`
 
 ---
