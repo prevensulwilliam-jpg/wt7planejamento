@@ -13,10 +13,11 @@ import { KpiCard } from "@/components/wt7/KpiCard";
 import { WtBadge } from "@/components/wt7/WtBadge";
 import { WT7Logo } from "@/components/wt7/WT7Logo";
 import { Skeleton } from "@/components/ui/skeleton";
-import { usePrevensulBilling, useBillingSummary, useCreateBilling, useUpdateBilling, useDeleteBilling, useReplicateMonth, useImportHistory, useCreateImportHistory, exportCSV } from "@/hooks/useBilling";
+import { usePrevensulBilling, useBillingSummary, useCreateBilling, useUpdateBilling, useDeleteBilling, useReplicateMonth, useImportHistory, useCreateImportHistory, useUpsertBillingSchedule, exportCSV } from "@/hooks/useBilling";
 import { formatCurrency, formatMonth, getCurrentMonth, formatDate } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
-import { LogOut, Upload, Trash2, FileSpreadsheet, Download, ArrowLeft, Pencil, Check, X, Copy, RotateCcw, FileText } from "lucide-react";
+import { LogOut, Upload, Trash2, FileSpreadsheet, Download, ArrowLeft, Pencil, Check, X, Copy, RotateCcw, FileText, Plus } from "lucide-react";
+import { DatePicker } from "@/components/wt7/DatePicker";
 import { exportPDF } from "@/lib/relatorioComissoes";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import * as XLSX from "xlsx";
@@ -146,27 +147,45 @@ function PrevensulTab({ month, userId }: { month: string; userId: string }) {
 }
 
 function PrevensulKPIs({ month }: { month: string }) {
-  const { totalContractAll, totalNewBillings, totalForecast, totalReceived, totalCommission, isLoading } = useBillingSummary(month);
-  if (isLoading) return <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)}</div>;
+  const { totalBilled, totalNew, totalForecast, totalReceived, totalCommission, total2026, isLoading } = useBillingSummary(month);
+  if (isLoading) return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">{[...Array(3)].map((_, i) => <Skeleton key={i} className="h-24 rounded-2xl" />)}</div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">{[...Array(3)].map((_, i) => <Skeleton key={i} className="h-24 rounded-2xl" />)}</div>
+    </div>
+  );
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-      <KpiCard label="Faturamento Total" value={totalContractAll} color="cyan" compact />
-      <KpiCard label="Faturamentos Novos" value={totalNewBillings} color="cyan" compact />
-      <KpiCard label="Previsão" value={totalForecast} color="cyan" compact />
-      <KpiCard label="Recebidos" value={totalReceived} color="green" compact />
-      <KpiCard label="Comissões" value={totalCommission} color="gold" compact />
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <KpiCard label="Faturamento Total" value={totalBilled} color="cyan" compact />
+        <KpiCard label="Faturamentos Novos" value={totalNew} color="cyan" compact />
+        <KpiCard label="Previsão" value={totalForecast} color="cyan" compact />
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <KpiCard label="Recebidos" value={totalReceived} color="green" compact />
+        <KpiCard label="Comissões" value={totalCommission} color="gold" compact />
+        <KpiCard label="Faturamento 2026" value={total2026} color="gold" compact />
+      </div>
     </div>
   );
 }
 
 const EMPTY_FORM = { client_name: "", contract_total: "", balance_remaining: "", contract_nf: "", installment_current: "", installment_total: "", closing_date: "", amount_paid: "", status: "Pendente", notes: "" };
 
+type ScheduleItem = { installment_number: number; due_date: string; amount: string };
+
 function PrevensulForm({ month, userId, editRecord, onClearEdit }: { month: string; userId: string; editRecord: any | null; onClearEdit: () => void }) {
   const { toast } = useToast();
   const createBilling = useCreateBilling();
   const updateBillingForm = useUpdateBilling();
+  const upsertSchedule = useUpsertBillingSchedule();
   const [form, setForm] = useState(EMPTY_FORM);
   const [editingRecordId, setEditingRecordId] = useState<string | null>(null);
+  const [paymentType, setPaymentType] = useState<"equal" | "custom">("equal");
+  const [scheduleItems, setScheduleItems] = useState<ScheduleItem[]>([
+    { installment_number: 0, due_date: "", amount: "" }, // entrada
+    { installment_number: 1, due_date: "", amount: "" }, // parcela 1
+  ]);
 
   useEffect(() => {
     if (!editRecord) return;
@@ -182,24 +201,47 @@ function PrevensulForm({ month, userId, editRecord, onClearEdit }: { month: stri
       status: editRecord.status ?? "Pendente",
       notes: editRecord.notes ?? "",
     });
+    setPaymentType(editRecord.payment_type === "custom" ? "custom" : "equal");
     setEditingRecordId(editRecord.id);
   }, [editRecord]);
 
-  const commission = useMemo(() => (parseFloat(form.amount_paid) || 0) * 0.03, [form.amount_paid]);
+  const estimatedInstallment = useMemo(() => {
+    const total = parseFloat(form.contract_total) || 0;
+    const qty = parseInt(form.installment_total) || 1;
+    return total / qty;
+  }, [form.contract_total, form.installment_total]);
+
   const isEditing = editingRecordId !== null;
+
+  const addScheduleItem = () => {
+    setScheduleItems(prev => [...prev, { installment_number: prev.length, due_date: "", amount: "" }]);
+  };
+
+  const removeScheduleItem = (idx: number) => {
+    setScheduleItems(prev => prev.filter((_, i) => i !== idx).map((item, i) => ({ ...item, installment_number: i })));
+  };
+
+  const updateScheduleItem = (idx: number, field: keyof ScheduleItem, value: string) => {
+    setScheduleItems(prev => prev.map((item, i) => i === idx ? { ...item, [field]: value } : item));
+  };
 
   const handleCancel = () => {
     setForm(EMPTY_FORM);
     setEditingRecordId(null);
+    setPaymentType("equal");
+    setScheduleItems([
+      { installment_number: 0, due_date: "", amount: "" },
+      { installment_number: 1, due_date: "", amount: "" },
+    ]);
     onClearEdit();
   };
 
   const handleSubmit = async () => {
-    if (!form.client_name || !form.amount_paid) {
-      toast({ title: "Preencha Cliente e Pago", variant: "destructive" }); return;
+    if (!form.client_name) {
+      toast({ title: "Preencha o Cliente", variant: "destructive" }); return;
     }
     const paid = parseFloat(form.amount_paid) || 0;
-    const payload = {
+    const payload: any = {
       client_name: form.client_name,
       contract_total: parseFloat(form.contract_total) || 0,
       balance_remaining: parseFloat(form.balance_remaining) || 0,
@@ -211,23 +253,46 @@ function PrevensulForm({ month, userId, editRecord, onClearEdit }: { month: stri
       commission_rate: 0.03,
       status: form.status,
       notes: form.notes || null,
+      payment_type: paymentType,
     };
     try {
+      let billingId = editingRecordId;
       if (isEditing) {
         await updateBillingForm.mutateAsync({ id: editingRecordId!, ...payload });
         toast({ title: "Registro atualizado!" });
       } else {
-        await createBilling.mutateAsync({ ...payload, reference_month: month, created_by: userId });
+        // Need the new ID to save schedule — use direct insert
+        const { data: inserted, error } = await (await import("@/integrations/supabase/client")).supabase
+          .from("prevensul_billing")
+          .insert({ ...payload, reference_month: month, created_by: userId })
+          .select("id")
+          .single();
+        if (error) throw error;
+        billingId = inserted.id;
         toast({ title: "Faturamento registrado!" });
       }
+
+      // Save schedule if custom
+      if (paymentType === "custom" && billingId) {
+        const validItems = scheduleItems
+          .filter(s => s.due_date && s.amount)
+          .map(s => ({
+            installment_number: s.installment_number,
+            due_date: s.due_date,
+            amount: parseFloat(s.amount) || 0,
+          }));
+        await upsertSchedule.mutateAsync({ billingId, items: validItems });
+      }
+
       handleCancel();
     } catch (e: any) {
       toast({ title: "Erro", description: e.message, variant: "destructive" });
     }
   };
 
-  const isPending = createBilling.isPending || updateBillingForm.isPending;
+  const isPending = createBilling.isPending || updateBillingForm.isPending || upsertSchedule.isPending;
   const inputStyle = { background: '#0D1318', border: '1px solid #1A2535', color: '#F0F4F8' };
+  const btnBase = "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors";
 
   return (
     <PremiumCard glowColor={isEditing ? "rgba(245,158,11,0.15)" : undefined}>
@@ -278,7 +343,7 @@ function PrevensulForm({ month, userId, editRecord, onClearEdit }: { month: stri
           <Input value={form.closing_date} onChange={e => setForm(p => ({ ...p, closing_date: e.target.value }))} style={inputStyle} placeholder="ex: mar/26, MENSAL" />
         </div>
         <div>
-          <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Pago (R$) *</label>
+          <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Pago (R$)</label>
           <Input type="number" value={form.amount_paid} onChange={e => setForm(p => ({ ...p, amount_paid: e.target.value }))} style={inputStyle} placeholder="0,00" />
         </div>
         <div>
@@ -291,7 +356,98 @@ function PrevensulForm({ month, userId, editRecord, onClearEdit }: { month: stri
           </Select>
         </div>
 
-        {/* Linha 4: Observações — full width */}
+        {/* Forma de Pagamento — full width */}
+        <div className="md:col-span-3 rounded-xl p-4 space-y-3" style={{ background: 'rgba(13,19,24,0.6)', border: '1px solid #1A2535' }}>
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-mono uppercase" style={{ color: '#94A3B8' }}>Forma de Pagamento</label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setPaymentType("equal")}
+                className={btnBase}
+                style={paymentType === "equal"
+                  ? { background: 'rgba(6,182,212,0.15)', color: '#22D3EE', border: '1px solid rgba(6,182,212,0.4)' }
+                  : { background: 'transparent', color: '#64748B', border: '1px solid #1A2535' }}
+              >
+                Parcelas Iguais
+              </button>
+              <button
+                type="button"
+                onClick={() => setPaymentType("custom")}
+                className={btnBase}
+                style={paymentType === "custom"
+                  ? { background: 'rgba(245,158,11,0.15)', color: '#F59E0B', border: '1px solid rgba(245,158,11,0.4)' }
+                  : { background: 'transparent', color: '#64748B', border: '1px solid #1A2535' }}
+              >
+                Parcelamento Personalizado
+              </button>
+            </div>
+          </div>
+
+          {paymentType === "equal" && (
+            <div className="flex items-center gap-2 text-sm" style={{ color: '#94A3B8' }}>
+              <span>Parcela estimada:</span>
+              <span className="font-mono font-semibold" style={{ color: '#22D3EE' }}>
+                {estimatedInstallment > 0
+                  ? `R$ ${estimatedInstallment.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                  : "—"}
+              </span>
+              <span className="text-xs" style={{ color: '#4A5568' }}>(Valor ÷ Nº Parcelas)</span>
+            </div>
+          )}
+
+          {paymentType === "custom" && (
+            <div className="space-y-2">
+              {scheduleItems.map((item, idx) => (
+                <div key={idx} className="grid grid-cols-12 gap-2 items-center">
+                  <div className="col-span-3">
+                    <span className="text-xs font-mono" style={{ color: '#94A3B8' }}>
+                      {idx === 0 ? "Entrada" : `Parcela ${idx}`}
+                    </span>
+                  </div>
+                  <div className="col-span-4">
+                    <DatePicker
+                      value={item.due_date}
+                      onChange={v => updateScheduleItem(idx, "due_date", v)}
+                      placeholder="Vencimento"
+                    />
+                  </div>
+                  <div className="col-span-4">
+                    <Input
+                      type="number"
+                      value={item.amount}
+                      onChange={e => updateScheduleItem(idx, "amount", e.target.value)}
+                      style={inputStyle}
+                      placeholder="Valor (R$)"
+                    />
+                  </div>
+                  <div className="col-span-1 flex justify-end">
+                    {scheduleItems.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeScheduleItem(idx)}
+                        className="p-1 rounded transition-colors"
+                        style={{ color: '#F43F5E' }}
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={addScheduleItem}
+                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-colors mt-1"
+                style={{ color: '#F59E0B', border: '1px solid rgba(245,158,11,0.3)', background: 'rgba(245,158,11,0.06)' }}
+              >
+                <Plus className="w-3 h-3" /> Adicionar Parcela
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Observações — full width */}
         <div className="md:col-span-3">
           <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Observações <span style={{ color: '#4A5568', textTransform: 'none', fontStyle: 'italic' }}>(Shift+Enter para nova linha)</span></label>
           <textarea

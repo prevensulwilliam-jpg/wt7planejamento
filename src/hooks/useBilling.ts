@@ -36,22 +36,86 @@ export function usePrevensulBillingRange(startMonth?: string, endMonth?: string)
   });
 }
 
+export function useBillingScheduleForMonth(month: string) {
+  return useQuery({
+    queryKey: ["billing_schedule", month],
+    queryFn: async () => {
+      const start = `${month}-01`;
+      const end = `${month}-31`;
+      const { data, error } = await (supabase as any)
+        .from("billing_payment_schedule")
+        .select("*")
+        .gte("due_date", start)
+        .lte("due_date", end);
+      if (error) throw error;
+      return (data ?? []) as Array<{
+        id: string;
+        billing_id: string;
+        installment_number: number;
+        due_date: string;
+        amount: number;
+        paid_at: string | null;
+        status: string;
+      }>;
+    },
+    enabled: !!month,
+  });
+}
+
+function calcPrevisao(
+  data: any[],
+  scheduleData: any[],
+  month: string
+): number {
+  return data.reduce((sum: number, r: any) => {
+    if (r.payment_type === "custom") {
+      // Parcelas do cronograma personalizado que vencem neste mês
+      const scheduled = scheduleData.filter(
+        (s) => s.billing_id === r.id && s.due_date?.startsWith(month)
+      );
+      return sum + scheduled.reduce((s: number, p: any) => s + (p.amount ?? 0), 0);
+    } else {
+      // Parcelas iguais: contract_total / installment_total
+      const total = r.installment_total ?? 1;
+      return sum + (r.contract_total ?? 0) / total;
+    }
+  }, 0);
+}
+
 export function useBillingSummary(month: string) {
   const { data = [], isLoading } = usePrevensulBilling(month);
-  const { data: allData = [], isLoading: isLoadingAll } = usePrevensulBilling();
+  const { data: ytdData = [], isLoading: isLoadingYtd } = usePrevensulBillingRange("2026-01", month);
+  const { data: scheduleData = [], isLoading: isLoadingSchedule } = useBillingScheduleForMonth(month);
 
-  // Faturamento Total — soma de todos os contratos (sem filtro de mês)
-  const totalContractAll = allData.reduce((s, r) => s + (r.contract_total ?? 0), 0);
-  // Faturamentos Novos — soma dos contratos do mês selecionado
-  const totalNewBillings = data.reduce((s, r) => s + (r.contract_total ?? 0), 0);
-  // Previsão — saldo devedor total do mês (balance_remaining - amount_paid)
-  const totalForecast = data.reduce((s, r) => s + Math.max(0, (r.balance_remaining ?? 0) - (r.amount_paid ?? 0)), 0);
-  // Recebidos — soma do pago no mês
-  const totalReceived = data.reduce((s, r) => s + (r.amount_paid ?? 0), 0);
-  // Comissões — 3% do recebido no mês
-  const totalCommission = data.reduce((s, r) => s + (r.commission_value ?? 0), 0);
+  // Faturamento Total — todos os contratos do mês selecionado
+  const totalBilled = data.reduce((s: number, r: any) => s + (r.contract_total ?? 0), 0);
 
-  return { totalContractAll, totalNewBillings, totalForecast, totalReceived, totalCommission, isLoading: isLoading || isLoadingAll };
+  // Faturamentos Novos — contratos cuja data de fechamento está no mês selecionado
+  const totalNew = data
+    .filter((r: any) => r.closing_date && String(r.closing_date).startsWith(month))
+    .reduce((s: number, r: any) => s + (r.contract_total ?? 0), 0);
+
+  // Previsão — parcela esperada por contrato no mês
+  const totalForecast = calcPrevisao(data, scheduleData, month);
+
+  // Recebidos — pago no mês
+  const totalReceived = data.reduce((s: number, r: any) => s + (r.amount_paid ?? 0), 0);
+
+  // Comissões — 3% do recebido
+  const totalCommission = data.reduce((s: number, r: any) => s + (r.commission_value ?? 0), 0);
+
+  // Faturamento 2026 — YTD: soma do pago de jan/2026 até o mês selecionado
+  const total2026 = ytdData.reduce((s: number, r: any) => s + (r.amount_paid ?? 0), 0);
+
+  return {
+    totalBilled,
+    totalNew,
+    totalForecast,
+    totalReceived,
+    totalCommission,
+    total2026,
+    isLoading: isLoading || isLoadingYtd || isLoadingSchedule,
+  };
 }
 
 export function useCreateBilling() {
@@ -79,6 +143,44 @@ export function useUpdateBilling() {
   });
 }
 
+export function useUpsertBillingSchedule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      billingId,
+      items,
+    }: {
+      billingId: string;
+      items: Array<{ installment_number: number; due_date: string; amount: number }>;
+    }) => {
+      // Apaga o cronograma anterior e insere o novo
+      const { error: delErr } = await (supabase as any)
+        .from("billing_payment_schedule")
+        .delete()
+        .eq("billing_id", billingId);
+      if (delErr) throw delErr;
+
+      if (items.length === 0) return;
+
+      const rows = items.map((item) => ({
+        billing_id: billingId,
+        installment_number: item.installment_number,
+        due_date: item.due_date,
+        amount: item.amount,
+        status: "pending",
+      }));
+
+      const { error: insErr } = await (supabase as any)
+        .from("billing_payment_schedule")
+        .insert(rows);
+      if (insErr) throw insErr;
+    },
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["billing_schedule"] });
+    },
+  });
+}
+
 export function useReplicateMonth() {
   const qc = useQueryClient();
   return useMutation({
@@ -101,6 +203,7 @@ export function useReplicateMonth() {
         amount_paid: r.amount_paid,
         commission_rate: r.commission_rate,
         status: r.status,
+        payment_type: r.payment_type ?? "equal",
         reference_month: targetMonth,
         created_by: userId,
       }));
@@ -160,19 +263,16 @@ export function useCreateImportHistory() {
 }
 
 export function exportCSV(data: any[], filename: string) {
-  // Formata número como R$ 1.234,56 (padrão brasileiro — abre correto no Excel PT-BR)
   const brl = (v: number | null | undefined): string => {
     if (v == null || v === 0) return "R$ -";
     return "R$ " + v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  // Escapa campo CSV: se contiver ; ou " ou quebra de linha, envolve em aspas
   const esc = (v: any): string => {
     const s = v == null ? "" : String(v);
     return s.includes(";") || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s;
   };
 
-  // Colunas na mesma ordem do template Excel
   const headers = ["CLIENTE", "VALOR", "SALDO", "CONTR/NF", "PARCELA", "DATA FECH.", "PAGO", "COMISSÃO", "STATUS", "ASSINATURA"];
 
   const rows = data.map((r) => [
@@ -187,7 +287,7 @@ export function exportCSV(data: any[], filename: string) {
     brl(r.amount_paid),
     brl(r.commission_value),
     r.status ?? "",
-    "", // ASSINATURA — coluna reservada para assinatura física
+    "",
   ]);
 
   const csv = [headers, ...rows].map((row) => row.map(esc).join(";")).join("\r\n");
