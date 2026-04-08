@@ -220,6 +220,20 @@ export function useDeleteBilling() {
   });
 }
 
+export function useDeleteAllBillingByMonth() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (month: string) => {
+      const { error } = await supabase.from("prevensul_billing").delete().eq("reference_month", month);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["prevensul_billing"] });
+      qc.invalidateQueries({ queryKey: ["prevensul_billing_range"] });
+    },
+  });
+}
+
 export function useImportHistory() {
   return useQuery({
     queryKey: ["import_history"],

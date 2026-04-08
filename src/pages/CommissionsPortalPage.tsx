@@ -13,7 +13,7 @@ import { KpiCard } from "@/components/wt7/KpiCard";
 import { WtBadge } from "@/components/wt7/WtBadge";
 import { WT7Logo } from "@/components/wt7/WT7Logo";
 import { Skeleton } from "@/components/ui/skeleton";
-import { usePrevensulBilling, useBillingSummary, useCreateBilling, useUpdateBilling, useDeleteBilling, useReplicateMonth, useImportHistory, useCreateImportHistory, useUpsertBillingSchedule, exportCSV } from "@/hooks/useBilling";
+import { usePrevensulBilling, useBillingSummary, useCreateBilling, useUpdateBilling, useDeleteBilling, useDeleteAllBillingByMonth, useReplicateMonth, useImportHistory, useCreateImportHistory, useUpsertBillingSchedule, exportCSV } from "@/hooks/useBilling";
 import { formatCurrency, formatMonth, getCurrentMonth, formatDate } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
 import { LogOut, Upload, Trash2, FileSpreadsheet, Download, ArrowLeft, Pencil, Check, X, Copy, RotateCcw, FileText, Plus } from "lucide-react";
@@ -807,12 +807,14 @@ function getPreviousMonth(month: string): string {
 function PrevensulHistory({ month, userId, onLoadRecord }: { month: string; userId: string; onLoadRecord: (r: any) => void }) {
   const { data = [], isLoading } = usePrevensulBilling(month);
   const deleteBilling = useDeleteBilling();
+  const deleteAllByMonth = useDeleteAllBillingByMonth();
   const updateBilling = useUpdateBilling();
   const replicateMonth = useReplicateMonth();
   const qc = useQueryClient();
   const { toast } = useToast();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Record<string, any>>({});
+  const [showDeleteAll, setShowDeleteAll] = useState(false);
 
   const totalPago = useMemo(() => data.reduce((s, r) => s + (r.amount_paid ?? 0), 0), [data]);
   const totalComissao = useMemo(() => data.reduce((s, r) => s + (r.commission_value ?? 0), 0), [data]);
@@ -870,6 +872,16 @@ function PrevensulHistory({ month, userId, onLoadRecord }: { month: string; user
     }
   };
 
+  const handleDeleteAll = async () => {
+    try {
+      await deleteAllByMonth.mutateAsync(month);
+      toast({ title: `Histórico de ${formatMonth(month)} apagado!` });
+      setShowDeleteAll(false);
+    } catch (e: any) {
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    }
+  };
+
   const inputStyle: React.CSSProperties = { background: '#0D1318', border: '1px solid #1A2535', color: '#F0F4F8', padding: '4px 8px', height: '32px', fontSize: '13px' };
 
   if (isLoading) return <Skeleton className="h-64 rounded-2xl" />;
@@ -908,6 +920,13 @@ function PrevensulHistory({ month, userId, onLoadRecord }: { month: string; user
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-display font-semibold text-lg" style={{ color: '#F0F4F8' }}>Histórico do Mês</h2>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowDeleteAll(true)}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+            style={{ background: 'rgba(239,68,68,0.12)', color: '#FCA5A5', border: '1px solid rgba(239,68,68,0.25)' }}
+          >
+            <Trash2 className="w-3.5 h-3.5" /> Apagar Histórico
+          </button>
           <button onClick={() => exportPDF(data, month)} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium" style={{ background: 'rgba(239,68,68,0.12)', color: '#FCA5A5', border: '1px solid rgba(239,68,68,0.25)' }}>
             <FileText className="w-3.5 h-3.5" /> PDF
           </button>
@@ -916,6 +935,28 @@ function PrevensulHistory({ month, userId, onLoadRecord }: { month: string; user
           </button>
         </div>
       </div>
+
+      {/* Dialog apagar histórico */}
+      <AlertDialog open={showDeleteAll} onOpenChange={setShowDeleteAll}>
+        <AlertDialogContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+          <AlertDialogHeader>
+            <AlertDialogTitle style={{ color: '#F0F4F8' }}>Certeza que deseja apagar o histórico?</AlertDialogTitle>
+            <AlertDialogDescription style={{ color: '#94A3B8' }}>
+              Todos os <strong style={{ color: '#FCA5A5' }}>{data.length} registros</strong> de <strong style={{ color: '#E8C97A' }}>{formatMonth(month)}</strong> serão removidos permanentemente. Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel style={{ background: '#1A2535', color: '#F0F4F8', border: 'none' }}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteAll}
+              disabled={deleteAllByMonth.isPending}
+              style={{ background: '#F43F5E', color: '#fff' }}
+            >
+              {deleteAllByMonth.isPending ? "Apagando..." : "Apagar Tudo"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <div className="overflow-x-auto rounded-xl" style={{ border: '1px solid #1A2535' }}>
         <Table style={{ minWidth: 880 }}>
           <TableHeader>
