@@ -217,9 +217,10 @@ export function NavalChat() {
         { role: "assistant", content: reply || "Não consegui processar sua pergunta. Tente novamente." }
       ]);
     } catch (e) {
+      const errorMessage = await getNavalErrorMessage(e);
       setMessages(prev => [
         ...prev.filter(m => !m.loading),
-        { role: "assistant", content: await getNavalErrorMessage(e) }
+        { role: "assistant", content: errorMessage }
       ]);
     } finally {
       setLoading(false);
