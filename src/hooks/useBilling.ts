@@ -90,9 +90,9 @@ export function useBillingSummary(month: string) {
   // Faturamento Total — todos os contratos do mês selecionado
   const totalBilled = data.reduce((s: number, r: any) => s + (r.contract_total ?? 0), 0);
 
-  // Faturamentos Novos — contratos cuja data de fechamento está no mês selecionado
+  // Faturamentos Novos — contratos criados/lançados no mês selecionado (created_at no mês)
   const totalNew = data
-    .filter((r: any) => r.closing_date && String(r.closing_date).startsWith(month))
+    .filter((r: any) => r.created_at && String(r.created_at).startsWith(month))
     .reduce((s: number, r: any) => s + (r.contract_total ?? 0), 0);
 
   // Previsão — parcela esperada por contrato no mês
