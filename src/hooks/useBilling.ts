@@ -115,7 +115,7 @@ export function useBillingSummary(month: string) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("prevensul_billing")
-        .select("id, contract_total, closing_date");
+        .select("id, client_name, contract_total, closing_date");
       if (error) throw error;
       return data;
     },
@@ -123,9 +123,18 @@ export function useBillingSummary(month: string) {
   });
 
   const totalBilled = data.reduce((s: number, r: any) => s + (r.contract_total ?? 0), 0);
-  const totalNew = allRecords
-    .filter((r: any) => parseDateToYearMonth(r.closing_date) === month)
-    .reduce((s: number, r: any) => s + (r.contract_total ?? 0), 0);
+  // Faturamentos Novos: deduplica por client_name+closing_date para evitar
+  // contar o mesmo contrato replicado em múltiplos reference_months.
+  const newInMonth = allRecords.filter(
+    (r: any) => parseDateToYearMonth(r.closing_date) === month
+  );
+  const seenClients = new Set<string>();
+  const totalNew = newInMonth.reduce((s: number, r: any) => {
+    const key = `${r.client_name}__${r.closing_date}`;
+    if (seenClients.has(key)) return s;
+    seenClients.add(key);
+    return s + (r.contract_total ?? 0);
+  }, 0);
   const totalForecast = calcPrevisao(data, scheduleData, month);
   const totalReceived = data.reduce((s: number, r: any) => s + (r.amount_paid ?? 0), 0);
   const totalCommission = data.reduce((s: number, r: any) => s + (r.commission_value ?? 0), 0);
@@ -225,7 +234,7 @@ export function useReplicateMonth() {
         contract_nf: r.contract_nf,
         installment_current: r.installment_current ? r.installment_current + 1 : null,
         installment_total: r.installment_total,
-        closing_date: r.closing_date,
+        closing_date: null,
         amount_paid: r.amount_paid,
         commission_rate: r.commission_rate,
         status: r.status,
