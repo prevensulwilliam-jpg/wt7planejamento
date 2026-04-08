@@ -88,22 +88,31 @@ export function useNavalAnalysis() {
   const [analysis, setAnalysis] = useState("");
   const [loading, setLoading] = useState(false);
   const generated = useRef(false);
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
 
   const generate = useCallback(
     async (customPrompt?: string) => {
-      if (!context) return;
+      if (!context || !mounted.current) return;
       setLoading(true);
       try {
         const prompt =
           customPrompt ??
           `Analise os dados financeiros de ${context.month} e me dê:\n1. Os 2 pontos mais positivos do mês\n2. Os 2 alertas ou oportunidades de melhoria\n3. 1 ação prioritária que devo tomar esta semana\n\nDados do mês:\n${JSON.stringify(context, null, 2)}`;
         const text = await callNaval([{ role: "user", content: prompt }]);
-        setAnalysis(text);
+        if (mounted.current) {
+          setAnalysis(text);
+          generated.current = true;
+        }
       } catch (error) {
         console.error("Naval error:", error);
-        setAnalysis(getErrorMessage(error));
+        if (mounted.current) setAnalysis(getErrorMessage(error));
       } finally {
-        setLoading(false);
+        if (mounted.current) setLoading(false);
       }
     },
     [context],

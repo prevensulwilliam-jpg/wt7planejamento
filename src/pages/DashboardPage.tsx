@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronLeft, ChevronRight, Plus, RefreshCw, Home, ArrowRight } from "lucide-react";
 import { KpiCard } from "@/components/wt7/KpiCard";
@@ -67,6 +67,31 @@ function navigateMonth(current: string, delta: number): string {
   const [y, m] = current.split("-").map(Number);
   const d = new Date(y, m - 1 + delta, 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+class NavalErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <PremiumCard glowColor="rgba(45,212,191,0.15)">
+          <p className="text-sm" style={{ color: '#94A3B8' }}>
+            Análise Naval temporariamente indisponível.
+          </p>
+        </PremiumCard>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 function NavalDashboardCard() {
@@ -219,7 +244,9 @@ export default function DashboardPage() {
       </div>
 
       {/* Wisely Card */}
-      <NavalDashboardCard />
+      <NavalErrorBoundary>
+        <NavalDashboardCard />
+      </NavalErrorBoundary>
 
       {/* KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

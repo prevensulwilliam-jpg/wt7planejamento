@@ -218,7 +218,7 @@ export function exportPDF(data: any[], month: string): void {
         ? `${r.installment_current ?? "—"}/${r.installment_total ?? "—"}`
         : "—"}
     </td>
-    <td style="text-align:center">${r.closing_date ?? "—"}</td>
+    <td style="text-align:center">${r.closing_date ? new Date(r.closing_date).toLocaleDateString('pt-BR') : "—"}</td>
     <td class="num">${brl(r.amount_paid)}</td>
     <td class="num">${brl(r.commission_value)}</td>
     <td style="text-align:center">${badgeHtml(r.status)}</td>

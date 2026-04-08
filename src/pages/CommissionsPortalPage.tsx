@@ -16,7 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { usePrevensulBilling, useBillingSummary, useCreateBilling, useUpdateBilling, useDeleteBilling, useDeleteAllBillingByMonth, useReplicateMonth, useImportHistory, useCreateImportHistory, useUpsertBillingSchedule, exportCSV } from "@/hooks/useBilling";
 import { formatCurrency, formatMonth, getCurrentMonth, formatDate } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
-import { LogOut, Upload, Trash2, FileSpreadsheet, Download, ArrowLeft, Pencil, Check, X, Copy, RotateCcw, FileText, Plus } from "lucide-react";
+import { LogOut, Upload, Trash2, FileSpreadsheet, Download, ArrowLeft, Pencil, Check, X, Copy, RotateCcw, FileText, Plus, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { DatePicker } from "@/components/wt7/DatePicker";
 import { exportPDF } from "@/lib/relatorioComissoes";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -798,6 +798,31 @@ function PrevensulExcelImport({ month, userId }: { month: string; userId: string
   );
 }
 
+function SortHeader({ label, field, sortField, sortDir, onSort }: {
+  label: string;
+  field: string;
+  sortField: string | null;
+  sortDir: 'asc' | 'desc';
+  onSort: (field: string) => void;
+}) {
+  const active = sortField === field;
+  return (
+    <button
+      onClick={() => onSort(field)}
+      className="flex items-center gap-1 hover:text-white transition-colors whitespace-nowrap"
+      style={{ color: active ? '#E8C97A' : '#94A3B8', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 'inherit', fontFamily: 'inherit' }}
+    >
+      {label}
+      {active
+        ? sortDir === 'asc'
+          ? <ArrowUp className="w-3 h-3" />
+          : <ArrowDown className="w-3 h-3" />
+        : <ArrowUpDown className="w-3 h-3 opacity-40" />
+      }
+    </button>
+  );
+}
+
 function getPreviousMonth(month: string): string {
   const [y, m] = month.split("-").map(Number);
   const d = new Date(y, m - 2, 1);
@@ -815,9 +840,50 @@ function PrevensulHistory({ month, userId, onLoadRecord }: { month: string; user
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Record<string, any>>({});
   const [showDeleteAll, setShowDeleteAll] = useState(false);
+  const [sortField, setSortField] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
 
-  const totalPago = useMemo(() => data.reduce((s, r) => s + (r.amount_paid ?? 0), 0), [data]);
-  const totalComissao = useMemo(() => data.reduce((s, r) => s + (r.commission_value ?? 0), 0), [data]);
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir('asc');
+    }
+  };
+
+  const displayData = useMemo(() => {
+    let rows = [...data];
+    if (statusFilter !== 'all') {
+      rows = rows.filter(r => r.status === statusFilter);
+    }
+    if (sortField) {
+      rows.sort((a, b) => {
+        if (sortField === 'client_name') {
+          const va = (a.client_name ?? '').toLowerCase();
+          const vb = (b.client_name ?? '').toLowerCase();
+          return sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+        }
+        let va: number, vb: number;
+        if (sortField === 'saldo') {
+          va = Math.max(0, (a.balance_remaining ?? 0) - (a.amount_paid ?? 0));
+          vb = Math.max(0, (b.balance_remaining ?? 0) - (b.amount_paid ?? 0));
+        } else if (sortField === 'closing_date') {
+          va = a.closing_date ? new Date(a.closing_date).getTime() : 0;
+          vb = b.closing_date ? new Date(b.closing_date).getTime() : 0;
+        } else {
+          va = (a as any)[sortField] ?? 0;
+          vb = (b as any)[sortField] ?? 0;
+        }
+        return sortDir === 'asc' ? va - vb : vb - va;
+      });
+    }
+    return rows;
+  }, [data, sortField, sortDir, statusFilter]);
+
+  const totalPago = useMemo(() => displayData.reduce((s, r) => s + (r.amount_paid ?? 0), 0), [displayData]);
+  const totalComissao = useMemo(() => displayData.reduce((s, r) => s + (r.commission_value ?? 0), 0), [displayData]);
 
   const startEdit = (r: any) => {
     setEditingId(r.id);
@@ -961,19 +1027,43 @@ function PrevensulHistory({ month, userId, onLoadRecord }: { month: string; user
         <Table style={{ minWidth: 880 }}>
           <TableHeader>
             <TableRow style={{ borderColor: '#1A2535' }}>
-              <TableHead className="whitespace-nowrap" style={{ color: '#94A3B8', width: 180 }}>Cliente</TableHead>
-              <TableHead className="whitespace-nowrap" style={{ color: '#94A3B8', width: 110 }}>Valor</TableHead>
-              <TableHead className="whitespace-nowrap" style={{ color: '#94A3B8', width: 110 }}>Saldo</TableHead>
+              <TableHead style={{ width: 180 }}>
+                <SortHeader label="Cliente" field="client_name" sortField={sortField} sortDir={sortDir} onSort={handleSort} />
+              </TableHead>
+              <TableHead style={{ width: 110 }}>
+                <SortHeader label="Valor" field="contract_total" sortField={sortField} sortDir={sortDir} onSort={handleSort} />
+              </TableHead>
+              <TableHead style={{ width: 110 }}>
+                <SortHeader label="Saldo" field="saldo" sortField={sortField} sortDir={sortDir} onSort={handleSort} />
+              </TableHead>
               <TableHead className="whitespace-nowrap" style={{ color: '#94A3B8', width: 80 }}>Parcela</TableHead>
-              <TableHead className="whitespace-nowrap" style={{ color: '#94A3B8', width: 90 }}>Data Fech.</TableHead>
-              <TableHead className="whitespace-nowrap" style={{ color: '#94A3B8', width: 110 }}>Pago</TableHead>
-              <TableHead className="whitespace-nowrap" style={{ color: '#94A3B8', width: 110 }}>Comissão</TableHead>
-              <TableHead className="whitespace-nowrap" style={{ color: '#94A3B8', width: 105 }}>Status</TableHead>
+              <TableHead style={{ width: 90 }}>
+                <SortHeader label="Data Fech." field="closing_date" sortField={sortField} sortDir={sortDir} onSort={handleSort} />
+              </TableHead>
+              <TableHead style={{ width: 110 }}>
+                <SortHeader label="Pago" field="amount_paid" sortField={sortField} sortDir={sortDir} onSort={handleSort} />
+              </TableHead>
+              <TableHead style={{ width: 110 }}>
+                <SortHeader label="Comissão" field="commission_value" sortField={sortField} sortDir={sortDir} onSort={handleSort} />
+              </TableHead>
+              <TableHead style={{ width: 105 }}>
+                <select
+                  value={statusFilter}
+                  onChange={e => setStatusFilter(e.target.value)}
+                  style={{ background: '#0D1318', border: 'none', color: statusFilter !== 'all' ? '#E8C97A' : '#94A3B8', cursor: 'pointer', fontSize: 12, outline: 'none', fontFamily: 'inherit' }}
+                >
+                  <option value="all">Status ▾</option>
+                  <option value="Pendente">Pendente</option>
+                  <option value="Pago">Pago</option>
+                  <option value="Parcial">Parcial</option>
+                  <option value="Inadimplente">Inadimplente</option>
+                </select>
+              </TableHead>
               <TableHead className="whitespace-nowrap" style={{ color: '#94A3B8', width: 72 }}>Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data.map(r => {
+            {displayData.map(r => {
               const isEditing = editingId === r.id;
               if (isEditing) {
                 const editCommission = (parseFloat(editForm.amount_paid) || 0) * 0.03;
@@ -1035,7 +1125,7 @@ function PrevensulHistory({ month, userId, onLoadRecord }: { month: string; user
                   <TableCell className="font-mono text-xs whitespace-nowrap" style={{ color: '#94A3B8' }}>{formatCurrency(r.contract_total ?? 0)}</TableCell>
                   <TableCell className="font-mono text-xs whitespace-nowrap" style={{ color: '#F43F5E' }}>{formatCurrency(Math.max(0, (r.balance_remaining ?? 0) - (r.amount_paid ?? 0)))}</TableCell>
                   <TableCell className="font-mono text-xs whitespace-nowrap" style={{ color: '#94A3B8' }}>{r.installment_current ?? "—"}/{r.installment_total ?? "—"}</TableCell>
-                  <TableCell className="font-mono text-xs whitespace-nowrap" style={{ color: '#94A3B8' }}>{r.closing_date || "—"}</TableCell>
+                  <TableCell className="font-mono text-xs whitespace-nowrap" style={{ color: '#94A3B8' }}>{r.closing_date ? formatDate(r.closing_date) : "—"}</TableCell>
                   <TableCell className="font-mono text-xs whitespace-nowrap" style={{ color: '#10B981' }}>{formatCurrency(r.amount_paid ?? 0)}</TableCell>
                   <TableCell className="font-mono text-xs whitespace-nowrap" style={{ color: '#E8C97A' }}>{formatCurrency(r.commission_value ?? 0)}</TableCell>
                   <TableCell><WtBadge variant={statusBadge[r.status ?? ""] || "gray"}>{r.status ?? "—"}</WtBadge></TableCell>
