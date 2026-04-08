@@ -266,6 +266,47 @@ export type Database = {
           },
         ]
       }
+      billing_payment_schedule: {
+        Row: {
+          amount: number
+          billing_id: string
+          created_at: string | null
+          due_date: string
+          id: string
+          installment_number: number
+          paid_at: string | null
+          status: string | null
+        }
+        Insert: {
+          amount: number
+          billing_id: string
+          created_at?: string | null
+          due_date: string
+          id?: string
+          installment_number: number
+          paid_at?: string | null
+          status?: string | null
+        }
+        Update: {
+          amount?: number
+          billing_id?: string
+          created_at?: string | null
+          due_date?: string
+          id?: string
+          installment_number?: number
+          paid_at?: string | null
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_payment_schedule_billing_id_fkey"
+            columns: ["billing_id"]
+            isOneToOne: false
+            referencedRelation: "prevensul_billing"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       celesc_invoices: {
         Row: {
           amount_paid: number | null
@@ -968,6 +1009,7 @@ export type Database = {
           installment_current: number | null
           installment_total: number | null
           notes: string | null
+          payment_type: string | null
           reference_month: string | null
           status: string | null
         }
@@ -986,6 +1028,7 @@ export type Database = {
           installment_current?: number | null
           installment_total?: number | null
           notes?: string | null
+          payment_type?: string | null
           reference_month?: string | null
           status?: string | null
         }
@@ -1004,6 +1047,7 @@ export type Database = {
           installment_current?: number | null
           installment_total?: number | null
           notes?: string | null
+          payment_type?: string | null
           reference_month?: string | null
           status?: string | null
         }
