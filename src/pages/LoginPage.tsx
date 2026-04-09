@@ -50,18 +50,23 @@ export default function LoginPage() {
         .eq("user_id", userId)
         .maybeSingle();
 
-      if (roleData) {
-        const status = (roleData as any).status ?? "active";
-        if (status === "pending") {
-          await supabase.auth.signOut();
-          toast({ title: "Acesso pendente", description: "Aguarde a aprovação do administrador.", variant: "destructive" });
-          return;
-        }
-        if (status === "rejected") {
-          await supabase.auth.signOut();
-          toast({ title: "Acesso negado", description: "Entre em contato com o administrador.", variant: "destructive" });
-          return;
-        }
+      // Sem role cadastrada = acesso negado
+      if (!roleData) {
+        await supabase.auth.signOut();
+        toast({ title: "Acesso negado", description: "Usuário sem permissão. Contate o administrador.", variant: "destructive" });
+        return;
+      }
+
+      const status = (roleData as any).status ?? "active";
+      if (status === "pending") {
+        await supabase.auth.signOut();
+        toast({ title: "Acesso pendente", description: "Aguarde a aprovação do administrador.", variant: "destructive" });
+        return;
+      }
+      if (status === "rejected") {
+        await supabase.auth.signOut();
+        toast({ title: "Acesso negado", description: "Entre em contato com o administrador.", variant: "destructive" });
+        return;
       }
 
       // Grava histórico de login
@@ -71,7 +76,7 @@ export default function LoginPage() {
       });
 
       // Redireciona por role
-      const role = roleData?.role ?? "admin";
+      const role = roleData.role;
       if (role === "kitnet_manager") {
         navigate("/manager/kitnets", { replace: true });
       } else if (role === "financial") {

@@ -41,23 +41,50 @@ const queryClient = new QueryClient({
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
-  const [session, setSession] = useState<any>(null);
+  const [authorized, setAuthorized] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
+    let mounted = true;
+
+    async function checkAccess() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        if (mounted) navigate("/login", { replace: true });
+        return;
+      }
+
+      // Verifica se o usuário tem role admin no banco
+      const { data: isAdmin } = await supabase.rpc("has_role", {
+        _user_id: session.user.id,
+        _role: "admin",
+      });
+
+      if (!isAdmin) {
+        await supabase.auth.signOut();
+        if (mounted) navigate("/login", { replace: true });
+        return;
+      }
+
+      if (mounted) {
+        setAuthorized(true);
+        setLoading(false);
+      }
+    }
+
+    checkAccess();
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setLoading(false);
-      if (!session) navigate("/login", { replace: true });
+      if (!session && mounted) {
+        setAuthorized(false);
+        navigate("/login", { replace: true });
+      }
     });
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setLoading(false);
-      if (!session) navigate("/login", { replace: true });
-    });
-
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, [navigate]);
 
   if (loading) {
@@ -68,7 +95,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!session) return null;
+  if (!authorized) return null;
   return <>{children}</>;
 }
 
