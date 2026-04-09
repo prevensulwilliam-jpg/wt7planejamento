@@ -9,7 +9,7 @@ import { formatDate } from "@/lib/formatters";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Users, Link as LinkIcon, Trash2, AlertTriangle, Clock, CheckCircle, XCircle, Bell, Copy, Check } from "lucide-react";
+import { Users, Link as LinkIcon, Trash2, AlertTriangle, Clock, CheckCircle, XCircle, Bell, Copy, Check, ChevronDown, ChevronUp } from "lucide-react";
 import { usePendingUsers, useApproveUser, useRejectUser, useLoginHistory, useDeleteUser } from "@/hooks/useUsers";
 
 const roleBadge: Record<string, { variant: 'gold' | 'green' | 'cyan' | 'gray'; label: string }> = {
