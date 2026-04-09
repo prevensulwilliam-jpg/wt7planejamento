@@ -62,24 +62,39 @@ export function useBillingScheduleForMonth(month: string) {
   });
 }
 
-function calcPrevisao(
+export type KpiDrillType = 'totalBilled' | 'totalNew' | 'totalForecast' | 'totalReceived' | 'totalCommission' | 'total2026';
+
+export interface BilledDetail { client_name: string; contract_total: number }
+export interface NewDetail { client_name: string; closing_date: string; contract_total: number }
+export interface ForecastDetail { client_name: string; payment_type: string; predicted_amount: number }
+export interface ReceivedDetail { client_name: string; amount_paid: number }
+export interface CommissionDetail { client_name: string; amount_paid: number; commission_rate: number; commission_value: number }
+export interface YtdDetail { reference_month: string; client_name: string; amount_paid: number }
+
+function calcPrevisaoDetail(
   data: any[],
   scheduleData: any[],
   month: string
-): number {
-  return data.reduce((sum: number, r: any) => {
-    if (r.payment_type === "custom") {
-      // Parcelas do cronograma personalizado que vencem neste mês
-      const scheduled = scheduleData.filter(
-        (s) => s.billing_id === r.id && s.due_date?.startsWith(month)
-      );
-      return sum + scheduled.reduce((s: number, p: any) => s + (p.amount ?? 0), 0);
-    } else {
-      // Parcelas iguais: balance_remaining / parcelas restantes
-      const remaining = Math.max(1, (r.installment_total ?? 1) - (r.installment_current ?? 0));
-      return sum + (r.balance_remaining ?? 0) / remaining;
-    }
-  }, 0);
+): ForecastDetail[] {
+  return data
+    .map((r: any) => {
+      let predicted_amount = 0;
+      if (r.payment_type === "custom") {
+        const scheduled = scheduleData.filter(
+          (s) => s.billing_id === r.id && s.due_date?.startsWith(month)
+        );
+        predicted_amount = scheduled.reduce((s: number, p: any) => s + (p.amount ?? 0), 0);
+      } else {
+        const remaining = Math.max(1, (r.installment_total ?? 1) - (r.installment_current ?? 0));
+        predicted_amount = (r.balance_remaining ?? 0) / remaining;
+      }
+      return {
+        client_name: r.client_name ?? "",
+        payment_type: r.payment_type === "custom" ? "Personalizado" : "Parcelas iguais",
+        predicted_amount,
+      };
+    })
+    .filter((d) => d.predicted_amount > 0);
 }
 
 function parseDateToYearMonth(val: string | null | undefined): string | null {
@@ -122,23 +137,59 @@ export function useBillingSummary(month: string) {
     staleTime: 1000 * 60 * 5,
   });
 
-  const totalBilled = data.reduce((s: number, r: any) => s + (r.contract_total ?? 0), 0);
+  // Detail arrays
+  const billedDetail: BilledDetail[] = data
+    .filter((r: any) => (r.contract_total ?? 0) > 0)
+    .map((r: any) => ({ client_name: r.client_name ?? "", contract_total: r.contract_total ?? 0 }));
+
   // Faturamentos Novos: deduplica por client_name+closing_date para evitar
   // contar o mesmo contrato replicado em múltiplos reference_months.
   const newInMonth = allRecords.filter(
     (r: any) => parseDateToYearMonth(r.closing_date) === month
   );
   const seenClients = new Set<string>();
-  const totalNew = newInMonth.reduce((s: number, r: any) => {
+  const newDetail: NewDetail[] = [];
+  for (const r of newInMonth) {
     const key = `${r.client_name}__${r.closing_date}`;
-    if (seenClients.has(key)) return s;
+    if (seenClients.has(key)) continue;
     seenClients.add(key);
-    return s + (r.contract_total ?? 0);
-  }, 0);
-  const totalForecast = calcPrevisao(data, scheduleData, month);
-  const totalReceived = data.reduce((s: number, r: any) => s + (r.amount_paid ?? 0), 0);
-  const totalCommission = data.reduce((s: number, r: any) => s + (r.commission_value ?? 0), 0);
-  const total2026 = ytdData.reduce((s: number, r: any) => s + (r.amount_paid ?? 0), 0);
+    newDetail.push({
+      client_name: (r as any).client_name ?? "",
+      closing_date: (r as any).closing_date ?? "",
+      contract_total: (r as any).contract_total ?? 0,
+    });
+  }
+
+  const forecastDetail = calcPrevisaoDetail(data, scheduleData, month);
+
+  const receivedDetail: ReceivedDetail[] = data
+    .filter((r: any) => (r.amount_paid ?? 0) > 0)
+    .map((r: any) => ({ client_name: r.client_name ?? "", amount_paid: r.amount_paid ?? 0 }));
+
+  const commissionDetail: CommissionDetail[] = data
+    .filter((r: any) => (r.commission_value ?? 0) > 0)
+    .map((r: any) => ({
+      client_name: r.client_name ?? "",
+      amount_paid: r.amount_paid ?? 0,
+      commission_rate: r.commission_rate ?? 0.03,
+      commission_value: r.commission_value ?? 0,
+    }));
+
+  const ytdDetail: YtdDetail[] = ytdData
+    .filter((r: any) => (r.amount_paid ?? 0) > 0)
+    .map((r: any) => ({
+      reference_month: r.reference_month ?? "",
+      client_name: r.client_name ?? "",
+      amount_paid: r.amount_paid ?? 0,
+    }));
+
+  // Totals
+  const totalBilled = billedDetail.reduce((s, r) => s + r.contract_total, 0);
+  const totalNew = newDetail.reduce((s, r) => s + r.contract_total, 0);
+  const totalForecast = forecastDetail.reduce((s, r) => s + r.predicted_amount, 0);
+  const totalReceived = receivedDetail.reduce((s, r) => s + r.amount_paid, 0);
+  const totalCommission = commissionDetail.reduce((s, r) => s + r.commission_value, 0);
+  const total2026 = ytdDetail.reduce((s, r) => s + r.amount_paid, 0);
   const totalRecords = data.length;
 
   return {
@@ -149,6 +200,12 @@ export function useBillingSummary(month: string) {
     totalCommission,
     total2026,
     totalRecords,
+    billedDetail,
+    newDetail,
+    forecastDetail,
+    receivedDetail,
+    commissionDetail,
+    ytdDetail,
     isLoading: isLoading || isLoadingYtd || isLoadingSchedule || isLoadingAll,
   };
 }

@@ -8,6 +8,7 @@ interface KpiCardProps {
   color: 'gold' | 'green' | 'red' | 'cyan' | 'gray';
   compact?: boolean;
   formatAs?: 'currency' | 'number';
+  onClick?: () => void;
 }
 
 const colorMap = {
@@ -18,7 +19,7 @@ const colorMap = {
   gray: { bg: 'rgba(74,85,104,0.08)', border: 'rgba(74,85,104,0.2)', text: '#94A3B8', badge: 'rgba(74,85,104,0.15)' },
 };
 
-export function KpiCard({ label, value, change, color, compact, formatAs = 'currency' }: KpiCardProps) {
+export function KpiCard({ label, value, change, color, compact, formatAs = 'currency', onClick }: KpiCardProps) {
   const c = colorMap[color];
   const isPositive = (change ?? 0) >= 0;
 
@@ -28,12 +29,16 @@ export function KpiCard({ label, value, change, color, compact, formatAs = 'curr
 
   return (
     <div
-      className="rounded-2xl p-5 transition-all duration-200 hover:shadow-lg"
+      className={`rounded-2xl p-5 transition-all duration-200 hover:shadow-lg ${onClick ? 'cursor-pointer hover:scale-[1.02]' : ''}`}
       style={{
         background: `linear-gradient(135deg, ${c.bg}, #0D1318)`,
         border: `1px solid ${c.border}`,
         boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
       }}
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}
     >
       <p className="font-mono text-xs uppercase tracking-wider" style={{ color: '#94A3B8' }}>
         {label}

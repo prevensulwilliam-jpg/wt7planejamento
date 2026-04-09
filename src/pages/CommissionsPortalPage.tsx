@@ -14,6 +14,8 @@ import { WtBadge } from "@/components/wt7/WtBadge";
 import { WT7Logo } from "@/components/wt7/WT7Logo";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePrevensulBilling, useBillingSummary, useCreateBilling, useUpdateBilling, useDeleteBilling, useDeleteAllBillingByMonth, useReplicateMonth, useImportHistory, useCreateImportHistory, useUpsertBillingSchedule, exportCSV } from "@/hooks/useBilling";
+import type { KpiDrillType } from "@/hooks/useBilling";
+import { KpiDrillDownDialog } from "@/components/wt7/KpiDrillDownDialog";
 import { formatCurrency, formatMonth, getCurrentMonth, formatDate } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
 import { LogOut, Upload, Trash2, FileSpreadsheet, Download, ArrowLeft, Pencil, Check, X, Copy, RotateCcw, FileText, Plus, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
@@ -147,7 +149,10 @@ function PrevensulTab({ month, userId }: { month: string; userId: string }) {
 }
 
 function PrevensulKPIs({ month }: { month: string }) {
-  const { totalBilled, totalNew, totalForecast, totalReceived, totalCommission, total2026, isLoading } = useBillingSummary(month);
+  const summary = useBillingSummary(month);
+  const { totalBilled, totalNew, totalForecast, totalReceived, totalCommission, total2026, billedDetail, newDetail, forecastDetail, receivedDetail, commissionDetail, ytdDetail, isLoading } = summary;
+  const [drillType, setDrillType] = useState<KpiDrillType | null>(null);
+
   if (isLoading) return (
     <div className="space-y-3">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">{[...Array(3)].map((_, i) => <Skeleton key={i} className="h-24 rounded-2xl" />)}</div>
@@ -155,18 +160,32 @@ function PrevensulKPIs({ month }: { month: string }) {
     </div>
   );
   return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <KpiCard label="Faturamento Total" value={totalBilled} color="cyan" compact />
-        <KpiCard label="Faturamentos Novos" value={totalNew} color="cyan" compact />
-        <KpiCard label="Previsão" value={totalForecast} color="cyan" compact />
+    <>
+      <div className="space-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <KpiCard label="Faturamento Total" value={totalBilled} color="cyan" compact onClick={() => setDrillType("totalBilled")} />
+          <KpiCard label="Faturamentos Novos" value={totalNew} color="cyan" compact onClick={() => setDrillType("totalNew")} />
+          <KpiCard label="Previsão" value={totalForecast} color="cyan" compact onClick={() => setDrillType("totalForecast")} />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <KpiCard label="Recebidos" value={totalReceived} color="green" compact onClick={() => setDrillType("totalReceived")} />
+          <KpiCard label="Comissões" value={totalCommission} color="gold" compact onClick={() => setDrillType("totalCommission")} />
+          <KpiCard label="Faturamento 2026" value={total2026} color="gold" compact onClick={() => setDrillType("total2026")} />
+        </div>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <KpiCard label="Recebidos" value={totalReceived} color="green" compact />
-        <KpiCard label="Comissões" value={totalCommission} color="gold" compact />
-        <KpiCard label="Faturamento 2026" value={total2026} color="gold" compact />
-      </div>
-    </div>
+      <KpiDrillDownDialog
+        open={drillType !== null}
+        onOpenChange={(v) => { if (!v) setDrillType(null); }}
+        drillType={drillType}
+        month={month}
+        billedDetail={billedDetail}
+        newDetail={newDetail}
+        forecastDetail={forecastDetail}
+        receivedDetail={receivedDetail}
+        commissionDetail={commissionDetail}
+        ytdDetail={ytdDetail}
+      />
+    </>
   );
 }
 
