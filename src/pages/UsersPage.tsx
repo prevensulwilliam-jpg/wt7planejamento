@@ -9,7 +9,7 @@ import { formatDate } from "@/lib/formatters";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Users, Link as LinkIcon, Trash2, AlertTriangle, Clock, CheckCircle, XCircle, Bell, Copy, Check } from "lucide-react";
+import { Users, Link as LinkIcon, Trash2, AlertTriangle, Clock, CheckCircle, XCircle, Bell, Copy, Check, ChevronDown, ChevronUp } from "lucide-react";
 import { usePendingUsers, useApproveUser, useRejectUser, useLoginHistory, useDeleteUser } from "@/hooks/useUsers";
 
 const roleBadge: Record<string, { variant: 'gold' | 'green' | 'cyan' | 'gray'; label: string }> = {
@@ -75,6 +75,8 @@ export default function UsersPage() {
   const deleteMut = useDeleteUser();
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [historyUserId, setHistoryUserId] = useState<string>("");
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyPage, setHistoryPage] = useState(0);
   const { data: loginHistory = [] } = useLoginHistory(historyUserId || undefined);
   const [cleaning, setCleaning] = useState(false);
   const [confirm2, setConfirm2] = useState(false);
@@ -239,54 +241,91 @@ export default function UsersPage() {
 
       {/* ── Histórico de Acessos ── */}
       <PremiumCard>
-        <div className="flex items-center gap-2 mb-4">
+        <button
+          onClick={() => setHistoryOpen(o => !o)}
+          className="flex items-center gap-2 w-full mb-0 cursor-pointer"
+          type="button"
+        >
           <Clock className="w-4 h-4" style={{ color: '#2DD4BF' }} />
           <h3 className="font-display font-bold text-sm" style={{ color: '#2DD4BF' }}>Histórico de Acessos</h3>
-        </div>
-        <div className="flex items-center gap-3 mb-4">
-          <Select value={historyUserId || "__all__"} onValueChange={v => setHistoryUserId(v === "__all__" ? "" : v)}>
-            <SelectTrigger className="w-56 bg-background border-border text-foreground">
-              <SelectValue placeholder="Selecionar usuário..." />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">Todos os usuários</SelectItem>
-              {data.filter(u => u.role !== "admin").map((u, i) => (
-                <SelectItem key={`${u.user_id}-${i}`} value={u.user_id}>{u.name || u.user_id.slice(0, 8)}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <span className="text-xs" style={{ color: '#64748B' }}>{loginHistory.length} registro(s)</span>
-        </div>
-        {loginHistory.length === 0 ? (
-          <p className="text-sm" style={{ color: '#64748B' }}>Nenhum acesso registrado.</p>
-        ) : (
-          <div className="rounded-xl overflow-hidden border border-border">
-            <Table>
-              <TableHeader>
-                <TableRow style={{ borderColor: '#1A2535' }}>
-                  {!historyUserId && <TableHead style={{ color: '#94A3B8' }}>Usuário</TableHead>}
-                  <TableHead style={{ color: '#94A3B8' }}>Data</TableHead>
-                  <TableHead style={{ color: '#94A3B8' }}>Hora</TableHead>
-                  <TableHead style={{ color: '#94A3B8' }}>Navegador</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loginHistory.slice(0, 50).map(h => {
-                  const dt = new Date(h.logged_at);
-                  const user = data.find(u => u.user_id === h.user_id);
-                  const ua = h.user_agent ?? "";
-                  const browser = ua.includes("Chrome") ? "Chrome" : ua.includes("Firefox") ? "Firefox" : ua.includes("Safari") ? "Safari" : ua.includes("Edge") ? "Edge" : "—";
-                  return (
-                    <TableRow key={h.id} style={{ borderColor: '#1A2535' }}>
-                      {!historyUserId && <TableCell style={{ color: '#F0F4F8' }}>{user?.name ?? h.user_id.slice(0, 8)}</TableCell>}
-                      <TableCell className="font-mono text-xs" style={{ color: '#94A3B8' }}>{dt.toLocaleDateString("pt-BR")}</TableCell>
-                      <TableCell className="font-mono text-xs" style={{ color: '#94A3B8' }}>{dt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</TableCell>
-                      <TableCell className="text-xs" style={{ color: '#64748B' }}>{browser}</TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+          <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(148,163,184,0.1)', color: '#64748B' }}>{loginHistory.length}</span>
+          <span className="ml-auto">
+            {historyOpen ? <ChevronUp className="w-4 h-4" style={{ color: '#64748B' }} /> : <ChevronDown className="w-4 h-4" style={{ color: '#64748B' }} />}
+          </span>
+        </button>
+        {historyOpen && (
+          <div className="mt-4">
+            <div className="flex items-center gap-3 mb-4">
+              <Select value={historyUserId || "__all__"} onValueChange={v => { setHistoryUserId(v === "__all__" ? "" : v); setHistoryPage(0); }}>
+                <SelectTrigger className="w-56 bg-background border-border text-foreground">
+                  <SelectValue placeholder="Selecionar usuário..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">Todos os usuários</SelectItem>
+                  {data.map((u, i) => (
+                    <SelectItem key={`${u.user_id}-${i}`} value={u.user_id}>{u.name || u.user_id.slice(0, 8)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <span className="text-xs" style={{ color: '#64748B' }}>{loginHistory.length} registro(s)</span>
+            </div>
+            {loginHistory.length === 0 ? (
+              <p className="text-sm" style={{ color: '#64748B' }}>Nenhum acesso registrado.</p>
+            ) : (
+              <>
+                <div className="rounded-xl overflow-hidden border border-border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow style={{ borderColor: '#1A2535' }}>
+                        {!historyUserId && <TableHead style={{ color: '#94A3B8' }}>Usuário</TableHead>}
+                        <TableHead style={{ color: '#94A3B8' }}>Data</TableHead>
+                        <TableHead style={{ color: '#94A3B8' }}>Hora</TableHead>
+                        <TableHead style={{ color: '#94A3B8' }}>Navegador</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {loginHistory.slice(historyPage * 20, (historyPage + 1) * 20).map(h => {
+                        const dt = new Date(h.logged_at);
+                        const user = data.find(u => u.user_id === h.user_id);
+                        const ua = h.user_agent ?? "";
+                        const browser = ua.includes("Chrome") ? "Chrome" : ua.includes("Firefox") ? "Firefox" : ua.includes("Safari") ? "Safari" : ua.includes("Edge") ? "Edge" : "—";
+                        return (
+                          <TableRow key={h.id} style={{ borderColor: '#1A2535' }}>
+                            {!historyUserId && <TableCell style={{ color: '#F0F4F8' }}>{user?.name ?? h.user_id.slice(0, 8)}</TableCell>}
+                            <TableCell className="font-mono text-xs" style={{ color: '#94A3B8' }}>{dt.toLocaleDateString("pt-BR")}</TableCell>
+                            <TableCell className="font-mono text-xs" style={{ color: '#94A3B8' }}>{dt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</TableCell>
+                            <TableCell className="text-xs" style={{ color: '#64748B' }}>{browser}</TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+                {loginHistory.length > 20 && (
+                  <div className="flex items-center justify-between mt-3">
+                    <button
+                      onClick={() => setHistoryPage(p => Math.max(0, p - 1))}
+                      disabled={historyPage === 0}
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all disabled:opacity-40"
+                      style={{ background: 'rgba(148,163,184,0.1)', color: '#94A3B8', border: '1px solid #1A2535' }}
+                    >
+                      ← Anterior
+                    </button>
+                    <span className="text-xs" style={{ color: '#64748B' }}>
+                      Página {historyPage + 1} de {Math.ceil(loginHistory.length / 20)}
+                    </span>
+                    <button
+                      onClick={() => setHistoryPage(p => Math.min(Math.ceil(loginHistory.length / 20) - 1, p + 1))}
+                      disabled={historyPage >= Math.ceil(loginHistory.length / 20) - 1}
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all disabled:opacity-40"
+                      style={{ background: 'rgba(148,163,184,0.1)', color: '#94A3B8', border: '1px solid #1A2535' }}
+                    >
+                      Próxima →
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         )}
       </PremiumCard>
