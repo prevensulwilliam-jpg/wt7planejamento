@@ -12,6 +12,7 @@ import { KpiCard } from "@/components/wt7/KpiCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useKitnets, useCelescInvoices, useCreateCelescInvoice, useUpdateCelescInvoice, useEnergyReadings, useSaveEnergyReadings, useEnergyConfig, useUpdateEnergyTariff, useEnergyReadingsSummary } from "@/hooks/useKitnets";
 import { formatCurrency, formatMonth, getCurrentMonth } from "@/lib/formatters";
+import { DEFAULT_ENERGY_TARIFF } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Plus, Save, Upload, Pencil, Sparkles, Loader2, X, Download } from "lucide-react";
@@ -405,11 +406,11 @@ function ReadingsTab() {
 
   // Tarifa vem da config (padrão 1.06), não da fatura CELESC
   const configEntry = useMemo(() => (energyConfig ?? []).find(c => c.residencial_code === complex), [energyConfig, complex]);
-  const tariff = configEntry?.tariff_kwh ?? 1.06;
+  const tariff = configEntry?.tariff_kwh ?? DEFAULT_ENERGY_TARIFF;
   const [tariffEdit, setTariffEdit] = useState<string>("");
 
   // Sync tariffEdit quando muda de complexo
-  useMemo(() => { setTariffEdit(String(configEntry?.tariff_kwh ?? 1.06)); }, [configEntry]);
+  useMemo(() => { setTariffEdit(String(configEntry?.tariff_kwh ?? DEFAULT_ENERGY_TARIFF)); }, [configEntry]);
 
   const handleSaveTariff = async () => {
     const val = Number(tariffEdit);

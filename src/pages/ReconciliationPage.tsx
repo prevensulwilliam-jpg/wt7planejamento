@@ -237,11 +237,6 @@ function ImportTab({ accounts }: { accounts: any[] }) {
 
   const doImport = async () => {
     const { data: { user } } = await supabase.auth.getUser();
-    console.log('👤 Usuário logado:', {
-      userId: user?.id,
-      email: user?.email
-    });
-    
     if (!selectedAccount) { toast.error("Selecione uma conta bancária."); return; }
     if (!preview.length) { toast.error("Selecione um arquivo primeiro."); return; }
 

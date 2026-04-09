@@ -23,6 +23,7 @@ import {
   useEnergyConfig,
 } from "@/hooks/useKitnets";
 import { formatCurrency, formatMonth, getCurrentMonth } from "@/lib/formatters";
+import { DEFAULT_ENERGY_TARIFF } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
 import { LogOut, Home, Zap, Save, ArrowLeft, Download, Printer } from "lucide-react";
 import { abrirReciboConsolidado } from "@/lib/relatorioFechamento";
@@ -264,7 +265,7 @@ function EnergiaTab({ month }: { month: string }) {
   // Tarifa fixa da config (padrão 1.06) — manager só lê, não edita
   const tariff = useMemo(() => {
     const cfg = (energyConfig ?? []).find(c => c.residencial_code === complex);
-    return cfg?.tariff_kwh ?? 1.06;
+    return cfg?.tariff_kwh ?? DEFAULT_ENERGY_TARIFF;
   }, [energyConfig, complex]);
 
   const units = useMemo(

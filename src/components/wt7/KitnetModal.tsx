@@ -20,6 +20,7 @@ import {
   useCelescInvoices,
 } from "@/hooks/useKitnets";
 import { formatCurrency, formatMonth, getCurrentMonth } from "@/lib/formatters";
+import { DEFAULT_ENERGY_TARIFF } from "@/lib/constants";
 import { Upload, FileText, Trash2, Plus, Zap, Printer, Pencil } from "lucide-react";
 import { abrirReciboIndividual } from "@/lib/relatorioFechamento";
 import type { Tables } from "@/integrations/supabase/types";
@@ -375,7 +376,7 @@ function FechamentoForm({ kitnet, onSaved, onCancel, initialData, entryId }: Fec
   const [celescFoundInfo, setCelescFoundInfo] = useState<{ kwh: number; amount: number; tariff: number } | null>(null);
   const [readingCurrent, setReadingCurrent] = useState("");
 
-  const tariff = invoices?.find(i => i.residencial_code === kitnet.residencial_code)?.tariff_per_kwh ?? 1.06;
+  const tariff = invoices?.find(i => i.residencial_code === kitnet.residencial_code)?.tariff_per_kwh ?? DEFAULT_ENERGY_TARIFF;
   const prevReading = lastReading?.reading_current ?? 0;
   const kwh = Math.max(0, (Number(readingCurrent) || 0) - prevReading);
   const celescCalc = kwh * tariff;
