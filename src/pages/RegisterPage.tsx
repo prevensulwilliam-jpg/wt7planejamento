@@ -52,6 +52,12 @@ export default function RegisterPage() {
       const userId = authData.user?.id;
       if (!userId) throw new Error("Usuário não criado.");
 
+      // Supabase retorna identities vazio se e-mail já existe (deletado ou não confirmado)
+      const identities = authData.user?.identities ?? [];
+      if (identities.length === 0) {
+        throw new Error("Este e-mail já foi utilizado. Tente fazer login ou use outro e-mail.");
+      }
+
       // 2. Insere role via função SECURITY DEFINER (bypassa RLS)
 const { error: roleError } = await (supabase as any)
         .rpc("request_manager_access", { p_user_id: userId, p_role: role });
