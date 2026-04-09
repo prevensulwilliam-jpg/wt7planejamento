@@ -75,6 +75,8 @@ export default function UsersPage() {
   const deleteMut = useDeleteUser();
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [historyUserId, setHistoryUserId] = useState<string>("");
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyPage, setHistoryPage] = useState(0);
   const { data: loginHistory = [] } = useLoginHistory(historyUserId || undefined);
   const [cleaning, setCleaning] = useState(false);
   const [confirm2, setConfirm2] = useState(false);
