@@ -1,43 +1,25 @@
 
 
-# Correção do bug parseExcelDate — off-by-one do SheetJS
+# Histórico de Acessos — Collapsible + Paginação 20/página
 
-## Problema
-`XLSX.SSF.parse_date_code` soma +1 dia nas datas. Exemplo: planilha tem `28/02/2026`, banco grava `2026-03-01`. Isso causa valores em meses errados.
+## Mudanças (arquivo único: `src/pages/UsersPage.tsx`)
 
-## Mudanças
+### 1. Adicionar estado de abrir/fechar e paginação
+- Novo state `historyOpen` (default `false`) para controlar visibilidade da seção
+- Novo state `historyPage` (default `0`) para paginação
+- Reset `historyPage` para 0 quando mudar o filtro de usuário
 
-### 1. Substituir `parseExcelDate` em `CommissionsPortalPage.tsx` (linhas 523-533)
-Trocar `XLSX.SSF.parse_date_code` pela fórmula UTC direta `(val - 25569) * 86400 * 1000`. Adicionar suporte a formato `DD/MM` (sem ano).
+### 2. Header clicável com chevron
+- Tornar o header do card clicável (toggle `historyOpen`)
+- Adicionar ícone `ChevronDown`/`ChevronUp` ao lado do título
+- Quando fechado, esconder filtro + tabela
 
-### 2. Substituir `parseExcelDate` em `FinancialBillingPage.tsx` (linhas 303-313)
-Mesma correção — o bug existe nos dois arquivos.
+### 3. Paginação de 20 registros
+- Trocar `loginHistory.slice(0, 50)` por `loginHistory.slice(page * 20, (page + 1) * 20)`
+- Adicionar controles "Anterior" / "Próxima" abaixo da tabela
+- Mostrar "Página X de Y"
 
-### Código novo (ambos os arquivos)
-```typescript
-const parseExcelDate = (val: any): string | null => {
-    if (typeof val === "number") {
-      const utc = (val - 25569) * 86400 * 1000;
-      const date = new Date(utc);
-      const y = date.getUTCFullYear();
-      const m = String(date.getUTCMonth() + 1).padStart(2, '0');
-      const d = String(date.getUTCDate()).padStart(2, '0');
-      if (y > 2000 && y < 2100) return `${y}-${m}-${d}`;
-      return null;
-    }
-    if (typeof val === "string") {
-      const full = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(val.trim());
-      if (full) return `${full[3]}-${full[2].padStart(2,'0')}-${full[1].padStart(2,'0')}`;
-      const short = /^(\d{1,2})\/(\d{1,2})$/.exec(val.trim());
-      if (short) {
-        const year = new Date().getFullYear();
-        return `${year}-${short[2].padStart(2,'0')}-${short[1].padStart(2,'0')}`;
-      }
-    }
-    return null;
-  };
-```
-
-## Nota
-Os dados já gravados no banco com datas erradas precisarão ser corrigidos manualmente (apagar histórico e reimportar) ou via SQL update. Esta correção só afeta importações futuras.
+### 4. Filtro por usuário (já existe)
+- Manter o `Select` existente — já filtra por usuário
+- Incluir admin na lista de opções do filtro (atualmente excluído com `.filter(u => u.role !== "admin")`) — remover esse filtro para mostrar todos os usuários
 
