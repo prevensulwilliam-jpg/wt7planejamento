@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from "react";
+import ReactMarkdown from "react-markdown";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -160,6 +161,8 @@ function ImportTab({ accounts }: { accounts: any[] }) {
   const [fileName, setFileName] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [parsedFinalBalance, setParsedFinalBalance] = useState<number | undefined>(undefined);
+  const [navalAnalysis, setNavalAnalysis] = useState<string | null>(null);
+  const [navalLoading, setNavalLoading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const importMutation = useImportTransactions();
   const uploadStatementMutation = useBankStatementUpload();
@@ -389,12 +392,50 @@ function ImportTab({ accounts }: { accounts: any[] }) {
       setFileName("");
       setSelectedFile(null);
       setParsedFinalBalance(undefined);
+
+      // Chamar Naval para análise de conciliação
+      const refMonth = rows[0]?.date?.slice(0, 7) || getCurrentMonth();
+      setNavalLoading(true);
+      setNavalAnalysis(null);
+      try {
+        const startOfMonth = `${refMonth}-01`;
+        const endOfMonth = `${refMonth}-31`;
+
+        const [txRes, revRes, keRes] = await Promise.all([
+          supabase.from("bank_transactions").select("*")
+            .in("status", ["pending", "auto_categorized"])
+            .gte("date", startOfMonth).lte("date", endOfMonth),
+          supabase.from("revenues").select("*").eq("reference_month", refMonth),
+          supabase.from("kitnet_entries").select("*, kitnets(tenant_name)").eq("reference_month", refMonth),
+        ]);
+
+        const pendingTransactions = (txRes.data ?? []).map((t: any) => ({
+          date: t.date, type: t.type, amount: t.amount, description: t.description,
+        }));
+        const expectedRevenues = (revRes.data ?? []).map((r: any) => ({
+          source: r.source, amount: r.amount, description: r.description,
+        }));
+        const kitnetEntries = (keRes.data ?? []).map((k: any) => ({
+          amount: k.total_liquid ?? k.rent_gross, kitnet_id: k.kitnet_id,
+          tenant_name: k.kitnets?.tenant_name,
+        }));
+
+        const { data: navalData } = await supabase.functions.invoke("wisely-ai", {
+          body: { action: "reconcile", month: refMonth, pendingTransactions, expectedRevenues, kitnetEntries },
+        });
+        setNavalAnalysis(navalData?.text ?? null);
+      } catch (err) {
+        console.error("Naval reconcile error:", err);
+      } finally {
+        setNavalLoading(false);
+      }
     } catch (err: any) {
       toast.error(err.message || "Erro ao importar.");
     }
   };
 
   return (
+    <>
     <div className="grid gap-6 lg:grid-cols-2">
       <PremiumCard>
         <h2 className="font-display font-semibold text-lg mb-4" style={{ color: "#F0F4F8" }}>
@@ -547,6 +588,28 @@ function ImportTab({ accounts }: { accounts: any[] }) {
         </div>
       </PremiumCard>
     </div>
+
+    {/* Naval — Análise de Conciliação */}
+    {(navalLoading || navalAnalysis) && (
+      <PremiumCard className="mt-6" glowColor="#C9A84C">
+        <h2 className="font-display font-semibold text-lg mb-4" style={{ color: "#F0F4F8" }}>
+          🧭 Naval — Análise de Conciliação
+        </h2>
+        {navalLoading ? (
+          <div className="space-y-3">
+            <Skeleton className="h-4 w-full" style={{ background: "#1A2535" }} />
+            <Skeleton className="h-4 w-3/4" style={{ background: "#1A2535" }} />
+            <Skeleton className="h-4 w-5/6" style={{ background: "#1A2535" }} />
+            <Skeleton className="h-4 w-2/3" style={{ background: "#1A2535" }} />
+          </div>
+        ) : (
+          <div className="prose prose-invert prose-sm max-w-none" style={{ color: "#CBD5E1" }}>
+            <ReactMarkdown>{navalAnalysis ?? ""}</ReactMarkdown>
+          </div>
+        )}
+      </PremiumCard>
+    )}
+    </>
   );
 }
 
