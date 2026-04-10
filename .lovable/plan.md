@@ -1,25 +1,15 @@
 
 
-# Histórico de Acessos — Collapsible + Paginação 20/página
+# Atualizar Edge Function wisely-ai — Adicionar modo "reconcile"
 
-## Mudanças (arquivo único: `src/pages/UsersPage.tsx`)
+## O que muda
+Arquivo único: `supabase/functions/wisely-ai/index.ts`
 
-### 1. Adicionar estado de abrir/fechar e paginação
-- Novo state `historyOpen` (default `false`) para controlar visibilidade da seção
-- Novo state `historyPage` (default `0`) para paginação
-- Reset `historyPage` para 0 quando mudar o filtro de usuário
+O código atual será substituído pelo código fornecido, que adiciona:
 
-### 2. Header clicável com chevron
-- Tornar o header do card clicável (toggle `historyOpen`)
-- Adicionar ícone `ChevronDown`/`ChevronUp` ao lado do título
-- Quando fechado, esconder filtro + tabela
+1. **Novo prompt `RECONCILE_PROMPT`** — instruções para conciliação bancária automática
+2. **Novo modo `action: "reconcile"`** — recebe transações pendentes, receitas esperadas e fechamentos de kitnets, faz auto-match por valor exato, e envia contexto estruturado para o Naval gerar relatório de conciliação
+3. **Retorno enriquecido** — além do texto do Naval, retorna `autoMatched`, `unmatched`, `totalCredits`, `totalDebits`
 
-### 3. Paginação de 20 registros
-- Trocar `loginHistory.slice(0, 50)` por `loginHistory.slice(page * 20, (page + 1) * 20)`
-- Adicionar controles "Anterior" / "Próxima" abaixo da tabela
-- Mostrar "Página X de Y"
-
-### 4. Filtro por usuário (já existe)
-- Manter o `Select` existente — já filtra por usuário
-- Incluir admin na lista de opções do filtro (atualmente excluído com `.filter(u => u.role !== "admin")`) — remover esse filtro para mostrar todos os usuários
+Os modos existentes (chat Naval e extract-celesc) permanecem inalterados.
 
