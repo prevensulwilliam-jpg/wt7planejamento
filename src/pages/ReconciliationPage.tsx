@@ -161,6 +161,8 @@ function ImportTab({ accounts }: { accounts: any[] }) {
   const [fileName, setFileName] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [parsedFinalBalance, setParsedFinalBalance] = useState<number | undefined>(undefined);
+  const [navalAnalysis, setNavalAnalysis] = useState<string | null>(null);
+  const [navalLoading, setNavalLoading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const importMutation = useImportTransactions();
   const uploadStatementMutation = useBankStatementUpload();
