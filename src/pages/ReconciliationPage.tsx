@@ -435,6 +435,7 @@ function ImportTab({ accounts }: { accounts: any[] }) {
   };
 
   return (
+    <>
     <div className="grid gap-6 lg:grid-cols-2">
       <PremiumCard>
         <h2 className="font-display font-semibold text-lg mb-4" style={{ color: "#F0F4F8" }}>
