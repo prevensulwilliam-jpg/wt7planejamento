@@ -392,6 +392,43 @@ function ImportTab({ accounts }: { accounts: any[] }) {
       setFileName("");
       setSelectedFile(null);
       setParsedFinalBalance(undefined);
+
+      // Chamar Naval para análise de conciliação
+      const refMonth = rows[0]?.date?.slice(0, 7) || getCurrentMonth();
+      setNavalLoading(true);
+      setNavalAnalysis(null);
+      try {
+        const startOfMonth = `${refMonth}-01`;
+        const endOfMonth = `${refMonth}-31`;
+
+        const [txRes, revRes, keRes] = await Promise.all([
+          supabase.from("bank_transactions").select("*")
+            .in("status", ["pending", "auto_categorized"])
+            .gte("date", startOfMonth).lte("date", endOfMonth),
+          supabase.from("revenues").select("*").eq("reference_month", refMonth),
+          supabase.from("kitnet_entries").select("*, kitnets(tenant_name)").eq("reference_month", refMonth),
+        ]);
+
+        const pendingTransactions = (txRes.data ?? []).map((t: any) => ({
+          date: t.date, type: t.type, amount: t.amount, description: t.description,
+        }));
+        const expectedRevenues = (revRes.data ?? []).map((r: any) => ({
+          source: r.source, amount: r.amount, description: r.description,
+        }));
+        const kitnetEntries = (keRes.data ?? []).map((k: any) => ({
+          amount: k.total_liquid ?? k.rent_gross, kitnet_id: k.kitnet_id,
+          tenant_name: k.kitnets?.tenant_name,
+        }));
+
+        const { data: navalData } = await supabase.functions.invoke("wisely-ai", {
+          body: { action: "reconcile", month: refMonth, pendingTransactions, expectedRevenues, kitnetEntries },
+        });
+        setNavalAnalysis(navalData?.text ?? null);
+      } catch (err) {
+        console.error("Naval reconcile error:", err);
+      } finally {
+        setNavalLoading(false);
+      }
     } catch (err: any) {
       toast.error(err.message || "Erro ao importar.");
     }
