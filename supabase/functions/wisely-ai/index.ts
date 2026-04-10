@@ -22,6 +22,37 @@ MODO ESTRATÉGICO: Além de responder perguntas, identifique proativamente:
 
 Responda SEMPRE em português, direto e executivo. Use **negrito** para números e pontos importantes. Trate William pelo nome. Máximo 4 parágrafos por resposta, a não ser que ele peça mais detalhes.`;
 
+const RECONCILE_PROMPT = `Você é o Naval, assistente de conciliação financeira do William Tavares.
+
+Analise as transações bancárias pendentes e os dados esperados abaixo e gere um relatório de conciliação executivo.
+
+REGRAS:
+1. Agrupe transações similares (ex: múltiplos depósitos de kitnets)
+2. Para créditos sem identificação clara, liste cada um com valor e data e pergunte diretamente o que é
+3. Para débitos não categorizados, sugira a categoria mais provável baseado na descrição
+4. Calcule: total recebido vs total esperado por fonte (kitnets, comissões, outros)
+5. Seja direto e objetivo — William precisa resolver isso rapidamente
+
+FORMATO DA RESPOSTA:
+## Conciliação — [mês]
+
+**Resumo:**
+- Total créditos: R$X
+- Conciliado automaticamente: R$X (N transações)
+- Aguardando identificação: R$X (N transações)
+
+**✅ Conciliado automaticamente:**
+[lista resumida]
+
+**❓ Preciso que você identifique:**
+[para cada transação não identificada: data, valor, descrição do extrato]
+Ex: "Dia 08/04 — R$5.000 — CHEQUE COMPENSADO 123456 — É comissão Prevensul?"
+
+**⚠️ Atenção:**
+[desvios entre esperado e recebido, se houver]
+
+Responda SEMPRE em português. Seja direto e executivo.`;
+
 const CELESC_EXTRACT_PROMPT = `Você é um extrator de dados de faturas CELESC (energia elétrica de Santa Catarina, Brasil).
 
 Analise a imagem desta fatura e extraia os campos abaixo em JSON puro, sem markdown, sem explicações.
@@ -103,6 +134,102 @@ serve(async (req) => {
       });
     }
 
+    // ── Modo conciliação automática ──
+    if (body_req.action === "reconcile") {
+      const { month, pendingTransactions, expectedRevenues, kitnetEntries } = body_req as any;
+
+      const totalCredits = (pendingTransactions as any[])
+        .filter((t: any) => t.type === "credit")
+        .reduce((s: number, t: any) => s + Math.abs(t.amount), 0);
+
+      const totalDebits = (pendingTransactions as any[])
+        .filter((t: any) => t.type === "debit")
+        .reduce((s: number, t: any) => s + Math.abs(t.amount), 0);
+
+      const kitnetValues = (kitnetEntries as any[] ?? []).map((k: any) => ({
+        amount: k.amount,
+        kitnet: k.unit_id || k.kitnet_id,
+        tenant: k.tenant_name,
+      }));
+
+      const autoMatched: any[] = [];
+      const unmatched: any[] = [];
+
+      for (const tx of (pendingTransactions as any[])) {
+        if (tx.type !== "credit") continue;
+        const cents = Math.round(Math.abs(tx.amount) * 100);
+        const kitMatch = kitnetValues.find((k: any) => Math.round(k.amount * 100) === cents);
+        if (kitMatch) {
+          autoMatched.push({ ...tx, match: kitMatch });
+        } else {
+          unmatched.push(tx);
+        }
+      }
+
+      const dataContext = `
+MÊS: ${month}
+
+TRANSAÇÕES PENDENTES NO EXTRATO:
+${(pendingTransactions as any[]).map((t: any) =>
+  `- ${t.date} | ${t.type === "credit" ? "CRÉDITO" : "DÉBITO"} | R$${Math.abs(t.amount).toFixed(2)} | ${t.description}`
+).join("\n")}
+
+RECEITAS ESPERADAS NESTE MÊS (cadastradas no sistema):
+${(expectedRevenues as any[] ?? []).map((r: any) =>
+  `- ${r.source}: R$${r.amount?.toFixed(2)} | ${r.description || ""}`
+).join("\n") || "Nenhuma receita cadastrada para este mês"}
+
+KITNETS COM VALORES ESPERADOS:
+${kitnetValues.map((k: any) => `- R$${k.amount?.toFixed(2)} | ${k.tenant || "sem inquilino"}`).join("\n") || "Nenhum fechamento de kitnet lançado"}
+
+AUTO-MATCH REALIZADO (${autoMatched.length} transações):
+${autoMatched.map((t: any) => `- R$${Math.abs(t.amount).toFixed(2)} → Kitnet ${t.match?.kitnet || ""} (${t.match?.tenant || ""})`).join("\n") || "Nenhum match automático"}
+
+SEM IDENTIFICAÇÃO (${unmatched.length} transações — precisa de William):
+${unmatched.map((t: any) => `- ${t.date} | R$${Math.abs(t.amount).toFixed(2)} | ${t.description}`).join("\n") || "Todas identificadas!"}
+
+TOTAIS:
+- Total créditos extrato: R$${totalCredits.toFixed(2)}
+- Total débitos extrato: R$${totalDebits.toFixed(2)}
+- Conciliado automaticamente: ${autoMatched.length} transações
+- Aguardando identificação: ${unmatched.length} transações
+`;
+
+      const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          max_tokens: 1500,
+          messages: [
+            { role: "system", content: RECONCILE_PROMPT },
+            { role: "user", content: dataContext },
+          ],
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.text();
+        return new Response(JSON.stringify({ error: "Erro no gateway", detail: err }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const data = await res.json();
+      const text = data.choices?.[0]?.message?.content ?? "";
+
+      return new Response(JSON.stringify({
+        text,
+        autoMatched: autoMatched.length,
+        unmatched: unmatched.length,
+        totalCredits,
+        totalDebits,
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // ── Modo chat Naval (padrão) ──
     const { messages, stream } = body_req;
     if (!Array.isArray(messages)) {
@@ -133,7 +260,6 @@ serve(async (req) => {
       const t = await response.text();
       console.error("AI gateway error:", status, t);
 
-      // Return 200 with error payload so supabase.functions.invoke() doesn't throw
       if (status === 429) {
         return new Response(
           JSON.stringify({ error: "Limite de requisições excedido. Tente novamente em alguns segundos.", rateLimited: true }),
