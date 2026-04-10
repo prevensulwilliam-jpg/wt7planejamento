@@ -588,6 +588,28 @@ function ImportTab({ accounts }: { accounts: any[] }) {
         </div>
       </PremiumCard>
     </div>
+
+    {/* Naval — Análise de Conciliação */}
+    {(navalLoading || navalAnalysis) && (
+      <PremiumCard className="mt-6" glowColor="#C9A84C">
+        <h2 className="font-display font-semibold text-lg mb-4" style={{ color: "#F0F4F8" }}>
+          🧭 Naval — Análise de Conciliação
+        </h2>
+        {navalLoading ? (
+          <div className="space-y-3">
+            <Skeleton className="h-4 w-full" style={{ background: "#1A2535" }} />
+            <Skeleton className="h-4 w-3/4" style={{ background: "#1A2535" }} />
+            <Skeleton className="h-4 w-5/6" style={{ background: "#1A2535" }} />
+            <Skeleton className="h-4 w-2/3" style={{ background: "#1A2535" }} />
+          </div>
+        ) : (
+          <div className="prose prose-invert prose-sm max-w-none" style={{ color: "#CBD5E1" }}>
+            <ReactMarkdown>{navalAnalysis ?? ""}</ReactMarkdown>
+          </div>
+        )}
+      </PremiumCard>
+    )}
+    </>
   );
 }
 
