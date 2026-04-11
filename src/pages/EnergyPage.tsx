@@ -200,19 +200,10 @@ function InvoicesTab() {
     }
     try {
       // Buscar TODOS os débitos CELESC na Credifoz — sem filtro de mês para não perder por timezone
-      const startDate = inv.reference_month + "-01";
-      // Calcular último dia do mês corretamente
-      const [year, month] = inv.reference_month.split("-").map(Number);
-      const lastDay = new Date(year, month, 0).getDate();
-      const endDate = inv.reference_month + "-" + String(lastDay).padStart(2, "0");
-
       const { data: txs, error } = await supabase
         .from("bank_transactions" as any)
         .select("id, description, amount, date, type")
-        .eq("bank_account_id", CREDIFOZ_ID)
-        .or("description.ilike.%CELESC DISTRIBU%,description.ilike.%CELESC DISTRIBUICAO%")
-        .gte("date", startDate)
-        .lte("date", endDate);
+        .or("description.ilike.%CELESC DISTRIBU%,description.ilike.%CELESC DISTRIBUICAO%");
 
       if (error) throw new Error(error.message);
 
