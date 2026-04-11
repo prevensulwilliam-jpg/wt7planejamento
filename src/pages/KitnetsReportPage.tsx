@@ -1,29 +1,50 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
 import { GoldButton } from "@/components/wt7/GoldButton";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useKitnetEntries } from "@/hooks/useKitnets";
+import { useKitnetEntries, useKitnets } from "@/hooks/useKitnets";
 import { exportCSV } from "@/hooks/useFinances";
 import { formatCurrency, formatMonth, getCurrentMonth } from "@/lib/formatters";
-import { ChevronLeft, ChevronRight, FileDown, BarChart3, Info } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid } from "recharts";
+import { ChevronLeft, ChevronRight, FileDown, BarChart3, Info, ChevronDown, ChevronUp } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid } from "recharts";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+
+function getYearMonths(year: number) {
+  return Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, "0")}`);
+}
+
+function useAllYearEntries(year: number) {
+  return useQuery({
+    queryKey: ["kitnet_entries_year", year],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("kitnet_entries")
+        .select("*, kitnets(code, tenant_name, residencial_code)")
+        .gte("reference_month", `${year}-01`)
+        .lte("reference_month", `${year}-12`);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+}
 
 export default function KitnetsReportPage() {
   const [month, setMonth] = useState(getCurrentMonth());
   const [complex, setComplex] = useState("todos");
+  const [tableOpen, setTableOpen] = useState(false);
+  const year = parseInt(month.split("-")[0]);
+
   const { data: entries, isLoading } = useKitnetEntries(month);
+  const { data: kitnets } = useKitnets();
+  const { data: yearEntries } = useAllYearEntries(year);
 
   const { data: energyReadings } = useQuery({
     queryKey: ["energy_readings_report", month],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("energy_readings")
-        .select("*, kitnets(residencial_code)")
-        .eq("reference_month", month);
+      const { data, error } = await supabase.from("energy_readings").select("*, kitnets(residencial_code)").eq("reference_month", month);
       if (error) throw error;
       return data ?? [];
     },
@@ -32,72 +53,69 @@ export default function KitnetsReportPage() {
   const { data: celescInvoices } = useQuery({
     queryKey: ["celesc_invoices_report", month],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("celesc_invoices")
-        .select("*")
-        .eq("reference_month", month);
+      const { data, error } = await supabase.from("celesc_invoices").select("*").eq("reference_month", month);
       if (error) throw error;
       return data ?? [];
     },
   });
 
-  // Buscar valor depositado da conciliação bancária
-  // Créditos categorizados como aluguel_kitnets no mês
   const { data: bankDeposits } = useQuery({
     queryKey: ["bank_deposits_kitnets", month],
     queryFn: async () => {
       const [y, m] = month.split("-");
       const start = `${y}-${m}-01`;
       const end = new Date(+y, +m, 0).toISOString().split("T")[0];
-      const { data, error } = await supabase
-        .from("bank_transactions")
-        .select("amount, date, description")
-        .eq("type", "credit")
-        .eq("category_confirmed", "aluguel_kitnets")
-        .gte("date", start)
-        .lte("date", end);
+      const { data, error } = await supabase.from("bank_transactions").select("amount").eq("type", "credit").eq("category_confirmed", "aluguel_kitnets").gte("date", start).lte("date", end);
       if (error) throw error;
       return data ?? [];
     },
   });
 
-  const filtered = (entries ?? []).filter(e => {
-    if (complex === "todos") return true;
-    return (e as any).kitnets?.residencial_code === complex;
-  });
-
-  const filteredEnergy = (energyReadings ?? []).filter(e => {
-    if (complex === "todos") return true;
-    return (e as any).kitnets?.residencial_code === complex;
-  });
+  const filtered = (entries ?? []).filter(e => complex === "todos" ? true : (e as any).kitnets?.residencial_code === complex);
+  const filteredEnergy = (energyReadings ?? []).filter(e => complex === "todos" ? true : (e as any).kitnets?.residencial_code === complex);
 
   const totalPrevisto = filtered.reduce((s, e) => s + (e.rent_gross ?? 0), 0);
   const totalLiquido = filtered.reduce((s, e) => s + (e.total_liquid ?? 0), 0);
   const totalDepositadoBanco = (bankDeposits ?? []).reduce((s, t) => s + Math.abs(t.amount ?? 0), 0);
   const totalDepositado = totalDepositadoBanco > 0 ? totalDepositadoBanco : totalLiquido;
-
-  // Diagnóstico: diferença entre depositado e líquido ADM
   const diferenca = totalDepositadoBanco > 0 ? totalLiquido - totalDepositadoBanco : 0;
-  const temDivergencia = Math.abs(diferenca) > 1; // tolerância de R$1 para arredondamentos
+  const temDivergencia = Math.abs(diferenca) > 1;
   const totalCobradoInquilinos = filteredEnergy.reduce((s, e) => s + ((e as any).amount_to_charge ?? 0), 0);
   const totalFaturasCelesc = (celescInvoices ?? []).reduce((s, inv) => s + ((inv as any).invoice_total ?? 0), 0);
   const saldoSolar = totalCobradoInquilinos - totalFaturasCelesc;
 
+  const yearMonths = getYearMonths(year);
+
+  const monthlyData = useMemo(() => yearMonths.map(m => {
+    const me = (yearEntries ?? []).filter(e => e.reference_month === m);
+    return {
+      month: formatMonth(m).slice(0, 3),
+      previsto: me.reduce((s, e) => s + (e.rent_gross ?? 0), 0),
+      liquido: me.reduce((s, e) => s + (e.total_liquid ?? 0), 0),
+    };
+  }), [yearEntries, yearMonths]);
+
+  const totalAnoPrevisto = monthlyData.reduce((s, m) => s + m.previsto, 0);
+  const totalAnoLiquido = monthlyData.reduce((s, m) => s + m.liquido, 0);
+  const eficiencia = totalAnoPrevisto > 0 ? (totalAnoLiquido / totalAnoPrevisto) * 100 : 0;
+
+  const kitnetList = useMemo(() => {
+    return (kitnets ?? [])
+      .filter(k => complex === "todos" ? true : k.residencial_code === complex)
+      .map(k => {
+        const months = yearMonths.map(m => {
+          const entry = (yearEntries ?? []).find(e => e.kitnet_id === k.id && e.reference_month === m);
+          return { month: m, liquido: entry?.total_liquid ?? null };
+        });
+        return { ...k, months, total: months.reduce((s, m) => s + (m.liquido ?? 0), 0) };
+      });
+  }, [kitnets, yearEntries, yearMonths, complex]);
+
   const barData = filtered.map(e => ({
     name: (e as any).kitnets?.code ?? "?",
+    previsto: e.rent_gross ?? 0,
     liquido: e.total_liquid ?? 0,
   }));
-
-  const prev1 = (() => { const [y, m] = month.split("-").map(Number); const d = new Date(y, m - 2, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; })();
-  const prev2 = (() => { const [y, m] = month.split("-").map(Number); const d = new Date(y, m - 3, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; })();
-  const { data: prev1Data } = useKitnetEntries(prev1);
-  const { data: prev2Data } = useKitnetEntries(prev2);
-
-  const compData = [
-    { month: formatMonth(prev2), total: (prev2Data ?? []).reduce((s, e) => s + (e.total_liquid ?? 0), 0) },
-    { month: formatMonth(prev1), total: (prev1Data ?? []).reduce((s, e) => s + (e.total_liquid ?? 0), 0) },
-    { month: formatMonth(month), total: totalLiquido },
-  ];
 
   const navMonth = (dir: number) => {
     const [y, m] = month.split("-").map(Number);
@@ -116,6 +134,7 @@ export default function KitnetsReportPage() {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <h1 className="font-display font-bold text-2xl" style={{ color: '#F0F4F8' }}>
           <BarChart3 className="inline w-6 h-6 mr-2" style={{ color: '#C9A84C' }} />
@@ -137,136 +156,207 @@ export default function KitnetsReportPage() {
         </div>
       </div>
 
-      {/* 4 KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-
-        {/* Valor Previsto */}
+      {/* KPIs mensais */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="rounded-2xl p-5 space-y-1" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
           <p className="text-xs uppercase font-mono tracking-widest" style={{ color: '#94A3B8' }}>Valor Previsto</p>
           <p className="font-mono text-2xl font-bold" style={{ color: '#C9A84C' }}>{formatCurrency(totalPrevisto)}</p>
-          <p className="text-xs" style={{ color: '#4A5568' }}>Soma dos aluguéis brutos contratados</p>
+          <p className="text-xs" style={{ color: '#4A5568' }}>Aluguéis brutos contratados</p>
         </div>
-
-        {/* Valor Líquido ADM */}
         <div className="rounded-2xl p-5 space-y-1" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
           <p className="text-xs uppercase font-mono tracking-widest" style={{ color: '#94A3B8' }}>Valor Líquido ADM</p>
           <p className="font-mono text-2xl font-bold" style={{ color: '#10B981' }}>{formatCurrency(totalLiquido)}</p>
           <p className="text-xs" style={{ color: '#4A5568' }}>Após CELESC, SEMASA, IPTU e ADM</p>
         </div>
-
-        {/* Valor Depositado */}
         <div className="rounded-2xl p-5 space-y-1" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
           <p className="text-xs uppercase font-mono tracking-widest" style={{ color: '#94A3B8' }}>Valor Depositado</p>
           <p className="font-mono text-2xl font-bold" style={{ color: '#2DD4BF' }}>{formatCurrency(totalDepositado)}</p>
-          <p className="text-xs" style={{ color: '#4A5568' }}>
-            {totalDepositadoBanco > 0 ? "Conciliado no extrato bancário" : "Estimado pelo líquido ADM"}
-          </p>
+          <p className="text-xs" style={{ color: '#4A5568' }}>{totalDepositadoBanco > 0 ? "Conciliado no extrato" : "Estimado pelo líquido ADM"}</p>
         </div>
-
-        {/* Saldo Solar com tooltip */}
         <div className="rounded-2xl p-5 space-y-1 relative group" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
           <div className="flex items-center gap-1.5">
             <p className="text-xs uppercase font-mono tracking-widest" style={{ color: '#94A3B8' }}>Saldo Solar</p>
             <div className="relative">
               <Info className="w-3.5 h-3.5 cursor-help" style={{ color: '#4A5568' }} />
-              <div
-                className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-72 p-3 rounded-lg text-xs z-50 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
-                style={{ background: '#131B22', border: '1px solid #2A3F55', color: '#94A3B8' }}
-              >
-                Este valor está embutido nos valores Previsto / Líquido / Depositado, apenas para informação. Representa o que os inquilinos pagaram de energia menos o custo da fatura CELESC — o saldo positivo é o ganho líquido do sistema solar.
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-72 p-3 rounded-lg text-xs z-50 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" style={{ background: '#131B22', border: '1px solid #2A3F55', color: '#94A3B8' }}>
+                Embutido nos valores Previsto/Líquido/Depositado. Ganho líquido do sistema solar: cobrado dos inquilinos menos fatura CELESC.
               </div>
             </div>
           </div>
-          <p className="font-mono text-2xl font-bold" style={{ color: saldoSolar >= 0 ? '#F59E0B' : '#F43F5E' }}>
-            {formatCurrency(saldoSolar)}
-          </p>
-          <p className="text-xs" style={{ color: '#4A5568' }}>
-            Cobrado {formatCurrency(totalCobradoInquilinos)} − Fatura {formatCurrency(totalFaturasCelesc)}
-          </p>
+          <p className="font-mono text-2xl font-bold" style={{ color: saldoSolar >= 0 ? '#F59E0B' : '#F43F5E' }}>{formatCurrency(saldoSolar)}</p>
+          <p className="text-xs" style={{ color: '#4A5568' }}>Cobrado {formatCurrency(totalCobradoInquilinos)} − Fatura {formatCurrency(totalFaturasCelesc)}</p>
         </div>
-
       </div>
 
-      {/* Alerta Naval quando há divergência entre depositado e líquido ADM */}
+      {/* Alerta Naval */}
       {temDivergencia && (
         <div className="rounded-2xl p-4 flex items-start gap-3" style={{ background: 'rgba(201,168,76,0.08)', border: '1px solid rgba(201,168,76,0.3)' }}>
           <span className="text-lg">⚓</span>
           <div>
             <p className="font-bold text-sm" style={{ color: '#E8C97A' }}>Naval — Divergência detectada em {formatMonth(month)}</p>
             <p className="text-sm mt-1" style={{ color: '#94A3B8' }}>
-              O valor líquido do ADM é <span style={{ color: '#10B981' }}>{formatCurrency(totalLiquido)}</span> mas foram identificados apenas <span style={{ color: '#2DD4BF' }}>{formatCurrency(totalDepositadoBanco)}</span> em depósitos de aluguel no extrato bancário.
+              Líquido ADM <span style={{ color: '#10B981' }}>{formatCurrency(totalLiquido)}</span> vs depositado <span style={{ color: '#2DD4BF' }}>{formatCurrency(totalDepositadoBanco)}</span>.{" "}
               {diferenca > 0
-                ? <> A diferença de <span style={{ color: '#F43F5E' }}>{formatCurrency(diferenca)}</span> ainda não foi localizada no extrato. Verifique: (1) depósitos pendentes de conciliação, (2) aluguéis em atraso, (3) depósitos em outra conta.</>
-                : <> O extrato mostra <span style={{ color: '#F43F5E' }}>{formatCurrency(Math.abs(diferenca))}</span> a mais do que o ADM repassou. Verifique se há depósitos de outros meses categorizados incorretamente.</>
+                ? <>Diferença de <span style={{ color: '#F43F5E' }}>{formatCurrency(diferenca)}</span> não localizada. Verifique: (1) depósitos pendentes de conciliação, (2) aluguéis em atraso, (3) depósitos em outra conta.</>
+                : <>Extrato mostra <span style={{ color: '#F43F5E' }}>{formatCurrency(Math.abs(diferenca))}</span> a mais. Verifique se há depósitos de outros meses categorizados incorretamente.</>
               }
             </p>
           </div>
         </div>
       )}
 
-      {isLoading ? <Skeleton className="h-64 rounded-2xl" /> : (
-        <>
-          <PremiumCard>
-            <Table>
-              <TableHeader>
-                <TableRow style={{ borderColor: '#1A2535' }}>
-                  {["Código", "Inquilino", "Bruto", "IPTU", "CELESC", "SEMASA", "ADM", "Líquido"].map(h => (
-                    <TableHead key={h} style={{ color: '#94A3B8' }}>{h}</TableHead>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.length === 0 ? (
-                  <TableRow><TableCell colSpan={8} className="text-center py-8" style={{ color: '#94A3B8' }}>Sem lançamentos no mês</TableCell></TableRow>
-                ) : filtered.map(e => (
-                  <TableRow key={e.id} style={{ borderColor: '#1A2535' }}>
-                    <TableCell style={{ color: '#F0F4F8' }}>{(e as any).kitnets?.code}</TableCell>
-                    <TableCell style={{ color: '#CBD5E1' }}>{(e as any).kitnets?.tenant_name}</TableCell>
-                    <TableCell className="font-mono" style={{ color: '#E8C97A' }}>{formatCurrency(e.rent_gross ?? 0)}</TableCell>
-                    <TableCell className="font-mono" style={{ color: '#F43F5E' }}>{formatCurrency(e.iptu_taxa ?? 0)}</TableCell>
-                    <TableCell className="font-mono" style={{ color: '#F43F5E' }}>{formatCurrency(e.celesc ?? 0)}</TableCell>
-                    <TableCell className="font-mono" style={{ color: '#F43F5E' }}>{formatCurrency(e.semasa ?? 0)}</TableCell>
-                    <TableCell className="font-mono" style={{ color: '#F43F5E' }}>{formatCurrency(e.adm_fee ?? 0)}</TableCell>
-                    <TableCell className="font-mono font-bold" style={{ color: '#10B981' }}>{formatCurrency(e.total_liquid ?? 0)}</TableCell>
-                  </TableRow>
+      {/* KPIs anuais */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="rounded-2xl p-5 space-y-1" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+          <p className="text-xs uppercase font-mono tracking-widest" style={{ color: '#94A3B8' }}>Previsto {year}</p>
+          <p className="font-mono text-xl font-bold" style={{ color: '#C9A84C' }}>{formatCurrency(totalAnoPrevisto)}</p>
+          <p className="text-xs" style={{ color: '#4A5568' }}>Acumulado no ano</p>
+        </div>
+        <div className="rounded-2xl p-5 space-y-1" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+          <p className="text-xs uppercase font-mono tracking-widest" style={{ color: '#94A3B8' }}>Líquido {year}</p>
+          <p className="font-mono text-xl font-bold" style={{ color: '#10B981' }}>{formatCurrency(totalAnoLiquido)}</p>
+          <p className="text-xs" style={{ color: '#4A5568' }}>Recebido no ano</p>
+        </div>
+        <div className="rounded-2xl p-5 space-y-1" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+          <p className="text-xs uppercase font-mono tracking-widest" style={{ color: '#94A3B8' }}>Eficiência {year}</p>
+          <p className="font-mono text-xl font-bold" style={{ color: eficiencia >= 95 ? '#10B981' : eficiencia >= 85 ? '#F59E0B' : '#F43F5E' }}>
+            {eficiencia.toFixed(1)}%
+          </p>
+          <p className="text-xs" style={{ color: '#4A5568' }}>Líquido ÷ Previsto</p>
+        </div>
+        <div className="rounded-2xl p-5 space-y-1" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+          <p className="text-xs uppercase font-mono tracking-widest" style={{ color: '#94A3B8' }}>Projeção Anual</p>
+          <p className="font-mono text-xl font-bold" style={{ color: '#8B5CF6' }}>{formatCurrency(totalPrevisto * 12)}</p>
+          <p className="text-xs" style={{ color: '#4A5568' }}>Base mês atual × 12</p>
+        </div>
+      </div>
+
+      {/* Gráfico anual previsto vs líquido */}
+      <PremiumCard>
+        <h3 className="font-display font-bold mb-4" style={{ color: '#F0F4F8' }}>Previsto vs Líquido — {year}</h3>
+        <ResponsiveContainer width="100%" height={240}>
+          <BarChart data={monthlyData} barGap={2}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#1A2535" />
+            <XAxis dataKey="month" stroke="#4A5568" tick={{ fontSize: 11 }} />
+            <YAxis tickFormatter={v => `${(v/1000).toFixed(0)}k`} stroke="#4A5568" tick={{ fontSize: 11 }} />
+            <Tooltip formatter={(v: number) => formatCurrency(v)} contentStyle={{ background: '#0D1318', border: '1px solid #1A2535', color: '#F0F4F8' }} />
+            <Legend wrapperStyle={{ color: '#94A3B8', fontSize: 12 }} />
+            <Bar dataKey="previsto" name="Previsto" fill="#C9A84C" opacity={0.4} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="liquido" name="Líquido" fill="#10B981" radius={[4, 4, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </PremiumCard>
+
+      {/* Gráfico por unidade no mês */}
+      <PremiumCard>
+        <h3 className="font-display font-bold mb-4" style={{ color: '#F0F4F8' }}>Previsto vs Líquido por Unidade — {formatMonth(month)}</h3>
+        <ResponsiveContainer width="100%" height={Math.max(200, barData.length * 38)}>
+          <BarChart data={barData} layout="vertical" barGap={2}>
+            <XAxis type="number" tickFormatter={v => `${(v/1000).toFixed(1)}k`} stroke="#4A5568" tick={{ fontSize: 11 }} />
+            <YAxis type="category" dataKey="name" width={85} stroke="#94A3B8" tick={{ fontSize: 11 }} />
+            <Tooltip formatter={(v: number) => formatCurrency(v)} contentStyle={{ background: '#0D1318', border: '1px solid #1A2535', color: '#F0F4F8' }} />
+            <Legend wrapperStyle={{ color: '#94A3B8', fontSize: 12 }} />
+            <Bar dataKey="previsto" name="Previsto" fill="#C9A84C" opacity={0.4} radius={[0, 4, 4, 0]} />
+            <Bar dataKey="liquido" name="Líquido" fill="#10B981" radius={[0, 4, 4, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </PremiumCard>
+
+      {/* Tabela anual kitnet × mês */}
+      <PremiumCard>
+        <h3 className="font-display font-bold mb-4" style={{ color: '#F0F4F8' }}>Kitnet × Mês — {year}</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs font-mono" style={{ borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid #1A2535' }}>
+                <th className="text-left py-2 px-3 sticky left-0" style={{ color: '#94A3B8', background: '#0A1118', minWidth: 100 }}>Kitnet</th>
+                {yearMonths.map(m => (
+                  <th key={m} className="text-right py-2 px-2" style={{ color: '#94A3B8', minWidth: 72 }}>
+                    {formatMonth(m).slice(0, 3)}
+                  </th>
                 ))}
-                {filtered.length > 0 && (
-                  <TableRow style={{ borderColor: '#C9A84C' }}>
-                    <TableCell colSpan={7} className="font-bold text-right" style={{ color: '#E8C97A' }}>Total Líquido</TableCell>
-                    <TableCell className="font-mono font-bold" style={{ color: '#E8C97A' }}>{formatCurrency(totalLiquido)}</TableCell>
+                <th className="text-right py-2 px-3" style={{ color: '#C9A84C', minWidth: 90 }}>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {kitnetList.map(k => (
+                <tr key={k.id} style={{ borderBottom: '1px solid #1A2535' }}>
+                  <td className="py-2 px-3 sticky left-0" style={{ color: '#F0F4F8', background: '#0A1118' }}>
+                    <div>{k.code}</div>
+                    <div style={{ color: '#4A5568', fontSize: 10 }}>{k.tenant_name}</div>
+                  </td>
+                  {k.months.map(({ month: m, liquido }) => (
+                    <td key={m} className="text-right py-2 px-2">
+                      {liquido !== null
+                        ? <span style={{ color: liquido >= (k.rent_value ?? 0) * 0.85 ? '#10B981' : '#F59E0B' }}>{(liquido / 1000).toFixed(1)}k</span>
+                        : <span style={{ color: '#2A3F55' }}>—</span>
+                      }
+                    </td>
+                  ))}
+                  <td className="text-right py-2 px-3 font-bold" style={{ color: '#C9A84C' }}>{formatCurrency(k.total)}</td>
+                </tr>
+              ))}
+              <tr style={{ borderTop: '1px solid #C9A84C' }}>
+                <td className="py-2 px-3 font-bold sticky left-0" style={{ color: '#E8C97A', background: '#0A1118' }}>Total</td>
+                {yearMonths.map(m => {
+                  const t = kitnetList.reduce((s, k) => s + (k.months.find(mo => mo.month === m)?.liquido ?? 0), 0);
+                  return <td key={m} className="text-right py-2 px-2 font-bold" style={{ color: t > 0 ? '#E8C97A' : '#2A3F55' }}>{t > 0 ? `${(t/1000).toFixed(1)}k` : "—"}</td>;
+                })}
+                <td className="text-right py-2 px-3 font-bold" style={{ color: '#E8C97A' }}>{formatCurrency(kitnetList.reduce((s, k) => s + k.total, 0))}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p className="text-xs mt-3" style={{ color: '#4A5568' }}>Verde ≥ 85% do previsto · Âmbar {'<'} 85% · — sem lançamento</p>
+      </PremiumCard>
+
+      {/* Detalhes do mês — colapsável */}
+      {!isLoading && (
+        <PremiumCard>
+          <button className="w-full flex items-center justify-between" onClick={() => setTableOpen(o => !o)}>
+            <h3 className="font-display font-bold" style={{ color: '#F0F4F8' }}>Detalhes — {formatMonth(month)}</h3>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-mono" style={{ color: '#10B981' }}>{formatCurrency(totalLiquido)}</span>
+              {tableOpen ? <ChevronUp className="w-5 h-5" style={{ color: '#94A3B8' }} /> : <ChevronDown className="w-5 h-5" style={{ color: '#94A3B8' }} />}
+            </div>
+          </button>
+          {tableOpen && (
+            <div className="mt-4 overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow style={{ borderColor: '#1A2535' }}>
+                    {["Código", "Inquilino", "Bruto", "IPTU", "CELESC", "SEMASA", "ADM", "Líquido"].map(h => (
+                      <TableHead key={h} style={{ color: '#94A3B8' }}>{h}</TableHead>
+                    ))}
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </PremiumCard>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <PremiumCard>
-              <h3 className="font-display font-bold mb-3" style={{ color: '#F0F4F8' }}>Receita Líquida por Unidade</h3>
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={barData} layout="vertical">
-                  <XAxis type="number" tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} stroke="#4A5568" />
-                  <YAxis type="category" dataKey="name" width={80} stroke="#94A3B8" tick={{ fontSize: 11 }} />
-                  <Tooltip formatter={(v: number) => formatCurrency(v)} contentStyle={{ background: '#0D1318', border: '1px solid #1A2535' }} />
-                  <Bar dataKey="liquido" fill="#C9A84C" radius={[0, 6, 6, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </PremiumCard>
-
-            <PremiumCard>
-              <h3 className="font-display font-bold mb-3" style={{ color: '#F0F4F8' }}>Comparativo Mensal</h3>
-              <ResponsiveContainer width="100%" height={250}>
-                <LineChart data={compData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1A2535" />
-                  <XAxis dataKey="month" stroke="#4A5568" tick={{ fontSize: 11 }} />
-                  <YAxis tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} stroke="#4A5568" />
-                  <Tooltip formatter={(v: number) => formatCurrency(v)} contentStyle={{ background: '#0D1318', border: '1px solid #1A2535' }} />
-                  <Line type="monotone" dataKey="total" stroke="#C9A84C" strokeWidth={2} dot={{ fill: '#C9A84C' }} />
-                </LineChart>
-              </ResponsiveContainer>
-            </PremiumCard>
-          </div>
-        </>
+                </TableHeader>
+                <TableBody>
+                  {filtered.length === 0
+                    ? <TableRow><TableCell colSpan={8} className="text-center py-8" style={{ color: '#94A3B8' }}>Sem lançamentos</TableCell></TableRow>
+                    : filtered.map(e => (
+                      <TableRow key={e.id} style={{ borderColor: '#1A2535' }}>
+                        <TableCell style={{ color: '#F0F4F8' }}>{(e as any).kitnets?.code}</TableCell>
+                        <TableCell style={{ color: '#CBD5E1' }}>{(e as any).kitnets?.tenant_name}</TableCell>
+                        <TableCell className="font-mono" style={{ color: '#E8C97A' }}>{formatCurrency(e.rent_gross ?? 0)}</TableCell>
+                        <TableCell className="font-mono" style={{ color: '#F43F5E' }}>{formatCurrency(e.iptu_taxa ?? 0)}</TableCell>
+                        <TableCell className="font-mono" style={{ color: '#F43F5E' }}>{formatCurrency(e.celesc ?? 0)}</TableCell>
+                        <TableCell className="font-mono" style={{ color: '#F43F5E' }}>{formatCurrency(e.semasa ?? 0)}</TableCell>
+                        <TableCell className="font-mono" style={{ color: '#F43F5E' }}>{formatCurrency(e.adm_fee ?? 0)}</TableCell>
+                        <TableCell className="font-mono font-bold" style={{ color: '#10B981' }}>{formatCurrency(e.total_liquid ?? 0)}</TableCell>
+                      </TableRow>
+                    ))
+                  }
+                  {filtered.length > 0 && (
+                    <TableRow style={{ borderColor: '#C9A84C' }}>
+                      <TableCell colSpan={7} className="font-bold text-right" style={{ color: '#E8C97A' }}>Total Líquido</TableCell>
+                      <TableCell className="font-mono font-bold" style={{ color: '#E8C97A' }}>{formatCurrency(totalLiquido)}</TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </PremiumCard>
       )}
     </div>
   );
