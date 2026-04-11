@@ -153,6 +153,9 @@ export const CATEGORY_LABELS: Record<string, string> = {
   viagens: "Viagens", lazer: "Lazer", cartao: "Fatura Cartão",
   consorcio: "Consórcio", outros: "Outros",
   internet: "Internet/Telefonia", energia_eletrica: "Energia Elétrica",
+  camila: "Camila", estudo: "Estudo/Cursos", familia: "Família",
+  farmacia: "Farmácia", gasolina: "Gasolina", plataformas_ia: "Plataformas de IA",
+  terapia: "Terapia", terrenos: "Terrenos", aluguel: "Aluguel",
 };
 
 export const INTENT_CONFIG = {
