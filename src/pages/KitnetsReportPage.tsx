@@ -71,6 +71,22 @@ export default function KitnetsReportPage() {
     },
   });
 
+  // Depósitos anuais para gráfico
+  const { data: yearBankDeposits } = useQuery({
+    queryKey: ["bank_deposits_year", year],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("bank_transactions")
+        .select("amount, date")
+        .eq("type", "credit")
+        .eq("category_confirmed", "aluguel_kitnets")
+        .gte("date", `${year}-01-01`)
+        .lte("date", `${year}-12-31`);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
   const filtered = (entries ?? []).filter(e => complex === "todos" ? true : (e as any).kitnets?.residencial_code === complex);
   const filteredEnergy = (energyReadings ?? []).filter(e => complex === "todos" ? true : (e as any).kitnets?.residencial_code === complex);
 
@@ -88,16 +104,24 @@ export default function KitnetsReportPage() {
 
   const monthlyData = useMemo(() => yearMonths.map(m => {
     const me = (yearEntries ?? []).filter(e => e.reference_month === m);
+    const [y, mo] = m.split("-");
+    const start = `${y}-${mo}-01`;
+    const end = new Date(+y, +mo, 0).toISOString().split("T")[0];
+    const dep = (yearBankDeposits ?? [])
+      .filter(t => t.date >= start && t.date <= end)
+      .reduce((s, t) => s + Math.abs(t.amount ?? 0), 0);
+    const liquido = me.reduce((s, e) => s + (e.total_liquid ?? 0), 0);
     return {
       month: formatMonth(m).slice(0, 3),
-      previsto: me.reduce((s, e) => s + (e.rent_gross ?? 0), 0),
-      liquido: me.reduce((s, e) => s + (e.total_liquid ?? 0), 0),
+      liquido,
+      depositado: dep > 0 ? dep : 0,
     };
-  }), [yearEntries, yearMonths]);
+  }), [yearEntries, yearMonths, yearBankDeposits]);
 
-  const totalAnoPrevisto = monthlyData.reduce((s, m) => s + m.previsto, 0);
+  const totalAnoPrevisto = (yearEntries ?? []).reduce((s, e) => s + (e.rent_gross ?? 0), 0);
   const totalAnoLiquido = monthlyData.reduce((s, m) => s + m.liquido, 0);
-  const eficiencia = totalAnoPrevisto > 0 ? (totalAnoLiquido / totalAnoPrevisto) * 100 : 0;
+  const totalAnoDepositado = monthlyData.reduce((s, m) => s + m.depositado, 0);
+  const eficiencia = totalAnoLiquido > 0 ? (totalAnoDepositado / totalAnoLiquido) * 100 : 0;
 
   const kitnetList = useMemo(() => {
     return (kitnets ?? [])
@@ -218,11 +242,13 @@ export default function KitnetsReportPage() {
           <p className="text-xs" style={{ color: '#4A5568' }}>Recebido no ano</p>
         </div>
         <div className="rounded-2xl p-5 space-y-1" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
-          <p className="text-xs uppercase font-mono tracking-widest" style={{ color: '#94A3B8' }}>Eficiência {year}</p>
-          <p className="font-mono text-xl font-bold" style={{ color: eficiencia >= 95 ? '#10B981' : eficiencia >= 85 ? '#F59E0B' : '#F43F5E' }}>
-            {eficiencia.toFixed(1)}%
+          <p className="text-xs uppercase font-mono tracking-widest" style={{ color: '#94A3B8' }}>Depositado {year}</p>
+          <p className="font-mono text-xl font-bold" style={{ color: '#2DD4BF' }}>
+            {totalAnoDepositado > 0 ? formatCurrency(totalAnoDepositado) : formatCurrency(totalAnoLiquido)}
           </p>
-          <p className="text-xs" style={{ color: '#4A5568' }}>Líquido ÷ Previsto</p>
+          <p className="text-xs" style={{ color: eficiencia >= 95 ? '#10B981' : eficiencia >= 85 ? '#F59E0B' : '#F43F5E' }}>
+            {totalAnoDepositado > 0 ? `${eficiencia.toFixed(1)}% de eficiência` : "Sem conciliação ainda"}
+          </p>
         </div>
         <div className="rounded-2xl p-5 space-y-1" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
           <p className="text-xs uppercase font-mono tracking-widest" style={{ color: '#94A3B8' }}>Projeção Anual</p>
@@ -233,7 +259,7 @@ export default function KitnetsReportPage() {
 
       {/* Gráfico anual previsto vs líquido */}
       <PremiumCard>
-        <h3 className="font-display font-bold mb-4" style={{ color: '#F0F4F8' }}>Previsto vs Líquido — {year}</h3>
+        <h3 className="font-display font-bold mb-4" style={{ color: '#F0F4F8' }}>Líquido ADM vs Depositado — {year}</h3>
         <ResponsiveContainer width="100%" height={240}>
           <BarChart data={monthlyData} barGap={2}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1A2535" />
@@ -241,8 +267,8 @@ export default function KitnetsReportPage() {
             <YAxis tickFormatter={v => `${(v/1000).toFixed(0)}k`} stroke="#4A5568" tick={{ fontSize: 11 }} />
             <Tooltip formatter={(v: number) => formatCurrency(v)} contentStyle={{ background: '#0D1318', border: '1px solid #1A2535', color: '#F0F4F8' }} />
             <Legend wrapperStyle={{ color: '#94A3B8', fontSize: 12 }} />
-            <Bar dataKey="previsto" name="Previsto" fill="#C9A84C" opacity={0.4} radius={[4, 4, 0, 0]} />
-            <Bar dataKey="liquido" name="Líquido" fill="#10B981" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="liquido" name="Líquido ADM" fill="#10B981" opacity={0.4} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="depositado" name="Depositado" fill="#2DD4BF" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </PremiumCard>
@@ -307,7 +333,7 @@ export default function KitnetsReportPage() {
             </tbody>
           </table>
         </div>
-        <p className="text-xs mt-3" style={{ color: '#4A5568' }}>Verde ≥ 85% do previsto · Âmbar {'<'} 85% · — sem lançamento</p>
+        <p className="text-xs mt-3" style={{ color: '#4A5568' }}>Verde ≥ 95% eficiência · Âmbar {'<'} 95% · — sem lançamento</p>
       </PremiumCard>
 
       {/* Detalhes do mês — colapsável */}
