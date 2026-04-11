@@ -220,7 +220,7 @@ export function useReconciliationSummary(month: string) {
   const matched = data.filter((t: any) => t.status === "matched").length;
   const ignored = data.filter((t: any) => t.status === "ignored").length;
   const autoCategorized = data.filter((t: any) => t.status === "auto_categorized").length;
-  const doubts = data.filter((t: any) => t.category_intent === "duvida" && t.status === "pending").length;
+  const doubts = data.filter((t: any) => t.status === "pending").length;
   const transfers = data.filter((t: any) => t.category_intent === "transferencia").length;
   return { totalCredits, totalDebits, pending, matched, ignored, autoCategorized, doubts, transfers, total: data.length, isLoading };
 }
