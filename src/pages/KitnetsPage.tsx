@@ -12,7 +12,7 @@ import { KpiCard } from "@/components/wt7/KpiCard";
 import { WtBadge } from "@/components/wt7/WtBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { KitnetModal } from "@/components/wt7/KitnetModal";
-import { useKitnets, useKitnetEntries, useKitnetSummary, useCreateKitnetEntry, useEnergyReadings, useCelescInvoices, useSaveEnergyReadings, useUnreconciledEntries, useReconcileKitnetEntry } from "@/hooks/useKitnets";
+import { useKitnets, useKitnetEntries, useKitnetSummary, useCreateKitnetEntry, useEnergyReadings, useCelescInvoices, useSaveEnergyReadings, useUnreconciledEntries, useReconcileKitnetEntry, usePrevMonth } from "@/hooks/useKitnets";
 import { formatCurrency, formatMonth, getCurrentMonth, formatDate } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -73,6 +73,8 @@ function OverviewTab({ month, setMonth }: { month: string; setMonth: (v: string)
     abrirReciboConsolidado(data, month);
   };
 
+  const prevMonth = usePrevMonth(month);
+  const { data: prevEntries } = useKitnetEntries(prevMonth);
   const rwt02 = (kitnets ?? []).filter(k => k.residencial_code === "RWT02");
   const rwt03 = (kitnets ?? []).filter(k => k.residencial_code === "RWT03");
 
@@ -109,20 +111,26 @@ function OverviewTab({ month, setMonth }: { month: string; setMonth: (v: string)
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard label="Total Recebido" value={summary.totalReceived} color="gold" compact />
         <KpiCard label="Ocupadas" value={summary.occupied} color="green" compact formatAs="number" />
-        <KpiCard label="Manutenção" value={summary.maintenance} color="cyan" compact formatAs="number" />
+        <div className="rounded-2xl p-4 space-y-1" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+          <p className="text-xs uppercase font-mono tracking-widest" style={{ color: '#94A3B8' }}>Recebidos</p>
+          <p className="font-mono text-2xl font-bold" style={{ color: '#2DD4BF' }}>
+            {summary.received}<span className="text-sm font-normal" style={{ color: '#4A5568' }}>/{summary.occupied}</span>
+          </p>
+          <p className="text-xs" style={{ color: '#4A5568' }}>fechamentos no mês</p>
+        </div>
         <KpiCard label="Vacâncias" value={summary.vacant} color="red" compact formatAs="number" />
       </div>
 
       {/* RWT02 */}
       <div>
         <h2 className="font-display font-bold text-lg text-foreground mb-3">RWT02 — Rua Amauri de Souza, 08</h2>
-        <KitnetGrid kitnets={rwt02} onManage={setSelected} entries={entries ?? []} />
+        <KitnetGrid kitnets={rwt02} onManage={setSelected} entries={entries ?? []} prevEntries={prevEntries ?? []} />
       </div>
 
       {/* RWT03 */}
       <div>
         <h2 className="font-display font-bold text-lg text-foreground mb-3">RWT03 — Rua Manoel Corrêa, 125</h2>
-        <KitnetGrid kitnets={rwt03} onManage={setSelected} entries={entries ?? []} />
+        <KitnetGrid kitnets={rwt03} onManage={setSelected} entries={entries ?? []} prevEntries={prevEntries ?? []} />
       </div>
 
       {selected && (
@@ -136,7 +144,7 @@ function OverviewTab({ month, setMonth }: { month: string; setMonth: (v: string)
   );
 }
 
-function KitnetGrid({ kitnets, onManage, entries }: { kitnets: Tables<"kitnets">[]; onManage: (k: Tables<"kitnets">) => void; entries: any[] }) {
+function KitnetGrid({ kitnets, onManage, entries, prevEntries }: { kitnets: Tables<"kitnets">[]; onManage: (k: Tables<"kitnets">) => void; entries: any[]; prevEntries: any[] }) {
   if (!kitnets.length) {
     return <p className="text-muted-foreground text-sm">Nenhuma kitnet cadastrada.</p>;
   }
@@ -144,12 +152,16 @@ function KitnetGrid({ kitnets, onManage, entries }: { kitnets: Tables<"kitnets">
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
       {kitnets.map(k => {
         const fechamento = entries.find(e => e.kitnet_id === k.id);
-        // Status histórico: se tem entry no mês = ocupada, senão = vaga
-        const isOccupied = !!fechamento;
-        const s = isOccupied ? statusLabels.occupied : statusLabels.vacant;
-        // Nome do inquilino: usa o do entry (histórico) ou o atual se não tiver entry
-        const tenantName = (fechamento as any)?.tenant_name || (isOccupied ? k.tenant_name : null);
-        const rentValue = fechamento?.rent_gross ?? k.rent_value ?? 0;
+        const prevFechamento = prevEntries.find(e => e.kitnet_id === k.id);
+        // Ocupada = tem entry atual OU tinha entry no mês anterior
+        const isOccupied = !!fechamento || !!prevFechamento;
+        // Recebido no mês atual
+        const isReceived = !!fechamento;
+        // Badge: recebido = verde, ocupada sem receber = âmbar, vaga = vermelho
+        const s = isReceived ? statusLabels.occupied : isOccupied ? { label: "Aguardando", variant: "gold" as const } : statusLabels.vacant;
+        // Nome: do entry atual, ou do mês anterior se ainda não recebido
+        const tenantName = (fechamento as any)?.tenant_name || (prevFechamento as any)?.tenant_name || null;
+        const rentValue = fechamento?.rent_gross ?? prevFechamento?.rent_gross ?? k.rent_value ?? 0;
         return (
           <PremiumCard key={k.id} className="relative p-4">
             <div className="flex items-center justify-between mb-2">
@@ -168,9 +180,13 @@ function KitnetGrid({ kitnets, onManage, entries }: { kitnets: Tables<"kitnets">
                   Fechado · {formatCurrency(fechamento.total_liquid ?? 0)}
                 </span>
               </div>
+            ) : isOccupied ? (
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg mt-1" style={{ background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.3)' }}>
+                <span className="text-xs font-medium" style={{ color: '#C9A84C' }}>⏳ Aguardando fechamento</span>
+              </div>
             ) : (
-              <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg mt-1" style={{ background: 'rgba(148,163,184,0.08)', border: '1px solid rgba(148,163,184,0.2)' }}>
-                <span className="text-xs" style={{ color: '#64748B' }}>— Sem fechamento</span>
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg mt-1" style={{ background: 'rgba(244,63,94,0.08)', border: '1px solid rgba(244,63,94,0.2)' }}>
+                <span className="text-xs" style={{ color: '#F43F5E' }}>— Vaga</span>
               </div>
             )}
 
