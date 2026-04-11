@@ -192,6 +192,7 @@ export type Database = {
           description: string | null
           external_id: string | null
           id: string
+          kitnet_entry_id: string | null
           matched_expense_id: string | null
           matched_revenue_id: string | null
           raw_data: Json | null
@@ -213,6 +214,7 @@ export type Database = {
           description?: string | null
           external_id?: string | null
           id?: string
+          kitnet_entry_id?: string | null
           matched_expense_id?: string | null
           matched_revenue_id?: string | null
           raw_data?: Json | null
@@ -234,6 +236,7 @@ export type Database = {
           description?: string | null
           external_id?: string | null
           id?: string
+          kitnet_entry_id?: string | null
           matched_expense_id?: string | null
           matched_revenue_id?: string | null
           raw_data?: Json | null
@@ -248,6 +251,13 @@ export type Database = {
             columns: ["bank_account_id"]
             isOneToOne: false
             referencedRelation: "bank_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bank_transactions_kitnet_entry_id_fkey"
+            columns: ["kitnet_entry_id"]
+            isOneToOne: false
+            referencedRelation: "kitnet_entries"
             referencedColumns: ["id"]
           },
           {
@@ -801,6 +811,7 @@ export type Database = {
           reference_month: string | null
           rent_gross: number | null
           semasa: number | null
+          tenant_name: string | null
           total_liquid: number | null
         }
         Insert: {
@@ -820,6 +831,7 @@ export type Database = {
           reference_month?: string | null
           rent_gross?: number | null
           semasa?: number | null
+          tenant_name?: string | null
           total_liquid?: number | null
         }
         Update: {
@@ -839,6 +851,7 @@ export type Database = {
           reference_month?: string | null
           rent_gross?: number | null
           semasa?: number | null
+          tenant_name?: string | null
           total_liquid?: number | null
         }
         Relationships: [
