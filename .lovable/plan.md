@@ -1,25 +1,37 @@
 
 
-# Botão Apagar fechamento + tooltip com data no badge "Último fechamento"
+# Corrigir build errors + filtro de dúvidas
 
-## Mudanças (arquivo único: `src/components/wt7/KitnetModal.tsx`)
+## Problema
+3 fontes de erro:
 
-### 1. Criar hook `useDeleteKitnetEntry` em `src/hooks/useKitnets.ts`
-- Mutation que executa `supabase.from("kitnet_entries").delete().eq("id", id)`
-- Invalidar queries `["kitnet-fechamentos"]` e `["kitnet-entries"]` no onSuccess
+1. **`kitnet_entry_id` não existe** na tabela `bank_transactions` — o código referencia essa coluna mas ela nunca foi criada no banco
+2. **`category_label`** também não existe nos types (linha 196 do hook) — mesma situação
+3. **Filtro de dúvidas** na ReconciliationPage (linha 769) exclui transações pendentes sem `category_intent === "duvida"`
 
-### 2. Botão Apagar ao lado do badge "Último fechamento"
-- Adicionar botão vermelho com ícone `Trash2` entre o badge "Último fechamento" e o botão "Editar" (linha ~302-307)
-- Confirmar exclusão com `window.confirm("Deseja realmente apagar este fechamento?")`
-- Ao apagar, chamar `deleteKitnetEntry.mutateAsync(displayed.id)` e exibir toast
+## Mudanças
 
-### 3. Tooltip no badge "Último fechamento"
-- Usar o campo `created_at` (ou `updated_at`) do registro `displayed` para mostrar a data de lançamento
-- Adicionar `title` attribute no `<span>` do badge com texto: `"Lançado em DD/MM/YYYY às HH:MM"`
-- Alternativamente, usar componente `Tooltip` do shadcn para melhor UX
+### 1. Migration: adicionar colunas faltantes em `bank_transactions`
+```sql
+ALTER TABLE public.bank_transactions 
+  ADD COLUMN IF NOT EXISTS kitnet_entry_id uuid REFERENCES public.kitnet_entries(id) ON DELETE SET NULL;
+```
+Nota: `category_label` já existe nos types (linha 188), então o erro de `category_label` na linha 196 do hook é na verdade sobre `kitnet_entry_id`. Confirmado: os erros TS2322 nas linhas 87 e 196 são sobre `kitnet_entry_id` que não existe no tipo Update.
 
-### Detalhes técnicos
-- O botão Apagar só aparece quando há um fechamento exibido (`displayed` não é null)
-- Após apagar, o componente recarrega via invalidação do TanStack Query
-- O badge "Último fechamento" só aparece quando `selectedMonth === null`, mantendo essa lógica
+### 2. `src/pages/ReconciliationPage.tsx` (linha 769)
+Alterar o filtro de dúvidas:
+```typescript
+// ANTES
+const doubts = allTransactions.filter((t: any) => t.category_intent === "duvida" && t.status === "pending");
+// DEPOIS
+const doubts = allTransactions.filter((t: any) => t.status === "pending");
+```
+
+### 3. `src/hooks/useBankReconciliation.ts` + `src/pages/KitnetsReportPage.tsx`
+Após a migration ser aplicada e os types regenerados, os erros TS desaparecem automaticamente. Enquanto isso, adicionar casts `as any` temporários onde necessário para destravar o build.
+
+## Ordem de execução
+1. Criar migration para `kitnet_entry_id`
+2. Corrigir filtro na ReconciliationPage
+3. Adicionar casts `as any` nos pontos com erro de tipo para destravar build imediatamente
 
