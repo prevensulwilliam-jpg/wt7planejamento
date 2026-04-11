@@ -282,7 +282,7 @@ function FechamentosTab({ kitnet }: { kitnet: Tables<"kitnets"> }) {
         </GoldButton>
       </div>
 
-      {showForm && <FechamentoForm kitnet={kitnet} onSaved={() => setShowForm(false)} defaultMonth={displayMonth ?? getCurrentMonth()} />}
+      {showForm && <FechamentoForm kitnet={kitnet} onSaved={() => setShowForm(false)} defaultMonth={getCurrentMonth()} />}
       {editingEntry && (
         <FechamentoForm
           kitnet={kitnet}
