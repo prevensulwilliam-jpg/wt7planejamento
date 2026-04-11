@@ -19,33 +19,50 @@ export const REVENUE_SOURCE_MAP: Record<string, { emoji: string; name: string; c
 
 // Despesas (expenses.category)
 export const EXPENSE_CATEGORY_MAP: Record<string, { emoji: string; name: string; color: string }> = {
+  // Aliases legacy
   cartao_credito:       { emoji: "💳", name: "Cartão de Crédito",      color: "#F43F5E" },
   cartao:               { emoji: "💳", name: "Cartão de Crédito",      color: "#F43F5E" },
-  energia_eletrica:     { emoji: "⚡", name: "Energia Elétrica",       color: "#F59E0B" },
-  internet:             { emoji: "🌐", name: "Internet",               color: "#3B82F6" },
-  telefonia:            { emoji: "📱", name: "Telefonia",              color: "#8B5CF6" },
-  lazer:                { emoji: "🎉", name: "Lazer",                  color: "#EC4899" },
-  alimentacao:          { emoji: "🍽️", name: "Alimentação",            color: "#F59E0B" },
-  suplementos:          { emoji: "💊", name: "Suplementação",          color: "#8B5CF6" },
-  saude:                { emoji: "🏥", name: "Saúde",                  color: "#10B981" },
-  maconaria:            { emoji: "🔷", name: "Maçonaria",              color: "#2DD4BF" },
-  guarani:              { emoji: "⚽", name: "Guarani",                color: "#10B981" },
-  consorcio:            { emoji: "🔄", name: "Consórcio",              color: "#C9A84C" },
-  terapia:              { emoji: "🧠", name: "Terapia",                color: "#8B5CF6" },
-  obras:                { emoji: "🏗️", name: "Obras",                  color: "#F59E0B" },
-  terrenos:             { emoji: "🌍", name: "Terrenos",               color: "#10B981" },
-  agua:                 { emoji: "💧", name: "Água",                   color: "#3B82F6" },
-  gasolina:             { emoji: "⛽", name: "Gasolina",               color: "#F43F5E" },
-  farmacia:             { emoji: "💊", name: "Farmácia",               color: "#10B981" },
-  academia:             { emoji: "🏋️", name: "Academia",              color: "#2DD4BF" },
-  impostos:             { emoji: "🧾", name: "Impostos/Taxas",         color: "#F43F5E" },
-  casamento:            { emoji: "💍", name: "Casamento",              color: "#EC4899" },
-  assinaturas:          { emoji: "📲", name: "Assinaturas",            color: "#6366F1" },
-  veiculo:              { emoji: "🚗", name: "Veículo",                color: "#94A3B8" },
-  kitnets_manutencao:   { emoji: "🔧", name: "Kitnets Manutenção",     color: "#F97316" },
+  cartao_de_credito:    { emoji: "💳", name: "Cartão de Crédito",      color: "#F43F5E" },
   energia_agua:         { emoji: "💧", name: "Energia/Água",           color: "#3B82F6" },
-  gas:                  { emoji: "🔥", name: "Gás",                    color: "#F97316" },
+  agua:                 { emoji: "💧", name: "Água",                   color: "#3B82F6" },
+  kitnets_manutencao:   { emoji: "🔧", name: "Kitnets Manutenção",     color: "#F97316" },
+  // Slugs com acento removido (gerados por versões antigas)
+  ma_onaria:            { emoji: "🔷", name: "Maçonaria",              color: "#2DD4BF" },
+  ve_culo:              { emoji: "🚗", name: "Veículo",                color: "#94A3B8" },
+  cons_rcio:            { emoji: "🔄", name: "Consórcio",              color: "#C9A84C" },
+  suplementa_o:         { emoji: "💊", name: "Suplementação",          color: "#8B5CF6" },
+  // Categorias atuais
+  academia:             { emoji: "🏋️", name: "Academia",              color: "#2DD4BF" },
+  alimentacao:          { emoji: "🍽️", name: "Alimentação",            color: "#F59E0B" },
   aluguel:              { emoji: "🏠", name: "Aluguel",                color: "#F43F5E" },
+  assinaturas:          { emoji: "📲", name: "Assinaturas",            color: "#6366F1" },
+  camila:               { emoji: "💛", name: "Camila",                 color: "#F59E0B" },
+  casamento:            { emoji: "💍", name: "Casamento",              color: "#EC4899" },
+  consorcio:            { emoji: "🔄", name: "Consórcio",              color: "#C9A84C" },
+  energia_eletrica:     { emoji: "⚡", name: "Energia Elétrica",       color: "#F59E0B" },
+  estudos:              { emoji: "📚", name: "Estudos",                color: "#3B82F6" },
+  estudo:               { emoji: "📚", name: "Estudos",                color: "#3B82F6" },
+  familia:              { emoji: "👨‍👩‍👧", name: "Família",            color: "#10B981" },
+  farmacia:             { emoji: "💊", name: "Farmácia",               color: "#10B981" },
+  gas:                  { emoji: "🔥", name: "Gás",                    color: "#F97316" },
+  gasolina:             { emoji: "⛽", name: "Gasolina",               color: "#F43F5E" },
+  guarani:              { emoji: "⚽", name: "Guarani",                color: "#10B981" },
+  impostos:             { emoji: "🧾", name: "Impostos/Taxas",         color: "#F43F5E" },
+  impostos_taxas:       { emoji: "🧾", name: "Impostos/Taxas",         color: "#F43F5E" },
+  internet:             { emoji: "🌐", name: "Internet",               color: "#3B82F6" },
+  lazer:                { emoji: "🎉", name: "Lazer",                  color: "#EC4899" },
+  maconaria:            { emoji: "🔷", name: "Maçonaria",              color: "#2DD4BF" },
+  obras:                { emoji: "🏗️", name: "Obras",                  color: "#F59E0B" },
+  plataformas_ia:       { emoji: "🤖", name: "Plataformas de IA",      color: "#8B5CF6" },
+  plataformas_de_ia:    { emoji: "🤖", name: "Plataformas de IA",      color: "#8B5CF6" },
+  saude:                { emoji: "🏥", name: "Saúde",                  color: "#10B981" },
+  suplementos:          { emoji: "💊", name: "Suplementação",          color: "#8B5CF6" },
+  suplementacao:        { emoji: "💊", name: "Suplementação",          color: "#8B5CF6" },
+  telefonia:            { emoji: "📱", name: "Telefonia",              color: "#8B5CF6" },
+  terapia:              { emoji: "🧠", name: "Terapia",                color: "#8B5CF6" },
+  terrenos:             { emoji: "🌍", name: "Terrenos",               color: "#10B981" },
+  veiculo:              { emoji: "🚗", name: "Veículo",                color: "#94A3B8" },
+  viagens:              { emoji: "✈️", name: "Viagens",                color: "#3B82F6" },
   outros:               { emoji: "📦", name: "Outros",                 color: "#4A5568" },
 };
 
@@ -54,7 +71,6 @@ export function getRevenueDisplay(source: string | null) {
   if (!source) return { emoji: "💰", name: "Outros", color: "#C9A84C" };
   const found = REVENUE_SOURCE_MAP[source];
   if (found) return found;
-  // Fallback: formatar o slug para leitura
   const readable = source.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
   return { emoji: "💰", name: readable, color: "#C9A84C" };
 }
