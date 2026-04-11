@@ -68,19 +68,32 @@ export default function ExpensesPage() {
     return counts;
   }, [expenses]);
 
-  // All categories from map + any in data not in map, sorted by usage
+  // All categories: banco (custom_categories) como fonte primária, fallback para EXPENSE_CATEGORY_MAP
   const allCategoryOptions = useMemo(() => {
     const seen = new Set<string>();
     const options: { value: string; label: string; emoji: string; name: string; color: string }[] = [];
-    // From static map (dedupe by name to avoid alias duplicates like cartao/cartao_credito)
-    const namesSeen = new Set<string>();
-    Object.entries(EXPENSE_CATEGORY_MAP).forEach(([value, cat]) => {
-      if (namesSeen.has(cat.name)) return;
-      namesSeen.add(cat.name);
-      options.push({ value, label: `${cat.emoji} ${cat.name}`, emoji: cat.emoji, name: cat.name, color: cat.color });
-      seen.add(value);
-    });
-    // Add any from data not in map
+
+    // 1. Fonte primária: categorias do banco
+    if (categories.length > 0) {
+      categories.forEach((c: any) => {
+        const value = c.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+        if (!seen.has(value)) {
+          options.push({ value, label: `${c.emoji} ${c.name}`, emoji: c.emoji, name: c.name, color: c.color ?? "#94A3B8" });
+          seen.add(value);
+        }
+      });
+    } else {
+      // Fallback: mapa estático (dedupe por nome)
+      const namesSeen = new Set<string>();
+      Object.entries(EXPENSE_CATEGORY_MAP).forEach(([value, cat]) => {
+        if (namesSeen.has(cat.name)) return;
+        namesSeen.add(cat.name);
+        options.push({ value, label: `${cat.emoji} ${cat.name}`, emoji: cat.emoji, name: cat.name, color: cat.color });
+        seen.add(value);
+      });
+    }
+
+    // 2. Adicionar slugs que existem nos dados mas não no banco (legado)
     expenses.forEach(e => {
       if (e.category && !seen.has(e.category)) {
         const display = getExpenseDisplay(e.category);
@@ -88,8 +101,9 @@ export default function ExpensesPage() {
         seen.add(e.category);
       }
     });
+
     return options.sort((a, b) => (categoryCounts[b.value] ?? 0) - (categoryCounts[a.value] ?? 0) || a.name.localeCompare(b.name));
-  }, [expenses, categoryCounts]);
+  }, [categories, expenses, categoryCounts]);
 
   const getCategoryDisplay = (catValue: string | null) => {
     const display = getExpenseDisplay(catValue);
