@@ -16,9 +16,11 @@ import {
   useKitnetFechamentos,
   useCreateKitnetEntry,
   useUpdateKitnetEntry,
+  useDeleteKitnetEntry,
   useLastEnergyReading,
   useCelescInvoices,
 } from "@/hooks/useKitnets";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatCurrency, formatMonth, getCurrentMonth } from "@/lib/formatters";
 import { DEFAULT_ENERGY_TARIFF } from "@/lib/constants";
 import { Upload, FileText, Trash2, Plus, Zap, Printer, Pencil } from "lucide-react";
@@ -225,7 +227,9 @@ function ContratoTab({ kitnet, onUpdated }: { kitnet: Tables<"kitnets">; onUpdat
 
 // ─── ABA FECHAMENTOS ───
 function FechamentosTab({ kitnet }: { kitnet: Tables<"kitnets"> }) {
+  const { toast } = useToast();
   const { data: fechamentos, isLoading } = useKitnetFechamentos(kitnet.id);
+  const deleteEntry = useDeleteKitnetEntry();
   const [showForm, setShowForm] = useState(false);
   const [editingEntry, setEditingEntry] = useState<any | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
@@ -301,10 +305,35 @@ function FechamentosTab({ kitnet }: { kitnet: Tables<"kitnets"> }) {
             <p className="text-sm font-medium text-foreground">{formatMonth(displayed.reference_month ?? "")}</p>
             <div className="flex items-center gap-2">
               {selectedMonth === null && (
-                <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(232,201,122,0.15)', color: '#E8C97A' }}>
-                  Último fechamento
-                </span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="text-xs px-2 py-0.5 rounded-full cursor-default" style={{ background: 'rgba(232,201,122,0.15)', color: '#E8C97A' }}>
+                        Último fechamento
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      Lançado em {displayed.created_at ? new Date(displayed.created_at).toLocaleDateString("pt-BR") + " às " + new Date(displayed.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "data desconhecida"}
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               )}
+              <button
+                onClick={async () => {
+                  if (!window.confirm("Deseja realmente apagar este fechamento?")) return;
+                  try {
+                    await deleteEntry.mutateAsync(displayed.id);
+                    toast({ title: "Fechamento apagado com sucesso" });
+                  } catch {
+                    toast({ title: "Erro ao apagar fechamento", variant: "destructive" });
+                  }
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                style={{ background: 'rgba(239,68,68,0.12)', color: '#F87171', border: '1px solid rgba(239,68,68,0.3)' }}
+                title="Apagar fechamento"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Apagar
+              </button>
               <button
                 onClick={() => handleEdit(displayed)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
