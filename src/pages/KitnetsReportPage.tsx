@@ -67,7 +67,7 @@ export default function KitnetsReportPage() {
       const end = new Date(+y, +m, 0).toISOString().split("T")[0];
       const { data, error } = await supabase
         .from("bank_transactions")
-        .select("amount, kitnet_entry_id")
+        .select("amount, kitnet_entry_id" as any)
         .eq("type", "credit")
         .eq("category_confirmed", "aluguel_kitnets")
         .gte("date", start)

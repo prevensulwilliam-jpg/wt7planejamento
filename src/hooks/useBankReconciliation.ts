@@ -84,7 +84,7 @@ export function useMatchTransaction() {
           status: "matched",
           matched_revenue_id: revenueId ?? null,
           matched_expense_id: expenseId ?? null,
-          kitnet_entry_id: kitnetEntryId ?? null,
+          kitnet_entry_id: kitnetEntryId ?? null as any,
         })
         .eq("id", id);
       if (error) throw error;
@@ -193,7 +193,7 @@ export function useAutoMatchKitnets() {
             category_intent: "receita",
             category_label: `${(entryMatch as any).kitnets?.code} - ${(entryMatch as any).kitnets?.tenant_name}`,
             status: "matched",
-            kitnet_entry_id: entryMatch.id,
+            kitnet_entry_id: entryMatch.id as any,
             matched_revenue_id: revenueMatch?.id ?? null,
           })
           .eq("id", credit.id);
