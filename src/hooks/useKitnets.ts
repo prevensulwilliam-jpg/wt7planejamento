@@ -84,13 +84,11 @@ export function useCreateKitnetEntry() {
       const { error } = await supabase.from("kitnet_entries").insert(entryData);
       if (error) throw error;
 
-      // Auto-create revenue for bank reconciliation matching by value
       if (entryData.total_liquid && entryData.total_liquid > 0 && entryData.reference_month) {
         const description = _kitnetCode
           ? `Repasse ${_kitnetCode}${_tenantName ? ` — ${_tenantName}` : ""}`
           : "Repasse Kitnet";
 
-        // Avoid duplicates: check if revenue already exists for this kitnet+month
         const { data: existing } = await supabase
           .from("revenues")
           .select("id")
@@ -137,11 +135,13 @@ export function useKitnetSummary(month: string) {
   const prevEntryData = prevEntries.data ?? [];
 
   const kitnetIdsWithEntry = new Set(entryData.map(e => e.kitnet_id));
-  const kitnetIdsWithPrevEntry = new Set(prevEntryData.map(e => e.kitnet_id));
 
-  const occupied = data.filter(k => kitnetIdsWithEntry.has(k.id) || kitnetIdsWithPrevEntry.has(k.id)).length;
+  // Ocupada = status no banco (definido manualmente)
+  const occupied = data.filter(k => k.status === "occupied" || k.status === "maintenance").length;
+  // Recebido = tem entry no mês atual
   const received = data.filter(k => kitnetIdsWithEntry.has(k.id)).length;
-  const vacant = data.filter(k => !kitnetIdsWithEntry.has(k.id) && !kitnetIdsWithPrevEntry.has(k.id)).length;
+  // Vaga = status vacant no banco
+  const vacant = data.filter(k => k.status === "vacant" || !k.status).length;
   const maintenance = data.filter(k => k.status === "maintenance").length;
   const totalReceived = entryData.reduce((s, e) => s + (e.total_liquid ?? 0), 0);
 
@@ -196,11 +196,10 @@ export function useEnergyReadings(month: string, residencialCode?: string) {
   return useQuery({
     queryKey: ["energy_readings", month, residencialCode],
     queryFn: async () => {
-      let q = supabase
+      const { data, error } = await supabase
         .from("energy_readings")
         .select("*, kitnets(code, tenant_name, residencial_code, unit_number)")
         .eq("reference_month", month);
-      const { data, error } = await q;
       if (error) throw error;
       if (residencialCode) {
         return data.filter((r: any) => r.kitnets?.residencial_code === residencialCode);
@@ -211,7 +210,7 @@ export function useEnergyReadings(month: string, residencialCode?: string) {
   });
 }
 
-// ─── Kitnet Entries by kitnet ───
+// ─── Kitnet Fechamentos ───
 export function useKitnetFechamentos(kitnetId: string | null) {
   return useQuery({
     queryKey: ["kitnet_fechamentos", kitnetId],
@@ -228,7 +227,7 @@ export function useKitnetFechamentos(kitnetId: string | null) {
   });
 }
 
-// ─── Last energy reading for a kitnet ───
+// ─── Last energy reading ───
 export function useLastEnergyReading(kitnetId: string | null) {
   return useQuery({
     queryKey: ["last_energy_reading", kitnetId],
@@ -352,36 +351,4 @@ export function useDeleteKitnetEntry() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (entryId: string) => {
-      const { error } = await supabase.from("kitnet_entries").delete().eq("id", entryId);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["kitnet_entries"] });
-      qc.invalidateQueries({ queryKey: ["kitnet_entries_unreconciled"] });
-      qc.invalidateQueries({ queryKey: ["kitnet_entries_unreconciled_count"] });
-      qc.invalidateQueries({ queryKey: ["kitnet_fechamentos"] });
-      qc.invalidateQueries({ queryKey: ["kitnet_entries_for"] });
-    },
-  });
-}
-
-// ─── Energy Readings Summary ───
-export function useEnergyReadingsSummary(month: string) {
-  return useQuery({
-    queryKey: ["energy_readings_summary", month],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("energy_readings")
-        .select("amount_to_charge, kitnet:kitnets(residencial_code)")
-        .eq("reference_month", month);
-      if (error) throw error;
-      const summary: Record<string, number> = {};
-      (data ?? []).forEach((r: any) => {
-        const code = r.kitnet?.residencial_code;
-        if (code) summary[code] = (summary[code] ?? 0) + (r.amount_to_charge ?? 0);
-      });
-      return summary;
-    },
-    enabled: !!month,
-  });
-}
+      const { error } = await supabase.fr
