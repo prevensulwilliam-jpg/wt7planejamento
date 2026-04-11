@@ -191,6 +191,56 @@ function InvoicesTab() {
     }
   };
 
+  const CREDIFOZ_ID = "6b18a2de-d94a-43ee-8ff0-cf8c35041e9e";
+
+  const handleConciliar = async (inv: any) => {
+    if (inv.payment_date && inv.amount_paid > 0) {
+      toast({ title: "Fatura já conciliada", description: `Paga em ${new Date(inv.payment_date + "T12:00:00").toLocaleDateString("pt-BR")}` });
+      return;
+    }
+    try {
+      // Buscar débitos CELESC na Credifoz no mês da fatura ± 15 dias do vencimento
+      const { data: txs } = await supabase
+        .from("bank_transactions" as any)
+        .select("*")
+        .eq("bank_account_id", CREDIFOZ_ID)
+        .eq("type", "debit")
+        .ilike("description", "%celesc%")
+        .gte("date", inv.reference_month + "-01")
+        .lte("date", inv.reference_month + "-31");
+
+      if (!txs?.length) {
+        toast({ title: "Nenhum pagamento encontrado", description: "Não encontrei débito CELESC na Credifoz neste mês.", variant: "destructive" });
+        return;
+      }
+
+      // Pegar o mais próximo do valor da fatura (tolerância 10%)
+      const invoiceVal = inv.invoice_total ?? 0;
+      const best = (txs as any[]).reduce((prev: any, curr: any) => {
+        const diffPrev = Math.abs(prev.amount - invoiceVal);
+        const diffCurr = Math.abs(curr.amount - invoiceVal);
+        return diffCurr < diffPrev ? curr : prev;
+      });
+
+      const diff = Math.abs(best.amount - invoiceVal) / invoiceVal;
+      if (diff > 0.15) {
+        toast({ title: "Match incerto", description: `Encontrei R$${best.amount} mas difere ${(diff*100).toFixed(0)}% da fatura. Confirme manualmente.`, variant: "destructive" });
+        return;
+      }
+
+      // Atualizar fatura com data e valor do pagamento
+      await updateMut.mutateAsync({
+        id: inv.id,
+        payment_date: best.date,
+        amount_paid: best.amount,
+      });
+
+      toast({ title: "✅ Conciliado!", description: `Pagamento de ${formatCurrency(best.amount)} em ${new Date(best.date + "T12:00:00").toLocaleDateString("pt-BR")} vinculado.` });
+    } catch (e: any) {
+      toast({ title: "Erro na conciliação", description: e.message, variant: "destructive" });
+    }
+  };
+
   const set = (key: string, val: string) => setForm(f => ({ ...f, [key]: val }));
 
   return (
@@ -236,12 +286,26 @@ function InvoicesTab() {
                   <TableCell className="font-mono text-foreground">{formatCurrency(inv.amount_paid ?? 0)}</TableCell>
                   <TableCell className="font-mono text-foreground">R$ {(inv.tariff_per_kwh ?? 0).toFixed(4)}</TableCell>
                   <TableCell>
-                    <button
-                      onClick={() => handleEdit(inv)}
-                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded border border-border hover:border-[#E8C97A]/50"
-                    >
-                      <Pencil className="w-3 h-3" /> Editar
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleEdit(inv)}
+                        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded border border-border hover:border-[#E8C97A]/50"
+                      >
+                        <Pencil className="w-3 h-3" /> Editar
+                      </button>
+                      <button
+                        onClick={() => handleConciliar(inv)}
+                        className="flex items-center gap-1 text-xs px-2 py-1 rounded border transition-colors"
+                        style={
+                          inv.payment_date
+                            ? { color: "#10B981", borderColor: "rgba(16,185,129,0.4)", background: "rgba(16,185,129,0.08)" }
+                            : { color: "#E8C97A", borderColor: "rgba(232,201,122,0.4)", background: "rgba(232,201,122,0.08)" }
+                        }
+                        title={inv.payment_date ? "Já conciliada" : "Buscar pagamento no extrato"}
+                      >
+                        {inv.payment_date ? "✓ Paga" : "⚡ Conciliar"}
+                      </button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
