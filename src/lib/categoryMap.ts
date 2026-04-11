@@ -25,6 +25,8 @@ export const EXPENSE_CATEGORY_MAP: Record<string, { emoji: string; name: string;
   cartao_de_credito:    { emoji: "💳", name: "Cartão de Crédito",      color: "#F43F5E" },
   energia_agua:         { emoji: "💧", name: "Energia/Água",           color: "#3B82F6" },
   agua:                 { emoji: "💧", name: "Água",                   color: "#3B82F6" },
+  kitnets_energia:      { emoji: "⚡", name: "Kitnets Energia",        color: "#F59E0B" },
+  kitnets_agua:         { emoji: "💧", name: "Kitnets Água",           color: "#3B82F6" },
   kitnets_manutencao:   { emoji: "🔧", name: "Kitnets Manutenção",     color: "#F97316" },
   // Slugs com acento removido (gerados por versões antigas)
   ma_onaria:            { emoji: "🔷", name: "Maçonaria",              color: "#2DD4BF" },
