@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -332,11 +332,6 @@ function EnergiaTab({ month }: { month: string }) {
       ]);
     });
 
-    rows.push([]);
-    rows.push(["Total Cobrado Inquilinos", "", "", "", "", totals.totalCharged.toFixed(2)]);
-    rows.push(["Fatura CELESC Paga", "", "", "", "", totals.invoicePaid.toFixed(2)]);
-    rows.push(["Margem Solar", "", "", "", "", totals.margin.toFixed(2)]);
-
     const csv = rows.map(r => r.map(c => `"${c}"`).join(";")).join("\n");
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -451,13 +446,6 @@ function EnergiaTab({ month }: { month: string }) {
         </div>
       )}
 
-      {tariff > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <KpiCard label="Total Cobrado Inquilinos" value={totals.totalCharged} color="gold" />
-          <KpiCard label="Fatura CELESC Paga" value={totals.invoicePaid} color="red" />
-          <KpiCard label="Margem Solar" value={totals.margin} color="green" />
-        </div>
-      )}
     </div>
   );
 }
