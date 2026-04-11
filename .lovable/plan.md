@@ -1,16 +1,25 @@
 
 
-# Atualizar wisely-ai — RECONCILE_PROMPT melhorado
+# Botão Apagar fechamento + tooltip com data no badge "Último fechamento"
 
-## O que muda
-Arquivo único: `supabase/functions/wisely-ai/index.ts`
+## Mudanças (arquivo único: `src/components/wt7/KitnetModal.tsx`)
 
-O `RECONCILE_PROMPT` será substituído pela versão expandida que:
-1. Analisa créditos E débitos (antes só focava em créditos)
-2. Sugere categorias para débitos conhecidos (cartão, conta de luz, etc.)
-3. Pergunta sobre débitos não identificados (PIX, TED, cheque)
-4. Calcula saldo do mês e compara com esperado (~R$40k)
-5. Formato de resposta mais completo com seções para entradas e saídas não identificadas
+### 1. Criar hook `useDeleteKitnetEntry` em `src/hooks/useKitnets.ts`
+- Mutation que executa `supabase.from("kitnet_entries").delete().eq("id", id)`
+- Invalidar queries `["kitnet-fechamentos"]` e `["kitnet-entries"]` no onSuccess
 
-Nenhuma mudança na lógica JavaScript — apenas o texto do prompt `RECONCILE_PROMPT` é atualizado. Os demais modos (chat Naval, extract-celesc) permanecem inalterados.
+### 2. Botão Apagar ao lado do badge "Último fechamento"
+- Adicionar botão vermelho com ícone `Trash2` entre o badge "Último fechamento" e o botão "Editar" (linha ~302-307)
+- Confirmar exclusão com `window.confirm("Deseja realmente apagar este fechamento?")`
+- Ao apagar, chamar `deleteKitnetEntry.mutateAsync(displayed.id)` e exibir toast
+
+### 3. Tooltip no badge "Último fechamento"
+- Usar o campo `created_at` (ou `updated_at`) do registro `displayed` para mostrar a data de lançamento
+- Adicionar `title` attribute no `<span>` do badge com texto: `"Lançado em DD/MM/YYYY às HH:MM"`
+- Alternativamente, usar componente `Tooltip` do shadcn para melhor UX
+
+### Detalhes técnicos
+- O botão Apagar só aparece quando há um fechamento exibido (`displayed` não é null)
+- Após apagar, o componente recarrega via invalidação do TanStack Query
+- O badge "Último fechamento" só aparece quando `selectedMonth === null`, mantendo essa lógica
 
