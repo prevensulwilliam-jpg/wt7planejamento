@@ -41,6 +41,26 @@ export default function KitnetsReportPage() {
     },
   });
 
+  // Buscar valor depositado da conciliação bancária
+  // Créditos categorizados como aluguel_kitnets no mês
+  const { data: bankDeposits } = useQuery({
+    queryKey: ["bank_deposits_kitnets", month],
+    queryFn: async () => {
+      const [y, m] = month.split("-");
+      const start = `${y}-${m}-01`;
+      const end = new Date(+y, +m, 0).toISOString().split("T")[0];
+      const { data, error } = await supabase
+        .from("bank_transactions")
+        .select("amount, date, description")
+        .eq("type", "credit")
+        .eq("category_confirmed", "aluguel_kitnets")
+        .gte("date", start)
+        .lte("date", end);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
   const filtered = (entries ?? []).filter(e => {
     if (complex === "todos") return true;
     return (e as any).kitnets?.residencial_code === complex;
@@ -53,7 +73,12 @@ export default function KitnetsReportPage() {
 
   const totalPrevisto = filtered.reduce((s, e) => s + (e.rent_gross ?? 0), 0);
   const totalLiquido = filtered.reduce((s, e) => s + (e.total_liquid ?? 0), 0);
-  const totalDepositado = totalLiquido;
+  const totalDepositadoBanco = (bankDeposits ?? []).reduce((s, t) => s + Math.abs(t.amount ?? 0), 0);
+  const totalDepositado = totalDepositadoBanco > 0 ? totalDepositadoBanco : totalLiquido;
+
+  // Diagnóstico: diferença entre depositado e líquido ADM
+  const diferenca = totalDepositadoBanco > 0 ? totalLiquido - totalDepositadoBanco : 0;
+  const temDivergencia = Math.abs(diferenca) > 1; // tolerância de R$1 para arredondamentos
   const totalCobradoInquilinos = filteredEnergy.reduce((s, e) => s + ((e as any).amount_to_charge ?? 0), 0);
   const totalFaturasCelesc = (celescInvoices ?? []).reduce((s, inv) => s + ((inv as any).invoice_total ?? 0), 0);
   const saldoSolar = totalCobradoInquilinos - totalFaturasCelesc;
@@ -133,7 +158,9 @@ export default function KitnetsReportPage() {
         <div className="rounded-2xl p-5 space-y-1" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
           <p className="text-xs uppercase font-mono tracking-widest" style={{ color: '#94A3B8' }}>Valor Depositado</p>
           <p className="font-mono text-2xl font-bold" style={{ color: '#2DD4BF' }}>{formatCurrency(totalDepositado)}</p>
-          <p className="text-xs" style={{ color: '#4A5568' }}>Valor recebido em conta corrente</p>
+          <p className="text-xs" style={{ color: '#4A5568' }}>
+            {totalDepositadoBanco > 0 ? "Conciliado no extrato bancário" : "Estimado pelo líquido ADM"}
+          </p>
         </div>
 
         {/* Saldo Solar com tooltip */}
@@ -159,6 +186,23 @@ export default function KitnetsReportPage() {
         </div>
 
       </div>
+
+      {/* Alerta Naval quando há divergência entre depositado e líquido ADM */}
+      {temDivergencia && (
+        <div className="rounded-2xl p-4 flex items-start gap-3" style={{ background: 'rgba(201,168,76,0.08)', border: '1px solid rgba(201,168,76,0.3)' }}>
+          <span className="text-lg">⚓</span>
+          <div>
+            <p className="font-bold text-sm" style={{ color: '#E8C97A' }}>Naval — Divergência detectada em {formatMonth(month)}</p>
+            <p className="text-sm mt-1" style={{ color: '#94A3B8' }}>
+              O valor líquido do ADM é <span style={{ color: '#10B981' }}>{formatCurrency(totalLiquido)}</span> mas foram identificados apenas <span style={{ color: '#2DD4BF' }}>{formatCurrency(totalDepositadoBanco)}</span> em depósitos de aluguel no extrato bancário.
+              {diferenca > 0
+                ? <> A diferença de <span style={{ color: '#F43F5E' }}>{formatCurrency(diferenca)}</span> ainda não foi localizada no extrato. Verifique: (1) depósitos pendentes de conciliação, (2) aluguéis em atraso, (3) depósitos em outra conta.</>
+                : <> O extrato mostra <span style={{ color: '#F43F5E' }}>{formatCurrency(Math.abs(diferenca))}</span> a mais do que o ADM repassou. Verifique se há depósitos de outros meses categorizados incorretamente.</>
+              }
+            </p>
+          </div>
+        </div>
+      )}
 
       {isLoading ? <Skeleton className="h-64 rounded-2xl" /> : (
         <>
