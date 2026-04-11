@@ -138,6 +138,7 @@ function OverviewTab({ month, setMonth }: { month: string; setMonth: (v: string)
           kitnet={selected}
           onClose={() => setSelected(null)}
           onUpdated={() => refetch()}
+          defaultMonth={month}
         />
       )}
     </div>
