@@ -84,11 +84,48 @@ const EXPENSE_RULES: { keywords: string[]; category: string; label: string }[] =
   { keywords: ["conveniencias rodoviaria"], category: "alimentacao", label: "Alimentação" },
 ];
 
+// IDs fixos das contas bancárias
+const ACCOUNT_IDS = {
+  CREDIFOZ: "6b18a2de-d94a-43ee-8ff0-cf8c35041e9e",
+  BB_SALDO:  "bb9bf23f-3e17-42d1-85f5-01d1f0b6f4c4",
+  BB_RENDE:  "2f4f91ff-34c3-41f4-8591-25108a8877fd",
+  CARTEIRA:  "97649308-d68e-43cd-b34c-f06d067a0da8",
+};
+
+// Regras que dependem da conta bancária (alta prioridade)
+const ACCOUNT_RULES: {
+  accountIds: string[];
+  keywords: string[];
+  category: string;
+  intent: TransactionIntent;
+  label: string;
+}[] = [
+  // CELESC na Credifoz → energia das kitnets
+  {
+    accountIds: [ACCOUNT_IDS.CREDIFOZ],
+    keywords: ["celesc", "celesc distribu", "celesc distribuicao"],
+    category: "kitnets_energia", intent: "despesa", label: "Kitnets Energia",
+  },
+  // CELESC no BB → energia do apartamento pessoal
+  {
+    accountIds: [ACCOUNT_IDS.BB_SALDO, ACCOUNT_IDS.BB_RENDE],
+    keywords: ["celesc", "celesc distribu", "celesc distribuicao"],
+    category: "energia_eletrica", intent: "despesa", label: "Energia Elétrica",
+  },
+  // SEMASA/CASAN na Credifoz → água das kitnets
+  {
+    accountIds: [ACCOUNT_IDS.CREDIFOZ],
+    keywords: ["semasa", "casan", "servico municipal de agua", "saneamento"],
+    category: "kitnets_agua", intent: "despesa", label: "Kitnets Água",
+  },
+];
+
 export function categorizeTransaction(
   description: string,
   type: "credit" | "debit",
   amount?: number,
-  allAccounts?: string[]
+  allAccounts?: string[],
+  accountId?: string
 ): CategorizationResult {
   const raw = description ?? "";
   // Normalizar: minúsculas + remover acentos
@@ -102,7 +139,19 @@ export function categorizeTransaction(
     return { category: "transferencia", intent: "transferencia", confidence: "high", label: "Transferência entre Contas" };
   }
 
-  // 2. RECEITA
+  // 2. REGRAS POR CONTA BANCÁRIA (alta prioridade, antes das regras genéricas)
+  if (accountId && type === "debit") {
+    for (const rule of ACCOUNT_RULES) {
+      if (
+        rule.accountIds.includes(accountId) &&
+        rule.keywords.some(k => lower.includes(k.normalize("NFD").replace(/[\u0300-\u036f]/g, "")))
+      ) {
+        return { category: rule.category, intent: rule.intent, confidence: "high", label: rule.label };
+      }
+    }
+  }
+
+  // 3. RECEITA
   if (type === "credit") {
     for (const rule of REVENUE_RULES) {
       if (rule.keywords.some(k => lower.includes(k.normalize("NFD").replace(/[\u0300-\u036f]/g, "")))) {
@@ -120,7 +169,7 @@ export function categorizeTransaction(
     return { category: "outros_receita", intent: "receita", confidence: "low", label: "Outros (Receita)" };
   }
 
-  // 3. DESPESA
+  // 4. DESPESA — regras genéricas
   if (type === "debit") {
     for (const rule of EXPENSE_RULES) {
       if (rule.keywords.some(k => lower.includes(k.normalize("NFD").replace(/[\u0300-\u036f]/g, "")))) {
