@@ -126,9 +126,11 @@ export function useKitnetSummary(month: string) {
   const data = kitnets.data ?? [];
   const entryData = entries.data ?? [];
 
-  const occupied = data.filter(k => k.status === "occupied").length;
+  // Status histórico: baseado nos kitnet_entries do mês, não no status global
+  const kitnetIdsWithEntry = new Set(entryData.map(e => e.kitnet_id));
+  const occupied = data.filter(k => kitnetIdsWithEntry.has(k.id)).length;
+  const vacant = data.filter(k => !kitnetIdsWithEntry.has(k.id)).length;
   const maintenance = data.filter(k => k.status === "maintenance").length;
-  const vacant = data.filter(k => k.status === "vacant").length;
   const totalReceived = entryData.reduce((s, e) => s + (e.total_liquid ?? 0), 0);
 
   return {
