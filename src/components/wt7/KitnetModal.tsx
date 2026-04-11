@@ -254,6 +254,7 @@ function FechamentosTab({ kitnet }: { kitnet: Tables<"kitnets"> }) {
 
   const handleNewFechamento = () => {
     setEditingEntry(null);
+    if (!showForm) setSelectedMonth(getCurrentMonth());
     setShowForm(v => !v);
   };
 
@@ -286,7 +287,7 @@ function FechamentosTab({ kitnet }: { kitnet: Tables<"kitnets"> }) {
         </GoldButton>
       </div>
 
-      {showForm && <FechamentoForm kitnet={kitnet} onSaved={() => setShowForm(false)} defaultMonth={getCurrentMonth()} />}
+      {showForm && <FechamentoForm kitnet={kitnet} onSaved={(savedMonth) => { setShowForm(false); if (savedMonth) setSelectedMonth(savedMonth); }} defaultMonth={getCurrentMonth()} />}
       {editingEntry && (
         <FechamentoForm
           kitnet={kitnet}
@@ -380,7 +381,7 @@ function FechamentosTab({ kitnet }: { kitnet: Tables<"kitnets"> }) {
 // ─── FORM NOVO / EDITAR FECHAMENTO ───
 interface FechamentoFormProps {
   kitnet: Tables<"kitnets">;
-  onSaved: () => void;
+  onSaved: (savedMonth?: string) => void;
   onCancel?: () => void;
   initialData?: any;
   entryId?: string;
@@ -479,6 +480,7 @@ function FechamentoForm({ kitnet, onSaved, onCancel, initialData, entryId, defau
         const { data: { user } } = await supabase.auth.getUser();
         await createMut.mutateAsync({
           kitnet_id: kitnet.id,
+          tenant_name: kitnet.tenant_name ?? null,
           reference_month: form.reference_month,
           period_start: form.period_start || null,
           period_end: form.period_end || null,
@@ -492,7 +494,7 @@ function FechamentoForm({ kitnet, onSaved, onCancel, initialData, entryId, defau
         });
         toast({ title: "Fechamento salvo!" });
       }
-      onSaved();
+      onSaved(form.reference_month);
     } catch (e: any) {
       toast({ title: "Erro", description: e.message, variant: "destructive" });
     }
