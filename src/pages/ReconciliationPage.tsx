@@ -255,7 +255,7 @@ function ImportTab({ accounts }: { accounts: any[] }) {
         }
 
         // 2. Fallback para regras manuais
-        const result = categorizeTransaction(tx.description, tx.type, tx.amount, accountNames);
+        const result = categorizeTransaction(tx.description, tx.type, tx.amount, accountNames, selectedAccount);
         return {
           ...tx,
           _previewId: `preview-${idx}`,
