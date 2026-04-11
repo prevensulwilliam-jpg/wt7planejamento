@@ -193,6 +193,19 @@ function InvoicesTab() {
 
   const CREDIFOZ_ID = "6b18a2de-d94a-43ee-8ff0-cf8c35041e9e";
 
+  const handleDesfazer = async (inv: any) => {
+    try {
+      await updateMut.mutateAsync({
+        id: inv.id,
+        payment_date: null,
+        amount_paid: 0,
+      });
+      toast({ title: "Conciliação desfeita", description: "Fatura voltou para pendente." });
+    } catch (e: any) {
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    }
+  };
+
   const handleConciliar = async (inv: any) => {
     if (inv.payment_date && inv.amount_paid > 0) {
       toast({ title: "Fatura já conciliada", description: `Paga em ${new Date(inv.payment_date + "T12:00:00").toLocaleDateString("pt-BR")}` });
@@ -309,6 +322,16 @@ function InvoicesTab() {
                       >
                         {inv.payment_date ? "✓ Paga" : "⚡ Conciliar"}
                       </button>
+                      {inv.payment_date && (
+                        <button
+                          onClick={() => handleDesfazer(inv)}
+                          className="flex items-center gap-1 text-xs px-2 py-1 rounded border transition-colors"
+                          style={{ color: "#F43F5E", borderColor: "rgba(244,63,94,0.4)", background: "rgba(244,63,94,0.08)" }}
+                          title="Desfazer conciliação"
+                        >
+                          ✕ Desfazer
+                        </button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
