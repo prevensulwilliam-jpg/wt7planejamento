@@ -766,7 +766,7 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
   });
 
   // Filter groups
-  const doubts = allTransactions.filter((t: any) => t.category_intent === "duvida" && t.status === "pending");
+  const doubts = allTransactions.filter((t: any) => t.status === "pending");
   const transfers = allTransactions.filter((t: any) => t.category_intent === "transferencia");
   const autoCategorized = allTransactions.filter((t: any) => t.status === "auto_categorized");
   const matched = allTransactions.filter((t: any) => t.status === "matched");

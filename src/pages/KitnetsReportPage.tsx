@@ -73,7 +73,7 @@ export default function KitnetsReportPage() {
         .gte("date", start)
         .lte("date", end);
       if (error) throw error;
-      return data ?? [];
+      return (data ?? []) as any[];
     },
   });
 
