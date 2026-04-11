@@ -199,36 +199,46 @@ function InvoicesTab() {
       return;
     }
     try {
-      // Buscar débitos CELESC na Credifoz no mês da fatura ± 15 dias do vencimento
-      const { data: txs } = await supabase
-        .from("bank_transactions" as any)
-        .select("*")
-        .eq("bank_account_id", CREDIFOZ_ID)
-        .eq("type", "debit")
-        .ilike("description", "%celesc%")
-        .gte("date", inv.reference_month + "-01")
-        .lte("date", inv.reference_month + "-31");
+      // Buscar TODOS os débitos CELESC na Credifoz — sem filtro de mês para não perder por timezone
+      const startDate = inv.reference_month + "-01";
+      const endDate = inv.reference_month + "-31";
 
-      if (!txs?.length) {
-        toast({ title: "Nenhum pagamento encontrado", description: "Não encontrei débito CELESC na Credifoz neste mês.", variant: "destructive" });
+      const { data: txs, error } = await supabase
+        .from("bank_transactions" as any)
+        .select("id, description, amount, date, type")
+        .eq("bank_account_id", CREDIFOZ_ID)
+        .or("description.ilike.%CELESC DISTRIBU%,description.ilike.%CELESC DISTRIBUICAO%")
+        .gte("date", startDate)
+        .lte("date", endDate);
+
+      if (error) throw new Error(error.message);
+
+      const list = (txs ?? []) as any[];
+
+      if (!list.length) {
+        toast({ title: "Nenhum pagamento encontrado", description: `Não há débito CELESC na Credifoz em ${inv.reference_month}. Verifique se o extrato foi importado.`, variant: "destructive" });
         return;
       }
 
-      // Pegar o mais próximo do valor da fatura (tolerância 10%)
+      // Se há múltiplos (RWT02 + RWT03 pagos juntos), soma todos ou pega o mais próximo
       const invoiceVal = inv.invoice_total ?? 0;
-      const best = (txs as any[]).reduce((prev: any, curr: any) => {
-        const diffPrev = Math.abs(prev.amount - invoiceVal);
-        const diffCurr = Math.abs(curr.amount - invoiceVal);
-        return diffCurr < diffPrev ? curr : prev;
+
+      // Tentar match exato primeiro
+      const exact = list.find((t: any) => Math.abs(t.amount - invoiceVal) < 1);
+      const best = exact ?? list.reduce((prev: any, curr: any) => {
+        return Math.abs(curr.amount - invoiceVal) < Math.abs(prev.amount - invoiceVal) ? curr : prev;
       });
 
-      const diff = Math.abs(best.amount - invoiceVal) / invoiceVal;
-      if (diff > 0.15) {
-        toast({ title: "Match incerto", description: `Encontrei R$${best.amount} mas difere ${(diff*100).toFixed(0)}% da fatura. Confirme manualmente.`, variant: "destructive" });
+      const diff = Math.abs(best.amount - invoiceVal) / (invoiceVal || 1);
+      if (diff > 0.20) {
+        toast({
+          title: "Match incerto",
+          description: `Encontrei R$${best.amount.toFixed(2)} mas difere ${(diff*100).toFixed(0)}% do valor da fatura (R$${invoiceVal.toFixed(2)}). Edite manualmente se necessário.`,
+          variant: "destructive"
+        });
         return;
       }
 
-      // Atualizar fatura com data e valor do pagamento
       await updateMut.mutateAsync({
         id: inv.id,
         payment_date: best.date,
