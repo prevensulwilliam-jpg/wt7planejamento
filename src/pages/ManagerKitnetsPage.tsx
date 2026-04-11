@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -205,7 +205,7 @@ function KitnetsTab({ month }: { month: string }) {
               {units.map(k => {
                 const fechamento = (entries as any[] ?? []).find(e => e.kitnet_id === k.id);
                 const prevFechamento = (prevEntries as any[] ?? []).find(e => e.kitnet_id === k.id);
-                const isOccupied = !!fechamento || !!prevFechamento;
+                const isOccupied = k.status === "occupied" || k.status === "maintenance";
                 const isReceived = !!fechamento;
                 const s = isReceived ? statusLabels.occupied : isOccupied ? { label: "Aguardando", variant: "gold" as const } : statusLabels.vacant;
                 const tenantName = (fechamento as any)?.tenant_name || (prevFechamento as any)?.tenant_name || k.tenant_name || null;
