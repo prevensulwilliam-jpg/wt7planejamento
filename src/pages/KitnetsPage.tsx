@@ -143,17 +143,22 @@ function KitnetGrid({ kitnets, onManage, entries }: { kitnets: Tables<"kitnets">
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
       {kitnets.map(k => {
-        const s = statusLabels[k.status ?? "vacant"] ?? statusLabels.vacant;
         const fechamento = entries.find(e => e.kitnet_id === k.id);
+        // Status histórico: se tem entry no mês = ocupada, senão = vaga
+        const isOccupied = !!fechamento;
+        const s = isOccupied ? statusLabels.occupied : statusLabels.vacant;
+        // Nome do inquilino: usa o do entry (histórico) ou o atual se não tiver entry
+        const tenantName = (fechamento as any)?.tenant_name || (isOccupied ? k.tenant_name : null);
+        const rentValue = fechamento?.rent_gross ?? k.rent_value ?? 0;
         return (
           <PremiumCard key={k.id} className="relative p-4">
             <div className="flex items-center justify-between mb-2">
               <span className="font-mono text-sm font-medium text-foreground">{k.code}</span>
               <WtBadge variant={s.variant}>{s.label}</WtBadge>
             </div>
-            <p className="text-sm text-muted-foreground truncate">{k.tenant_name || "—"}</p>
-            {k.tenant_phone && <p className="text-xs text-muted-foreground">{k.tenant_phone}</p>}
-            <p className="font-mono text-lg text-foreground mt-1">{formatCurrency(k.rent_value ?? 0)}</p>
+            <p className="text-sm text-muted-foreground truncate">{tenantName || "—"}</p>
+            {k.tenant_phone && isOccupied && <p className="text-xs text-muted-foreground">{k.tenant_phone}</p>}
+            <p className="font-mono text-lg text-foreground mt-1">{formatCurrency(rentValue)}</p>
 
             {/* Badge de fechamento */}
             {fechamento ? (
