@@ -93,6 +93,28 @@ const ALL_CATEGORY_LABELS: Record<string, string> = {
 
 const PIE_COLORS = ["#C9A84C", "#2DD4BF", "#8B5CF6", "#F43F5E", "#10B981", "#3B82F6", "#F59E0B", "#EC4899", "#6366F1", "#14B8A6"];
 
+// Converte nome de categoria do banco para o value correto usando DESPESA_OPTIONS como lookup
+function categoryNameToValue(name: string, options: { value: string; label: string }[]): string {
+  const normalized = name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+  const found = options.find(opt => {
+    const optNorm = opt.label.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+    const optValue = opt.value.replace(/_/g, "");
+    return optNorm.includes(normalized) || normalized.includes(optValue) || optValue === normalized;
+  });
+  return found?.value ?? name.toLowerCase().replace(/[^a-z0-9]/g, "_");
+}
+
+function buildDynamicOptions(
+  cats: any[],
+  fallback: { value: string; label: string }[]
+): { value: string; label: string }[] {
+  if (!cats.length) return fallback;
+  return cats.map((c: any) => ({
+    value: categoryNameToValue(c.name, fallback),
+    label: `${c.emoji} ${c.name}`,
+  }));
+}
+
 export default function ReconciliationPage() {
   const [month, setMonth] = useState(getCurrentMonth());
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -1150,12 +1172,8 @@ function DoubtCard({ tx, classifyAs, ignoreTransaction }: {
   );
   const { data: despesaCats = [] } = useCategories("despesa");
   const { data: receitaCats = [] } = useCategories("receita");
-  const dynamicDespOpts = despesaCats.length > 0
-    ? despesaCats.map((c: any) => ({ value: c.name.toLowerCase().replace(/[^a-z0-9]/g, "_"), label: `${c.emoji} ${c.name}` }))
-    : DESPESA_OPTIONS;
-  const dynamicRecOpts = receitaCats.length > 0
-    ? receitaCats.map((c: any) => ({ value: c.name.toLowerCase().replace(/[^a-z0-9]/g, "_"), label: `${c.emoji} ${c.name}` }))
-    : RECEITA_OPTIONS;
+  const dynamicDespOpts = buildDynamicOptions(despesaCats, DESPESA_OPTIONS);
+  const dynamicRecOpts = buildDynamicOptions(receitaCats, RECEITA_OPTIONS);
   const options = selectedIntent === "receita" ? dynamicRecOpts : dynamicDespOpts;
 
   const handleConfirm = () => {
@@ -1269,12 +1287,8 @@ function AutoCategorizedCard({ tx, classifyAs, ignoreTransaction, confirmAs }: {
   );
   const { data: despesaCats = [] } = useCategories("despesa");
   const { data: receitaCats = [] } = useCategories("receita");
-  const dynamicDespOpts = despesaCats.length > 0
-    ? despesaCats.map((c: any) => ({ value: c.name.toLowerCase().replace(/[^a-z0-9]/g, "_"), label: `${c.emoji} ${c.name}` }))
-    : DESPESA_OPTIONS;
-  const dynamicRecOpts = receitaCats.length > 0
-    ? receitaCats.map((c: any) => ({ value: c.name.toLowerCase().replace(/[^a-z0-9]/g, "_"), label: `${c.emoji} ${c.name}` }))
-    : RECEITA_OPTIONS;
+  const dynamicDespOpts = buildDynamicOptions(despesaCats, DESPESA_OPTIONS);
+  const dynamicRecOpts = buildDynamicOptions(receitaCats, RECEITA_OPTIONS);
   const options = selectedIntent === "receita" ? dynamicRecOpts : dynamicDespOpts;
 
   const categoryLabel = CATEGORY_LABELS[tx.category_suggestion] || tx.category_label || tx.category_suggestion || "—";
@@ -1420,9 +1434,7 @@ function AutoCategorizedCard({ tx, classifyAs, ignoreTransaction, confirmAs }: {
 function NewExpenseModal({ open, onClose, defaultMonth }: { open: boolean; onClose: () => void; defaultMonth: string }) {
   const qc = useQueryClient();
   const { data: cats = [] } = useCategories("despesa");
-  const dynamicOpts = cats.length > 0
-    ? cats.map((c: any) => ({ value: c.name.toLowerCase().replace(/[^a-z0-9]/g, "_"), label: `${c.emoji} ${c.name}` }))
-    : DESPESA_OPTIONS;
+  const dynamicOpts = buildDynamicOptions(cats, DESPESA_OPTIONS);
   const [form, setForm] = useState({
     category: "", description: "", amount: "",
     paid_at: new Date().toISOString().split("T")[0],
@@ -1523,9 +1535,7 @@ function NewExpenseModal({ open, onClose, defaultMonth }: { open: boolean; onClo
 function NewRevenueModal({ open, onClose, defaultMonth }: { open: boolean; onClose: () => void; defaultMonth: string }) {
   const qc = useQueryClient();
   const { data: cats = [] } = useCategories("receita");
-  const dynamicOpts = cats.length > 0
-    ? cats.map((c: any) => ({ value: c.name.toLowerCase().replace(/[^a-z0-9]/g, "_"), label: `${c.emoji} ${c.name}` }))
-    : RECEITA_OPTIONS;
+  const dynamicOpts = buildDynamicOptions(cats, RECEITA_OPTIONS);
   const [form, setForm] = useState({
     source: "", description: "", amount: "",
     received_at: new Date().toISOString().split("T")[0],
