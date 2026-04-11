@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -21,6 +21,7 @@ import {
   useCelescInvoices,
   useSaveEnergyReadings,
   useEnergyConfig,
+  usePrevMonth,
 } from "@/hooks/useKitnets";
 import { formatCurrency, formatMonth, getCurrentMonth } from "@/lib/formatters";
 import { DEFAULT_ENERGY_TARIFF } from "@/lib/constants";
@@ -165,25 +166,30 @@ function KitnetsTab({ month }: { month: string }) {
   const { data: kitnets, isLoading, refetch } = useKitnets();
   const summary = useKitnetSummary(month);
   const { data: entries } = useKitnetEntries(month);
+  const prevMonth = usePrevMonth(month);
+  const { data: prevEntries } = useKitnetEntries(prevMonth);
   const [selected, setSelected] = useState<Tables<"kitnets"> | null>(null);
 
+  const rwt02 = (kitnets ?? []).filter(k => k.residencial_code === "RWT02");
+  const rwt03 = (kitnets ?? []).filter(k => k.residencial_code === "RWT03");
 
-  const grouped = useMemo(() => {
-    const map: Record<string, Tables<"kitnets">[]> = {};
-    (kitnets ?? []).forEach(k => {
-      const key = k.residencial_code ?? "Sem Complexo";
-      if (!map[key]) map[key] = [];
-      map[key].push(k);
-    });
-    return map;
-  }, [kitnets]);
+  const complexos = [
+    { code: "RWT02", label: "RWT02 — Rua Amauri de Souza, 08", units: rwt02 },
+    { code: "RWT03", label: "RWT03 — Rua Manoel Corrêa, 125", units: rwt03 },
+  ].filter(c => c.units.length > 0);
 
   return (
     <div className="space-y-6 mt-4">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard label="Total Recebido" value={summary.totalReceived} color="gold" compact />
         <KpiCard label="Ocupadas" value={summary.occupied} color="green" compact formatAs="number" />
-        <KpiCard label="Manutenção" value={summary.maintenance} color="cyan" compact formatAs="number" />
+        <div className="rounded-2xl p-4 space-y-1" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+          <p className="text-xs uppercase font-mono tracking-widest" style={{ color: '#94A3B8' }}>Recebidos</p>
+          <p className="font-mono text-2xl font-bold" style={{ color: '#2DD4BF' }}>
+            {summary.received}<span className="text-sm font-normal" style={{ color: '#4A5568' }}>/{summary.occupied}</span>
+          </p>
+          <p className="text-xs" style={{ color: '#4A5568' }}>fechamentos no mês</p>
+        </div>
         <KpiCard label="Vacâncias" value={summary.vacant} color="red" compact formatAs="number" />
       </div>
 
@@ -192,43 +198,46 @@ function KitnetsTab({ month }: { month: string }) {
           {Array.from({ length: 13 }).map((_, i) => <Skeleton key={i} className="h-40 rounded-2xl" />)}
         </div>
       ) : (
-        Object.entries(grouped).sort().map(([code, units]) => (
-          <div key={code}>
-            <h2 className="font-display font-bold text-base text-foreground mb-3 flex items-center gap-2">
-              <span className="font-mono text-[#E8C97A]">{code}</span>
-              <span className="text-muted-foreground text-sm">— {units.length} unidades</span>
-            </h2>
+        complexos.map(({ label, units }) => (
+          <div key={label}>
+            <h2 className="font-display font-bold text-lg text-foreground mb-3">{label}</h2>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
               {units.map(k => {
-                const s = statusLabels[k.status ?? "vacant"] ?? statusLabels.vacant;
                 const fechamento = (entries as any[] ?? []).find(e => e.kitnet_id === k.id);
+                const prevFechamento = (prevEntries as any[] ?? []).find(e => e.kitnet_id === k.id);
+                const isOccupied = !!fechamento || !!prevFechamento;
+                const isReceived = !!fechamento;
+                const s = isReceived ? statusLabels.occupied : isOccupied ? { label: "Aguardando", variant: "gold" as const } : statusLabels.vacant;
+                const tenantName = (fechamento as any)?.tenant_name || (prevFechamento as any)?.tenant_name || k.tenant_name || null;
+                const rentValue = fechamento?.rent_gross ?? prevFechamento?.rent_gross ?? k.rent_value ?? 0;
                 return (
-                  <PremiumCard key={k.id} className="p-4 space-y-2">
-                    <div className="flex items-center justify-between">
+                  <PremiumCard key={k.id} className="relative p-4">
+                    <div className="flex items-center justify-between mb-2">
                       <span className="font-mono text-sm font-medium text-foreground">{k.code}</span>
                       <WtBadge variant={s.variant}>{s.label}</WtBadge>
                     </div>
-                    <p className="text-sm text-foreground truncate font-medium">{k.tenant_name || "Sem inquilino"}</p>
-                    {k.tenant_phone && (
-                      <p className="text-xs text-muted-foreground">{k.tenant_phone}</p>
-                    )}
-                    <p className="font-mono text-lg text-foreground">{formatCurrency(k.rent_value ?? 0)}</p>
+                    <p className="text-sm text-muted-foreground truncate">{tenantName || "—"}</p>
+                    {k.tenant_phone && isOccupied && <p className="text-xs text-muted-foreground">{k.tenant_phone}</p>}
+                    <p className="font-mono text-lg text-foreground mt-1">{formatCurrency(rentValue)}</p>
 
-                    {/* Badge de fechamento */}
                     {fechamento ? (
-                      <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg" style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)' }}>
+                      <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg mt-1" style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)' }}>
                         <span style={{ color: '#10B981' }}>✓</span>
                         <span className="text-xs font-medium" style={{ color: '#10B981' }}>
                           Fechado · {formatCurrency(fechamento.total_liquid ?? 0)}
                         </span>
                       </div>
+                    ) : isOccupied ? (
+                      <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg mt-1" style={{ background: 'rgba(201,168,76,0.08)', border: '1px solid rgba(201,168,76,0.2)' }}>
+                        <span className="text-xs font-medium" style={{ color: '#C9A84C' }}>⏳ Aguardando fechamento</span>
+                      </div>
                     ) : (
-                      <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg" style={{ background: 'rgba(148,163,184,0.08)', border: '1px solid rgba(148,163,184,0.2)' }}>
-                        <span className="text-xs" style={{ color: '#64748B' }}>— Sem fechamento</span>
+                      <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg mt-1" style={{ background: 'rgba(244,63,94,0.08)', border: '1px solid rgba(244,63,94,0.2)' }}>
+                        <span className="text-xs" style={{ color: '#F43F5E' }}>— Vaga</span>
                       </div>
                     )}
 
-                    <GoldButton className="w-full text-xs justify-center" onClick={() => setSelected(k)}>
+                    <GoldButton className="w-full text-xs justify-center mt-2" onClick={() => setSelected(k)}>
                       Gerenciar
                     </GoldButton>
                   </PremiumCard>
