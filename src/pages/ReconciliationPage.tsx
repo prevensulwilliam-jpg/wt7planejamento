@@ -121,7 +121,8 @@ function buildDynamicOptions(
 ): { value: string; label: string }[] {
   if (!cats.length) return fallback;
   return cats.map((c: any) => ({
-    value: categoryNameToValue(c.name, fallback),
+    // Gera slug a partir do nome removendo acentos corretamente
+    value: c.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, ""),
     label: `${c.emoji} ${c.name}`,
   }));
 }
