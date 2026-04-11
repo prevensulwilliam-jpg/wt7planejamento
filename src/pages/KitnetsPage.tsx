@@ -154,14 +154,14 @@ function KitnetGrid({ kitnets, onManage, entries, prevEntries }: { kitnets: Tabl
       {kitnets.map(k => {
         const fechamento = entries.find(e => e.kitnet_id === k.id);
         const prevFechamento = prevEntries.find(e => e.kitnet_id === k.id);
-        // Ocupada = tem entry atual OU tinha entry no mês anterior
-        const isOccupied = !!fechamento || !!prevFechamento;
-        // Recebido no mês atual
+        // Ocupada = status no banco é occupied (definido manualmente)
+        const isOccupied = k.status === "occupied" || k.status === "maintenance";
+        // Recebido = tem fechamento no mês atual
         const isReceived = !!fechamento;
-        // Badge: recebido = verde, ocupada sem receber = âmbar, vaga = vermelho
+        // Badge: recebido = verde, ocupada sem fechar = âmbar, vaga = vermelho
         const s = isReceived ? statusLabels.occupied : isOccupied ? { label: "Aguardando", variant: "gold" as const } : statusLabels.vacant;
-        // Nome: do entry atual, ou do mês anterior se ainda não recebido
-        const tenantName = (fechamento as any)?.tenant_name || (prevFechamento as any)?.tenant_name || null;
+        // Nome: do entry atual, anterior, ou direto do cadastro
+        const tenantName = (fechamento as any)?.tenant_name || (prevFechamento as any)?.tenant_name || k.tenant_name || null;
         const rentValue = fechamento?.rent_gross ?? prevFechamento?.rent_gross ?? k.rent_value ?? 0;
         return (
           <PremiumCard key={k.id} className="relative p-4">
