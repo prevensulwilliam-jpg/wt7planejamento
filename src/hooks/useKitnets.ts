@@ -363,3 +363,24 @@ export function useDeleteKitnetEntry() {
     },
   });
 }
+
+// ─── Energy Readings Summary ───
+export function useEnergyReadingsSummary(month: string) {
+  return useQuery({
+    queryKey: ["energy_readings_summary", month],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("energy_readings")
+        .select("amount_to_charge, kitnet:kitnets(residencial_code)")
+        .eq("reference_month", month);
+      if (error) throw error;
+      const summary: Record<string, number> = {};
+      (data ?? []).forEach((r: any) => {
+        const code = r.kitnet?.residencial_code;
+        if (code) summary[code] = (summary[code] ?? 0) + (r.amount_to_charge ?? 0);
+      });
+      return summary;
+    },
+    enabled: !!month,
+  });
+}
