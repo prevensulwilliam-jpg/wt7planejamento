@@ -244,6 +244,7 @@ function KitnetsTab({ month }: { month: string }) {
           kitnet={selected}
           onClose={() => setSelected(null)}
           onUpdated={() => refetch()}
+          defaultMonth={month}
         />
       )}
     </div>
