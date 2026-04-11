@@ -227,7 +227,9 @@ function ContratoTab({ kitnet, onUpdated }: { kitnet: Tables<"kitnets">; onUpdat
 
 // ─── ABA FECHAMENTOS ───
 function FechamentosTab({ kitnet }: { kitnet: Tables<"kitnets"> }) {
+  const { toast } = useToast();
   const { data: fechamentos, isLoading } = useKitnetFechamentos(kitnet.id);
+  const deleteEntry = useDeleteKitnetEntry();
   const [showForm, setShowForm] = useState(false);
   const [editingEntry, setEditingEntry] = useState<any | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
