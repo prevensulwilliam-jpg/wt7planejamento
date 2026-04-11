@@ -282,7 +282,7 @@ function FechamentosTab({ kitnet }: { kitnet: Tables<"kitnets"> }) {
         </GoldButton>
       </div>
 
-      {showForm && <FechamentoForm kitnet={kitnet} onSaved={() => setShowForm(false)} />}
+      {showForm && <FechamentoForm kitnet={kitnet} onSaved={() => setShowForm(false)} defaultMonth={displayMonth ?? getCurrentMonth()} />}
       {editingEntry && (
         <FechamentoForm
           kitnet={kitnet}
@@ -380,14 +380,15 @@ interface FechamentoFormProps {
   onCancel?: () => void;
   initialData?: any;
   entryId?: string;
+  defaultMonth?: string;
 }
 
-function FechamentoForm({ kitnet, onSaved, onCancel, initialData, entryId }: FechamentoFormProps) {
+function FechamentoForm({ kitnet, onSaved, onCancel, initialData, entryId, defaultMonth }: FechamentoFormProps) {
   const isEditMode = !!entryId;
   const { toast } = useToast();
   const createMut = useCreateKitnetEntry();
   const updateMut = useUpdateKitnetEntry();
-  const [month] = useState(getCurrentMonth());
+  const [month] = useState(defaultMonth ?? getCurrentMonth());
   const { data: lastReading } = useLastEnergyReading(kitnet.id);
   const { data: invoices } = useCelescInvoices(month);
 
@@ -399,7 +400,7 @@ function FechamentoForm({ kitnet, onSaved, onCancel, initialData, entryId }: Fec
     celesc: String(initialData?.celesc ?? 0),
     semasa: String(initialData?.semasa ?? 0),
     adm_fee: String(initialData?.adm_fee ?? ((kitnet.rent_value ?? 0) * 0.1).toFixed(2)),
-    reference_month: initialData?.reference_month ?? month,
+    reference_month: initialData?.reference_month ?? (defaultMonth ?? getCurrentMonth()),
   });
   const [celescMode, setCelescMode] = useState<"idle" | "loading" | "found" | "manual">("idle");
   const [celescFoundInfo, setCelescFoundInfo] = useState<{ kwh: number; amount: number; tariff: number } | null>(null);
