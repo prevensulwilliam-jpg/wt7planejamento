@@ -351,4 +351,15 @@ export function useDeleteKitnetEntry() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (entryId: string) => {
-      const { error } = await supabase.fr
+      const { error } = await supabase.from("kitnet_entries").delete().eq("id", entryId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["kitnet_entries"] });
+      qc.invalidateQueries({ queryKey: ["kitnet_entries_unreconciled"] });
+      qc.invalidateQueries({ queryKey: ["kitnet_entries_unreconciled_count"] });
+      qc.invalidateQueries({ queryKey: ["kitnet_fechamentos"] });
+      qc.invalidateQueries({ queryKey: ["kitnet_entries_for"] });
+    },
+  });
+}
