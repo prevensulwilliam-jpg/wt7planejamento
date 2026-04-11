@@ -2,14 +2,13 @@ import { useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
-import { KpiCard } from "@/components/wt7/KpiCard";
 import { GoldButton } from "@/components/wt7/GoldButton";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useKitnetEntries } from "@/hooks/useKitnets";
 import { exportCSV } from "@/hooks/useFinances";
 import { formatCurrency, formatMonth, getCurrentMonth } from "@/lib/formatters";
-import { ChevronLeft, ChevronRight, FileDown, BarChart3 } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid, Legend } from "recharts";
+import { ChevronLeft, ChevronRight, FileDown, BarChart3, Info } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid } from "recharts";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -18,32 +17,61 @@ export default function KitnetsReportPage() {
   const [complex, setComplex] = useState("todos");
   const { data: entries, isLoading } = useKitnetEntries(month);
 
+  const { data: energyReadings } = useQuery({
+    queryKey: ["energy_readings_report", month],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("energy_readings")
+        .select("*, kitnets(residencial_code)")
+        .eq("reference_month", month);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const { data: celescInvoices } = useQuery({
+    queryKey: ["celesc_invoices_report", month],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("celesc_invoices")
+        .select("*")
+        .eq("reference_month", month);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
   const filtered = (entries ?? []).filter(e => {
     if (complex === "todos") return true;
     return (e as any).kitnets?.residencial_code === complex;
   });
 
-  const totalReceived = filtered.reduce((s, e) => s + (e.total_liquid ?? 0), 0);
-  const totalCelesc = filtered.reduce((s, e) => s + (e.celesc ?? 0), 0);
-  const totalAdm = filtered.reduce((s, e) => s + (e.adm_fee ?? 0), 0);
-  const totalGross = filtered.reduce((s, e) => s + (e.rent_gross ?? 0), 0);
+  const filteredEnergy = (energyReadings ?? []).filter(e => {
+    if (complex === "todos") return true;
+    return (e as any).kitnets?.residencial_code === complex;
+  });
+
+  const totalPrevisto = filtered.reduce((s, e) => s + (e.rent_gross ?? 0), 0);
+  const totalLiquido = filtered.reduce((s, e) => s + (e.total_liquid ?? 0), 0);
+  const totalDepositado = totalLiquido;
+  const totalCobradoInquilinos = filteredEnergy.reduce((s, e) => s + ((e as any).amount_to_charge ?? 0), 0);
+  const totalFaturasCelesc = (celescInvoices ?? []).reduce((s, inv) => s + ((inv as any).invoice_total ?? 0), 0);
+  const saldoSolar = totalCobradoInquilinos - totalFaturasCelesc;
 
   const barData = filtered.map(e => ({
     name: (e as any).kitnets?.code ?? "?",
     liquido: e.total_liquid ?? 0,
   }));
 
-  // 3-month comparison
   const prev1 = (() => { const [y, m] = month.split("-").map(Number); const d = new Date(y, m - 2, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; })();
   const prev2 = (() => { const [y, m] = month.split("-").map(Number); const d = new Date(y, m - 3, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; })();
-
   const { data: prev1Data } = useKitnetEntries(prev1);
   const { data: prev2Data } = useKitnetEntries(prev2);
 
   const compData = [
     { month: formatMonth(prev2), total: (prev2Data ?? []).reduce((s, e) => s + (e.total_liquid ?? 0), 0) },
     { month: formatMonth(prev1), total: (prev1Data ?? []).reduce((s, e) => s + (e.total_liquid ?? 0), 0) },
-    { month: formatMonth(month), total: totalReceived },
+    { month: formatMonth(month), total: totalLiquido },
   ];
 
   const navMonth = (dir: number) => {
@@ -84,20 +112,65 @@ export default function KitnetsReportPage() {
         </div>
       </div>
 
+      {/* 4 KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <KpiCard label="Total Recebido" value={totalReceived} color="gold" />
-        <KpiCard label="Total CELESC" value={totalCelesc} color="red" />
-        <KpiCard label="Total ADM Corretor" value={totalAdm} color="cyan" />
-        <KpiCard label="Receita Bruta" value={totalGross} color="green" />
+
+        {/* Valor Previsto */}
+        <div className="rounded-2xl p-5 space-y-1" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+          <p className="text-xs uppercase font-mono tracking-widest" style={{ color: '#94A3B8' }}>Valor Previsto</p>
+          <p className="font-mono text-2xl font-bold" style={{ color: '#C9A84C' }}>{formatCurrency(totalPrevisto)}</p>
+          <p className="text-xs" style={{ color: '#4A5568' }}>Soma dos aluguéis brutos contratados</p>
+        </div>
+
+        {/* Valor Líquido ADM */}
+        <div className="rounded-2xl p-5 space-y-1" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+          <p className="text-xs uppercase font-mono tracking-widest" style={{ color: '#94A3B8' }}>Valor Líquido ADM</p>
+          <p className="font-mono text-2xl font-bold" style={{ color: '#10B981' }}>{formatCurrency(totalLiquido)}</p>
+          <p className="text-xs" style={{ color: '#4A5568' }}>Após CELESC, SEMASA, IPTU e ADM</p>
+        </div>
+
+        {/* Valor Depositado */}
+        <div className="rounded-2xl p-5 space-y-1" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+          <p className="text-xs uppercase font-mono tracking-widest" style={{ color: '#94A3B8' }}>Valor Depositado</p>
+          <p className="font-mono text-2xl font-bold" style={{ color: '#2DD4BF' }}>{formatCurrency(totalDepositado)}</p>
+          <p className="text-xs" style={{ color: '#4A5568' }}>Valor recebido em conta corrente</p>
+        </div>
+
+        {/* Saldo Solar com tooltip */}
+        <div className="rounded-2xl p-5 space-y-1 relative group" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+          <div className="flex items-center gap-1.5">
+            <p className="text-xs uppercase font-mono tracking-widest" style={{ color: '#94A3B8' }}>Saldo Solar</p>
+            <div className="relative">
+              <Info className="w-3.5 h-3.5 cursor-help" style={{ color: '#4A5568' }} />
+              <div
+                className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-72 p-3 rounded-lg text-xs z-50 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
+                style={{ background: '#131B22', border: '1px solid #2A3F55', color: '#94A3B8' }}
+              >
+                Este valor está embutido nos valores Previsto / Líquido / Depositado, apenas para informação. Representa o que os inquilinos pagaram de energia menos o custo da fatura CELESC — o saldo positivo é o ganho líquido do sistema solar.
+              </div>
+            </div>
+          </div>
+          <p className="font-mono text-2xl font-bold" style={{ color: saldoSolar >= 0 ? '#F59E0B' : '#F43F5E' }}>
+            {formatCurrency(saldoSolar)}
+          </p>
+          <p className="text-xs" style={{ color: '#4A5568' }}>
+            Cobrado {formatCurrency(totalCobradoInquilinos)} − Fatura {formatCurrency(totalFaturasCelesc)}
+          </p>
+        </div>
+
       </div>
 
       {isLoading ? <Skeleton className="h-64 rounded-2xl" /> : (
         <>
           <PremiumCard>
             <Table>
-              <TableHeader><TableRow style={{ borderColor: '#1A2535' }}>
-                {["Código", "Inquilino", "Bruto", "IPTU", "CELESC", "SEMASA", "ADM", "Líquido"].map(h => <TableHead key={h} style={{ color: '#94A3B8' }}>{h}</TableHead>)}
-              </TableRow></TableHeader>
+              <TableHeader>
+                <TableRow style={{ borderColor: '#1A2535' }}>
+                  {["Código", "Inquilino", "Bruto", "IPTU", "CELESC", "SEMASA", "ADM", "Líquido"].map(h => (
+                    <TableHead key={h} style={{ color: '#94A3B8' }}>{h}</TableHead>
+                  ))}
+                </TableRow>
+              </TableHeader>
               <TableBody>
                 {filtered.length === 0 ? (
                   <TableRow><TableCell colSpan={8} className="text-center py-8" style={{ color: '#94A3B8' }}>Sem lançamentos no mês</TableCell></TableRow>
@@ -116,7 +189,7 @@ export default function KitnetsReportPage() {
                 {filtered.length > 0 && (
                   <TableRow style={{ borderColor: '#C9A84C' }}>
                     <TableCell colSpan={7} className="font-bold text-right" style={{ color: '#E8C97A' }}>Total Líquido</TableCell>
-                    <TableCell className="font-mono font-bold" style={{ color: '#E8C97A' }}>{formatCurrency(totalReceived)}</TableCell>
+                    <TableCell className="font-mono font-bold" style={{ color: '#E8C97A' }}>{formatCurrency(totalLiquido)}</TableCell>
                   </TableRow>
                 )}
               </TableBody>
