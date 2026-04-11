@@ -65,7 +65,13 @@ export default function KitnetsReportPage() {
       const [y, m] = month.split("-");
       const start = `${y}-${m}-01`;
       const end = new Date(+y, +m, 0).toISOString().split("T")[0];
-      const { data, error } = await supabase.from("bank_transactions").select("amount").eq("type", "credit").eq("category_confirmed", "aluguel_kitnets").gte("date", start).lte("date", end);
+      const { data, error } = await supabase
+        .from("bank_transactions")
+        .select("amount, kitnet_entry_id")
+        .eq("type", "credit")
+        .eq("category_confirmed", "aluguel_kitnets")
+        .gte("date", start)
+        .lte("date", end);
       if (error) throw error;
       return data ?? [];
     },
@@ -89,6 +95,17 @@ export default function KitnetsReportPage() {
 
   const filtered = (entries ?? []).filter(e => complex === "todos" ? true : (e as any).kitnets?.residencial_code === complex);
   const filteredEnergy = (energyReadings ?? []).filter(e => complex === "todos" ? true : (e as any).kitnets?.residencial_code === complex);
+
+  // Mapa: kitnet_entry_id -> valor depositado
+  const depositadoPorEntry = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const t of (bankDeposits ?? [])) {
+      if (t.kitnet_entry_id) {
+        map[t.kitnet_entry_id] = (map[t.kitnet_entry_id] ?? 0) + Math.abs(t.amount ?? 0);
+      }
+    }
+    return map;
+  }, [bankDeposits]);
 
   const totalPrevisto = filtered.reduce((s, e) => s + (e.rent_gross ?? 0), 0);
   const totalLiquido = filtered.reduce((s, e) => s + (e.total_liquid ?? 0), 0);
@@ -273,20 +290,7 @@ export default function KitnetsReportPage() {
         </ResponsiveContainer>
       </PremiumCard>
 
-      {/* Gráfico por unidade no mês */}
-      <PremiumCard>
-        <h3 className="font-display font-bold mb-4" style={{ color: '#F0F4F8' }}>Previsto vs Líquido por Unidade — {formatMonth(month)}</h3>
-        <ResponsiveContainer width="100%" height={Math.max(200, barData.length * 38)}>
-          <BarChart data={barData} layout="vertical" barGap={2}>
-            <XAxis type="number" tickFormatter={v => `${(v/1000).toFixed(1)}k`} stroke="#4A5568" tick={{ fontSize: 11 }} />
-            <YAxis type="category" dataKey="name" width={85} stroke="#94A3B8" tick={{ fontSize: 11 }} />
-            <Tooltip formatter={(v: number) => formatCurrency(v)} contentStyle={{ background: '#0D1318', border: '1px solid #1A2535', color: '#F0F4F8' }} />
-            <Legend wrapperStyle={{ color: '#94A3B8', fontSize: 12 }} />
-            <Bar dataKey="previsto" name="Previsto" fill="#C9A84C" opacity={0.4} radius={[0, 4, 4, 0]} />
-            <Bar dataKey="liquido" name="Líquido" fill="#10B981" radius={[0, 4, 4, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </PremiumCard>
+
 
       {/* Tabela anual kitnet × mês */}
       <PremiumCard>
@@ -351,7 +355,7 @@ export default function KitnetsReportPage() {
               <Table>
                 <TableHeader>
                   <TableRow style={{ borderColor: '#1A2535' }}>
-                    {["Código", "Inquilino", "Bruto", "IPTU", "CELESC", "SEMASA", "ADM", "Líquido"].map(h => (
+                    {["Código", "Inquilino", "Bruto", "IPTU", "CELESC", "SEMASA", "ADM", "Líquido", "Depositado"].map(h => (
                       <TableHead key={h} style={{ color: '#94A3B8' }}>{h}</TableHead>
                     ))}
                   </TableRow>
@@ -369,6 +373,12 @@ export default function KitnetsReportPage() {
                         <TableCell className="font-mono" style={{ color: '#F43F5E' }}>{formatCurrency(e.semasa ?? 0)}</TableCell>
                         <TableCell className="font-mono" style={{ color: '#F43F5E' }}>{formatCurrency(e.adm_fee ?? 0)}</TableCell>
                         <TableCell className="font-mono font-bold" style={{ color: '#10B981' }}>{formatCurrency(e.total_liquid ?? 0)}</TableCell>
+                        <TableCell className="font-mono font-bold">
+                          {depositadoPorEntry[e.id]
+                            ? <span style={{ color: '#2DD4BF' }}>✓ {formatCurrency(depositadoPorEntry[e.id])}</span>
+                            : <span style={{ color: '#F59E0B' }}>⏳ —</span>
+                          }
+                        </TableCell>
                       </TableRow>
                     ))
                   }
@@ -376,6 +386,7 @@ export default function KitnetsReportPage() {
                     <TableRow style={{ borderColor: '#C9A84C' }}>
                       <TableCell colSpan={7} className="font-bold text-right" style={{ color: '#E8C97A' }}>Total Líquido</TableCell>
                       <TableCell className="font-mono font-bold" style={{ color: '#E8C97A' }}>{formatCurrency(totalLiquido)}</TableCell>
+                      <TableCell className="font-mono font-bold" style={{ color: '#2DD4BF' }}>{formatCurrency(totalDepositado)}</TableCell>
                     </TableRow>
                   )}
                 </TableBody>
