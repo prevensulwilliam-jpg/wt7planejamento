@@ -96,12 +96,23 @@ const PIE_COLORS = ["#C9A84C", "#2DD4BF", "#8B5CF6", "#F43F5E", "#10B981", "#3B8
 // Converte nome de categoria do banco para o value correto usando DESPESA_OPTIONS como lookup
 function categoryNameToValue(name: string, options: { value: string; label: string }[]): string {
   const normalized = name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
-  const found = options.find(opt => {
+  // 1. Exact match por value (sem underscore)
+  const exactByValue = options.find(opt => opt.value.replace(/_/g, "") === normalized);
+  if (exactByValue) return exactByValue.value;
+  // 2. Exact match por label normalizado
+  const exactByLabel = options.find(opt => {
+    const optNorm = opt.label.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+    return optNorm === normalized;
+  });
+  if (exactByLabel) return exactByLabel.value;
+  // 3. Substring — label contém o nome (mais específico primeiro)
+  const sorted = [...options].sort((a, b) => b.value.length - a.value.length);
+  const partial = sorted.find(opt => {
     const optNorm = opt.label.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
     const optValue = opt.value.replace(/_/g, "");
-    return optNorm.includes(normalized) || normalized.includes(optValue) || optValue === normalized;
+    return optNorm.includes(normalized) || normalized.includes(optValue);
   });
-  return found?.value ?? name.toLowerCase().replace(/[^a-z0-9]/g, "_");
+  return partial?.value ?? name.toLowerCase().replace(/[^a-z0-9]/g, "_");
 }
 
 function buildDynamicOptions(
