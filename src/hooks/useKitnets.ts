@@ -119,26 +119,43 @@ export function useCreateKitnetEntry() {
 }
 
 // ─── Summary KPIs ───
+export function usePrevMonth(month: string) {
+  const [y, m] = month.split("-").map(Number);
+  const d = new Date(y, m - 2, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
 export function useKitnetSummary(month: string) {
   const kitnets = useKitnets();
   const entries = useKitnetEntries(month);
+  const prevMonth = usePrevMonth(month);
+  const prevEntries = useKitnetEntries(prevMonth);
 
   const data = kitnets.data ?? [];
   const entryData = entries.data ?? [];
+  const prevEntryData = prevEntries.data ?? [];
 
-  // Status histórico: baseado nos kitnet_entries do mês, não no status global
+  // Kitnet com entry no mês atual = recebido
   const kitnetIdsWithEntry = new Set(entryData.map(e => e.kitnet_id));
-  const occupied = data.filter(k => kitnetIdsWithEntry.has(k.id)).length;
-  const vacant = data.filter(k => !kitnetIdsWithEntry.has(k.id)).length;
+  // Kitnet com entry no mês anterior = tinha inquilino
+  const kitnetIdsWithPrevEntry = new Set(prevEntryData.map(e => e.kitnet_id));
+
+  // Ocupada = tem entry atual OU tinha entry no mês anterior (contrato ativo)
+  const occupied = data.filter(k => kitnetIdsWithEntry.has(k.id) || kitnetIdsWithPrevEntry.has(k.id)).length;
+  // Recebido = tem entry no mês atual
+  const received = data.filter(k => kitnetIdsWithEntry.has(k.id)).length;
+  // Vaga real = sem entry atual E sem entry no mês anterior
+  const vacant = data.filter(k => !kitnetIdsWithEntry.has(k.id) && !kitnetIdsWithPrevEntry.has(k.id)).length;
   const maintenance = data.filter(k => k.status === "maintenance").length;
   const totalReceived = entryData.reduce((s, e) => s + (e.total_liquid ?? 0), 0);
 
   return {
     occupied,
-    maintenance,
+    received,
     vacant,
+    maintenance,
     totalReceived,
-    isLoading: kitnets.isLoading || entries.isLoading,
+    isLoading: kitnets.isLoading || entries.isLoading || prevEntries.isLoading,
   };
 }
 
