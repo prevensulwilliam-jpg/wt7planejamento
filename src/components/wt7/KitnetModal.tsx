@@ -260,20 +260,24 @@ function FechamentosTab({ kitnet }: { kitnet: Tables<"kitnets"> }) {
   return (
     <div className="space-y-4 mt-4">
       <div className="flex items-center justify-between gap-3">
-        {/* Seletor de mês */}
+        {/* Seletor de mês — oculto quando form de novo fechamento está aberto */}
         <div className="flex items-center gap-2">
-          <MonthPicker
-            value={displayMonth ?? getCurrentMonth()}
-            onChange={v => setSelectedMonth(v)}
-            className="w-40"
-          />
-          {selectedMonth && selectedMonth !== latestMonth && (
-            <button
-              onClick={() => setSelectedMonth(null)}
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              ← Último
-            </button>
+          {!showForm && (
+            <>
+              <MonthPicker
+                value={displayMonth ?? getCurrentMonth()}
+                onChange={v => setSelectedMonth(v)}
+                className="w-40"
+              />
+              {selectedMonth && selectedMonth !== latestMonth && (
+                <button
+                  onClick={() => setSelectedMonth(null)}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  ← Último
+                </button>
+              )}
+            </>
           )}
         </div>
         <GoldButton onClick={handleNewFechamento}>
