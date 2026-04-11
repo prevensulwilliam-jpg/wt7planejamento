@@ -67,12 +67,14 @@ export function useMatchTransaction() {
       intent,
       revenueId,
       expenseId,
+      kitnetEntryId,
     }: {
       id: string;
       category: string;
       intent?: string;
       revenueId?: string;
       expenseId?: string;
+      kitnetEntryId?: string;
     }) => {
       const { error } = await supabase
         .from("bank_transactions")
@@ -82,6 +84,7 @@ export function useMatchTransaction() {
           status: "matched",
           matched_revenue_id: revenueId ?? null,
           matched_expense_id: expenseId ?? null,
+          kitnet_entry_id: kitnetEntryId ?? null,
         })
         .eq("id", id);
       if (error) throw error;
@@ -120,7 +123,8 @@ export function useBulkConfirmSuggestions() {
   });
 }
 
-// Auto-match bank credit transactions to kitnet revenues by exact amount
+// Auto-match: cruza depósitos com kitnet_entries por valor exato
+// Grava matched_revenue_id E kitnet_entry_id para rastreabilidade completa
 export function useAutoMatchKitnets() {
   const qc = useQueryClient();
   return useMutation({
@@ -129,7 +133,7 @@ export function useAutoMatchKitnets() {
       const start = `${y}-${m}-01`;
       const end = new Date(+y, +m, 0).toISOString().split("T")[0];
 
-      // 1. Unmatched credits for the month
+      // 1. Créditos não conciliados do mês
       const { data: credits } = await supabase
         .from("bank_transactions")
         .select("id, amount, description")
@@ -140,44 +144,61 @@ export function useAutoMatchKitnets() {
 
       if (!credits?.length) return { matched: 0 };
 
-      // 2. Kitnet revenues for the month
+      // 2. Kitnet entries do mês (com kitnet_id para identificação)
+      const { data: kitnetEntries } = await supabase
+        .from("kitnet_entries")
+        .select("id, total_liquid, kitnet_id, kitnets(code, tenant_name)")
+        .eq("reference_month", month);
+
+      if (!kitnetEntries?.length) return { matched: 0 };
+
+      // 3. Receitas de kitnets do mês (para manter matched_revenue_id)
       const { data: kitnetRevenues } = await supabase
         .from("revenues")
-        .select("id, amount, description")
+        .select("id, amount")
         .eq("source", "kitnets")
         .eq("reference_month", month);
 
-      if (!kitnetRevenues?.length) return { matched: 0 };
-
-      // 3. Already matched revenue IDs (avoid double-matching)
+      // 4. Já vinculados — evitar duplo match
       const { data: alreadyLinked } = await supabase
         .from("bank_transactions")
-        .select("matched_revenue_id")
+        .select("kitnet_entry_id")
         .eq("status", "matched")
-        .not("matched_revenue_id", "is", null);
+        .not("kitnet_entry_id", "is", null);
 
-      const usedRevenueIds = new Set((alreadyLinked ?? []).map((t: any) => t.matched_revenue_id));
-      const available = kitnetRevenues.filter(r => !usedRevenueIds.has(r.id));
+      const usedEntryIds = new Set((alreadyLinked ?? []).map((t: any) => t.kitnet_entry_id));
+      const availableEntries = (kitnetEntries ?? []).filter(e => !usedEntryIds.has(e.id));
 
-      // 4. Match by exact amount (compare in cents to avoid float issues)
+      // 5. Match por valor exato (em centavos para evitar float)
       let matchCount = 0;
       for (const credit of credits) {
         const creditCents = Math.round(Math.abs(credit.amount) * 100);
-        const match = available.find(r => Math.round(r.amount * 100) === creditCents);
-        if (!match) continue;
+
+        // Tentar match com kitnet_entry por total_liquid
+        const entryMatch = availableEntries.find(
+          e => Math.round((e.total_liquid ?? 0) * 100) === creditCents
+        );
+
+        if (!entryMatch) continue;
+
+        // Encontrar revenue correspondente pelo mesmo valor
+        const revenueMatch = (kitnetRevenues ?? []).find(
+          r => Math.round((r.amount ?? 0) * 100) === creditCents
+        );
 
         await supabase
           .from("bank_transactions")
           .update({
-            category_confirmed: "kitnets",
+            category_confirmed: "aluguel_kitnets",
             category_intent: "receita",
-            category_label: match.description,
+            category_label: `${(entryMatch as any).kitnets?.code} - ${(entryMatch as any).kitnets?.tenant_name}`,
             status: "matched",
-            matched_revenue_id: match.id,
+            kitnet_entry_id: entryMatch.id,
+            matched_revenue_id: revenueMatch?.id ?? null,
           })
           .eq("id", credit.id);
 
-        usedRevenueIds.add(match.id); // prevent same revenue from matching twice
+        usedEntryIds.add(entryMatch.id);
         matchCount++;
       }
 
@@ -186,6 +207,7 @@ export function useAutoMatchKitnets() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["bank_transactions"] });
       qc.invalidateQueries({ queryKey: ["revenues"] });
+      qc.invalidateQueries({ queryKey: ["kitnet_entries"] });
     },
   });
 }
