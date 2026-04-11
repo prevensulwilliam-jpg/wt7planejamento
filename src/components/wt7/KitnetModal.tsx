@@ -37,9 +37,10 @@ interface Props {
   kitnet: Tables<"kitnets">;
   onClose: () => void;
   onUpdated: () => void;
+  defaultMonth?: string;
 }
 
-export function KitnetModal({ kitnet, onClose, onUpdated }: Props) {
+export function KitnetModal({ kitnet, onClose, onUpdated, defaultMonth }: Props) {
   return (
     <Dialog open onOpenChange={o => !o && onClose()}>
       <DialogContent className="bg-card border-border max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -59,7 +60,7 @@ export function KitnetModal({ kitnet, onClose, onUpdated }: Props) {
           </TabsList>
           <TabsContent value="dados"><DadosTab kitnet={kitnet} onUpdated={onUpdated} /></TabsContent>
           <TabsContent value="contrato"><ContratoTab kitnet={kitnet} onUpdated={onUpdated} /></TabsContent>
-          <TabsContent value="fechamentos"><FechamentosTab kitnet={kitnet} /></TabsContent>
+          <TabsContent value="fechamentos"><FechamentosTab kitnet={kitnet} defaultMonth={defaultMonth} /></TabsContent>
         </Tabs>
       </DialogContent>
     </Dialog>
@@ -226,13 +227,14 @@ function ContratoTab({ kitnet, onUpdated }: { kitnet: Tables<"kitnets">; onUpdat
 }
 
 // ─── ABA FECHAMENTOS ───
-function FechamentosTab({ kitnet }: { kitnet: Tables<"kitnets"> }) {
+function FechamentosTab({ kitnet, defaultMonth }: { kitnet: Tables<"kitnets">; defaultMonth?: string }) {
   const { toast } = useToast();
   const { data: fechamentos, isLoading } = useKitnetFechamentos(kitnet.id);
   const deleteEntry = useDeleteKitnetEntry();
   const [showForm, setShowForm] = useState(false);
   const [editingEntry, setEditingEntry] = useState<any | null>(null);
-  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+  // Inicializa com o mês da tela principal se disponível
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(defaultMonth ?? null);
 
   // Determina o mês a exibir: selectedMonth ou o mais recente
   const latestMonth = fechamentos?.length
@@ -287,7 +289,7 @@ function FechamentosTab({ kitnet }: { kitnet: Tables<"kitnets"> }) {
         </GoldButton>
       </div>
 
-      {showForm && <FechamentoForm kitnet={kitnet} onSaved={(savedMonth) => { setShowForm(false); if (savedMonth) setSelectedMonth(savedMonth); }} defaultMonth={getCurrentMonth()} />}
+      {showForm && <FechamentoForm kitnet={kitnet} onSaved={(savedMonth) => { setShowForm(false); if (savedMonth) setSelectedMonth(savedMonth); }} defaultMonth={defaultMonth ?? getCurrentMonth()} />}
       {editingEntry && (
         <FechamentoForm
           kitnet={kitnet}
