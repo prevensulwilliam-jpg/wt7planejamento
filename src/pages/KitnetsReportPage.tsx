@@ -54,6 +54,43 @@ function useCelescAllMonths(year: number) {
   });
 }
 
+// ─── Despesas reais por categoria (para demonstrativo CEO) ───
+const CATEGORIAS_KITNET = [
+  "celesc_rwt02", "celesc_rwt03",
+  "semasa_rwt02", "semasa_rwt03",
+  "iptu_rwt02", "iptu_rwt03",
+  "ambiental_rwt02", "ambiental_rwt03",
+  "internet_rwt02", "internet_rwt03",
+  "manutencao_rwt02", "manutencao_rwt03",
+] as const;
+
+function useExpensesByCategory(month: string) {
+  return useQuery({
+    queryKey: ["expenses_kitnets_ceo", month],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("expenses")
+        .select("category, amount")
+        .eq("reference_month", month)
+        .in("category", [...CATEGORIAS_KITNET]);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!month,
+  });
+}
+
+function sumExpenses(expenses: { category: string | null; amount: number | null }[], complex: "total" | "RWT02" | "RWT03", prefix: string): number {
+  return expenses
+    .filter(e => {
+      const cat = e.category ?? "";
+      if (!cat.startsWith(prefix)) return false;
+      if (complex === "total") return cat.includes("rwt02") || cat.includes("rwt03");
+      return cat.includes(complex.toLowerCase());
+    })
+    .reduce((s, e) => s + (e.amount ?? 0), 0);
+}
+
 function useEnergyReadingsMonth(month: string) {
   return useQuery({
     queryKey: ["energy_readings_ceo", month],
@@ -150,6 +187,7 @@ export default function KitnetsReportPage() {
   const { data: energyReadings = [] } = useEnergyReadingsMonth(month);
   const { data: celescMonth = [] } = useCelescMonth(month);
   const { data: celescYear = [] } = useCelescAllMonths(year);
+  const { data: expensesMonth = [] } = useExpensesByCategory(month);
 
   // ─── Navegar mês ───
   const changeMonth = (dir: -1 | 1) => {
@@ -173,16 +211,17 @@ export default function KitnetsReportPage() {
   );
 
   // ─── KPIs operacionais ───
-  const receita = filteredEntries.reduce((s: number, e: any) => s + (e.rent_gross ?? 0), 0);
-  const liquido = filteredEntries.reduce((s: number, e: any) => s + (e.total_liquid ?? 0), 0);
-  const adm = filteredEntries.reduce((s: number, e: any) => s + (e.adm_fee ?? 0), 0);
-  const celescCusto = filteredCelesc.reduce((s: number, c: any) => s + (c.invoice_total ?? 0), 0);
-  const semasa = filteredEntries.reduce((s: number, e: any) => s + (e.semasa ?? 0), 0);
-  const iptu = filteredEntries.reduce((s: number, e: any) => s + (e.iptu_taxa ?? 0), 0);
-  // Custos que precisam ser cadastrados — usando valores aproximados por ora
-  const internet = complex === "total" ? 180 : complex === "RWT02" ? 110 : 70;
-  const manutencao = complex === "total" ? 405 : complex === "RWT02" ? 250 : 155;
-  const custosTotal = adm + celescCusto + semasa + iptu + internet + manutencao;
+  // Receita = total_liquid (o que efetivamente cai na conta, já sem ADM)
+  const receita = filteredEntries.reduce((s: number, e: any) => s + (e.total_liquid ?? 0), 0);
+  const admInfo = filteredEntries.reduce((s: number, e: any) => s + (e.adm_fee ?? 0), 0);
+  // Custos reais vindos de expenses categorizados por edificação
+  const celescCusto = sumExpenses(expensesMonth, complex, "celesc_rwt");
+  const semasa = sumExpenses(expensesMonth, complex, "semasa_rwt");
+  const iptu = sumExpenses(expensesMonth, complex, "iptu_rwt");
+  const ambiental = sumExpenses(expensesMonth, complex, "ambiental_rwt");
+  const internet = sumExpenses(expensesMonth, complex, "internet_rwt");
+  const manutencao = sumExpenses(expensesMonth, complex, "manutencao_rwt");
+  const custosTotal = celescCusto + semasa + iptu + ambiental + internet + manutencao;
   const lucroLiquido = receita - custosTotal;
 
   // ─── Solar ───
@@ -211,7 +250,7 @@ export default function KitnetsReportPage() {
   const inadimplenciaValor = Math.max(0, aguardando) * aluguelMedio;
   const ocupacaoPct = (ocupadas / totalUnidades) * 100;
   const inadimplenciaPct = ocupadas > 0 ? (Math.max(0, aguardando) / ocupadas) * 100 : 0;
-  const eficienciaReceita = receita > 0 ? (liquido / (filteredKitnets.reduce((s, k) => s + (k.rent_value ?? 0), 0) || 1)) * 100 : 0;
+  const eficienciaReceita = receita > 0 ? (receita / (filteredKitnets.reduce((s, k) => s + (k.rent_value ?? 0), 0) || 1)) * 100 : 0;
 
   // ─── Rentabilidade ───
   const investimento = complex === "total" ? INVESTIMENTO.total : complex === "RWT02" ? INVESTIMENTO.RWT02 : INVESTIMENTO.RWT03;
@@ -377,13 +416,16 @@ export default function KitnetsReportPage() {
       <div style={g2}>
         <CardWrap style={{ marginBottom: 0 }}>
           <div style={{ fontSize: 12, fontWeight: 500, color: dark ? "#F0F4F8" : "var(--color-text-primary)", marginBottom: 12, paddingBottom: 8, borderBottom: dark ? "1px solid #1C2333" : "0.5px solid var(--color-border-tertiary)" }}>Demonstrativo</div>
-          <Row label="Aluguel bruto recebido" value={formatCurrency(receita)} color={t.gold} />
-          <Row label="Taxa ADM" value={`— ${formatCurrency(adm)}`} color={t.red} />
-          <Row label="Energia CELESC" value={`— ${formatCurrency(celescCusto)}`} color={t.red} />
-          <Row label="Água SEMASA" value={`— ${formatCurrency(semasa)}`} color={t.red} />
-          <Row label="Internet" value={`— ${formatCurrency(internet)}`} color={t.red} />
-          <Row label="IPTU (rateio)" value={`— ${formatCurrency(iptu)}`} color={t.red} />
-          <Row label="Manutenção" value={`— ${formatCurrency(manutencao)}`} color={t.red} />
+          <Row label="Recebido líquido (s/ ADM)" value={formatCurrency(receita)} color={t.gold} />
+          <Row label={`Taxa ADM (informativo)`} value={formatCurrency(admInfo)} color={dark ? "#2D3748" : "#94A3B8"} />
+          <div style={t.divider} />
+          {celescCusto > 0 && <Row label="Energia CELESC" value={`— ${formatCurrency(celescCusto)}`} color={t.red} />}
+          {semasa > 0 && <Row label="Água SEMASA" value={`— ${formatCurrency(semasa)}`} color={t.red} />}
+          {iptu > 0 && <Row label="IPTU" value={`— ${formatCurrency(iptu)}`} color={t.red} />}
+          {ambiental > 0 && <Row label="Ambiental" value={`— ${formatCurrency(ambiental)}`} color={t.red} />}
+          {internet > 0 && <Row label="Internet" value={`— ${formatCurrency(internet)}`} color={t.red} />}
+          {manutencao > 0 && <Row label="Manutenção" value={`— ${formatCurrency(manutencao)}`} color={t.red} />}
+          {custosTotal === 0 && <Row label="Sem despesas categorizadas" value="—" color={dark ? "#2D3748" : "#94A3B8"} />}
           <div style={t.divider} />
           <div style={{ ...t.row, borderBottom: "none" }}>
             <span style={{ ...t.rl, fontWeight: 500, color: dark ? "#F0F4F8" : "var(--color-text-primary)", fontSize: 13 }}>Resultado líquido</span>
