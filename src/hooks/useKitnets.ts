@@ -84,11 +84,13 @@ export function useCreateKitnetEntry() {
       const { error } = await supabase.from("kitnet_entries").insert(entryData);
       if (error) throw error;
 
+      // Auto-create revenue for bank reconciliation matching by value
       if (entryData.total_liquid && entryData.total_liquid > 0 && entryData.reference_month) {
         const description = _kitnetCode
           ? `Repasse ${_kitnetCode}${_tenantName ? ` — ${_tenantName}` : ""}`
           : "Repasse Kitnet";
 
+        // Avoid duplicates: check if revenue already exists for this kitnet+month
         const { data: existing } = await supabase
           .from("revenues")
           .select("id")
@@ -111,47 +113,30 @@ export function useCreateKitnetEntry() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["kitnet_entries"] });
-      qc.invalidateQueries({ queryKey: ["kitnet_fechamentos"] });
       qc.invalidateQueries({ queryKey: ["revenues"] });
     },
   });
 }
 
 // ─── Summary KPIs ───
-export function usePrevMonth(month: string) {
-  const [y, m] = month.split("-").map(Number);
-  const d = new Date(y, m - 2, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
 export function useKitnetSummary(month: string) {
   const kitnets = useKitnets();
   const entries = useKitnetEntries(month);
-  const prevMonth = usePrevMonth(month);
-  const prevEntries = useKitnetEntries(prevMonth);
 
   const data = kitnets.data ?? [];
   const entryData = entries.data ?? [];
-  const prevEntryData = prevEntries.data ?? [];
 
-  const kitnetIdsWithEntry = new Set(entryData.map(e => e.kitnet_id));
-
-  // Ocupada = status no banco (definido manualmente)
-  const occupied = data.filter(k => k.status === "occupied" || k.status === "maintenance").length;
-  // Recebido = tem entry no mês atual
-  const received = data.filter(k => kitnetIdsWithEntry.has(k.id)).length;
-  // Vaga = status vacant no banco
-  const vacant = data.filter(k => k.status === "vacant" || !k.status).length;
+  const occupied = data.filter(k => k.status === "occupied").length;
   const maintenance = data.filter(k => k.status === "maintenance").length;
+  const vacant = data.filter(k => k.status === "vacant").length;
   const totalReceived = entryData.reduce((s, e) => s + (e.total_liquid ?? 0), 0);
 
   return {
     occupied,
-    received,
-    vacant,
     maintenance,
+    vacant,
     totalReceived,
-    isLoading: kitnets.isLoading || entries.isLoading || prevEntries.isLoading,
+    isLoading: kitnets.isLoading || entries.isLoading,
   };
 }
 
@@ -196,11 +181,13 @@ export function useEnergyReadings(month: string, residencialCode?: string) {
   return useQuery({
     queryKey: ["energy_readings", month, residencialCode],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let q = supabase
         .from("energy_readings")
         .select("*, kitnets(code, tenant_name, residencial_code, unit_number)")
         .eq("reference_month", month);
+      const { data, error } = await q;
       if (error) throw error;
+      // Filter by residencial code client-side since it's on the joined table
       if (residencialCode) {
         return data.filter((r: any) => r.kitnets?.residencial_code === residencialCode);
       }
@@ -210,7 +197,7 @@ export function useEnergyReadings(month: string, residencialCode?: string) {
   });
 }
 
-// ─── Kitnet Fechamentos ───
+// ─── Kitnet Entries by kitnet ───
 export function useKitnetFechamentos(kitnetId: string | null) {
   return useQuery({
     queryKey: ["kitnet_fechamentos", kitnetId],
@@ -227,7 +214,7 @@ export function useKitnetFechamentos(kitnetId: string | null) {
   });
 }
 
-// ─── Last energy reading ───
+// ─── Last energy reading for a kitnet ───
 export function useLastEnergyReading(kitnetId: string | null) {
   return useQuery({
     queryKey: ["last_energy_reading", kitnetId],
@@ -259,7 +246,7 @@ export function useSaveEnergyReadings() {
   });
 }
 
-// ─── Energy Config ───
+// ─── Energy Config (tarifa por complexo) ───
 export function useEnergyConfig() {
   return useQuery({
     queryKey: ["energy_config"],
@@ -290,6 +277,8 @@ export function useUpdateEnergyTariff() {
 }
 
 // ─── Conciliação de Kitnets ───
+
+/** Todos os fechamentos não conciliados, opcionalmente filtrados por mês */
 export function useUnreconciledEntries(month?: string) {
   return useQuery({
     queryKey: ["kitnet_entries_unreconciled", month],
@@ -307,6 +296,7 @@ export function useUnreconciledEntries(month?: string) {
   });
 }
 
+/** Conta total de fechamentos não conciliados (para widget do Dashboard) */
 export function useUnreconciledCount() {
   return useQuery({
     queryKey: ["kitnet_entries_unreconciled_count"],
@@ -318,19 +308,27 @@ export function useUnreconciledCount() {
       if (error) throw error;
       return count ?? 0;
     },
-    refetchInterval: 60_000,
+    refetchInterval: 60_000, // atualiza a cada 1 min
   });
 }
 
+/** Marca um fechamento como conciliado e vincula a uma transação bancária */
 export function useReconcileKitnetEntry() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ entryId, bankTransactionId }: { entryId: string; bankTransactionId: string | null }) => {
+    mutationFn: async ({
+      entryId,
+      bankTransactionId,
+    }: {
+      entryId: string;
+      bankTransactionId: string | null;
+    }) => {
       const { error } = await supabase
         .from("kitnet_entries")
         .update({ reconciled: true, bank_transaction_id: bankTransactionId })
         .eq("id", entryId);
       if (error) throw error;
+      // Marca a transação bancária como matched se vinculada
       if (bankTransactionId) {
         await supabase
           .from("bank_transactions")
@@ -364,22 +362,32 @@ export function useDeleteKitnetEntry() {
   });
 }
 
-// ─── Energy Readings Summary ───
+// ─── Prev Month Helper ───
+export function usePrevMonth(month: string): string {
+  const [y, m] = month.split("-").map(Number);
+  const d = new Date(y, m - 2, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+// ─── Energy Readings Summary (agrupado por complexo) ───
 export function useEnergyReadingsSummary(month: string) {
   return useQuery({
     queryKey: ["energy_readings_summary", month],
     queryFn: async () => {
+      // Busca todas as leituras do mês com join em kitnets para pegar residencial_code
       const { data, error } = await supabase
         .from("energy_readings")
         .select("amount_to_charge, kitnet:kitnets(residencial_code)")
         .eq("reference_month", month);
       if (error) throw error;
+
+      // Agrupa por residencial_code
       const summary: Record<string, number> = {};
       (data ?? []).forEach((r: any) => {
         const code = r.kitnet?.residencial_code;
         if (code) summary[code] = (summary[code] ?? 0) + (r.amount_to_charge ?? 0);
       });
-      return summary;
+      return summary; // { RWT02: 1187.43, RWT03: 891.12 }
     },
     enabled: !!month,
   });
