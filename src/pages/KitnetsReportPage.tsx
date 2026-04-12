@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useKitnets, useKitnetEntries, usePrevMonth } from "@/hooks/useKitnets";
@@ -128,13 +128,13 @@ function getTheme(dark: boolean) {
       : { background: "#FFFFFF", color: "#1A202C" },
     card: dark
       ? { background: "#0D1117", border: "1px solid #1C2333", borderRadius: 10 }
-      : { background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: 12 },
+      : { background: "#FFFFFF", border: "1px solid #E2E8F0", borderRadius: 12, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" },
     kpi: dark
       ? { background: "#080C10", border: "1px solid #1C2333", borderRadius: 8, padding: "14px 16px" }
-      : { background: "#F1F5F9", border: "1px solid #E2E8F0", borderRadius: 8, padding: "14px 16px" },
+      : { background: "#FAFBFC", border: "1px solid #E2E8F0", borderRadius: 10, padding: "14px 16px", boxShadow: "0 1px 2px rgba(0,0,0,0.04)" },
     kpiAccent: dark
       ? { background: "#080C10", border: "1px solid #C9A84C44", borderRadius: 8, padding: "14px 16px" }
-      : { background: "#FFFBEB", border: "1px solid #D4A853", borderRadius: 12, padding: "14px 16px" },
+      : { background: "#FFFBEB", border: "1px solid #D4A853", borderRadius: 12, padding: "14px 16px", boxShadow: "0 1px 3px rgba(212,168,83,0.15)" },
     label: dark ? { color: "#4A5568", fontSize: 10, textTransform: "uppercase" as const, letterSpacing: "0.08em" } : { color: "#64748B", fontSize: 11, textTransform: "uppercase" as const, letterSpacing: "0.08em" },
     value: dark ? { color: "#F0F4F8", fontSize: 26, fontWeight: 500, lineHeight: 1 } : { color: "#1A202C", fontSize: 24, fontWeight: 600 },
     sub: dark ? { color: "#2D3748", fontSize: 10, marginTop: 3 } : { color: "#94A3B8", fontSize: 11, marginTop: 3 },
@@ -153,16 +153,16 @@ function getTheme(dark: boolean) {
       ? { display: "flex" as const, gap: 4, borderBottom: "1px solid #1C2333", marginBottom: 20 }
       : { display: "flex" as const, gap: 4, borderBottom: "1px solid #E2E8F0", marginBottom: 20 },
     divider: dark ? { height: 1, background: "#1C2333", margin: "8px 0" } : { height: 1, background: "#E2E8F0", margin: "8px 0" },
-    gold: "#C9A84C",
-    green: dark ? "#10B981" : "#3B6D11",
-    red: dark ? "#F43F5E" : "#993C1D",
-    purple: dark ? "#8B5CF6" : "#534AB7",
-    blue: dark ? "#60A5FA" : "#185FA5",
+    gold: dark ? "#C9A84C" : "#B45309",
+    green: dark ? "#10B981" : "#059669",
+    red: dark ? "#F43F5E" : "#DC2626",
+    purple: dark ? "#8B5CF6" : "#7C3AED",
+    blue: dark ? "#60A5FA" : "#2563EB",
     muted: dark ? "#94A3B8" : "#64748B",
     gridColor: dark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.06)",
     tooltipStyle: dark
       ? { background: "#0D1117", border: "1px solid #1C2333", color: "#F0F4F8", fontSize: 12 }
-      : { background: "#FFFFFF", border: "1px solid #E2E8F0", color: "#1A202C", fontSize: 12 },
+      : { background: "#FFFFFF", border: "1px solid #E2E8F0", color: "#1A202C", fontSize: 12, boxShadow: "0 4px 12px rgba(0,0,0,0.1)", borderRadius: 8 },
   };
 }
 
@@ -171,6 +171,16 @@ export default function KitnetsReportPage() {
   const [complex, setComplex] = useState<"total" | "RWT02" | "RWT03">("total");
   const [dark, setDark] = useState(true);
   const [solarOpen, setSolarOpen] = useState(false);
+
+  // Toggle body class for sidebar/layout light mode
+  useEffect(() => {
+    if (!dark) {
+      document.body.classList.add("ceo-light-mode");
+    } else {
+      document.body.classList.remove("ceo-light-mode");
+    }
+    return () => document.body.classList.remove("ceo-light-mode");
+  }, [dark]);
 
   const year = parseInt(month.split("-")[0]);
   const t = getTheme(dark);
@@ -322,25 +332,25 @@ export default function KitnetsReportPage() {
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
         <div>
-          <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.1em", color: dark ? "#4A5568" : "var(--color-text-tertiary)" }}>WT7 Holding · Kitnets</div>
-          <div style={{ fontSize: 22, fontWeight: 500, color: dark ? "#F0F4F8" : "var(--color-text-primary)", marginTop: 2 }}>
+          <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.1em", color: dark ? "#4A5568" : "#94A3B8" }}>WT7 Holding · Kitnets</div>
+          <div style={{ fontSize: 22, fontWeight: 500, color: dark ? "#F0F4F8" : "#1A202C", marginTop: 2 }}>
             Dashboard CEO
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {/* Navegação mês */}
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <button onClick={() => changeMonth(-1)} style={{ background: "none", border: dark ? "1px solid #1C2333" : "0.5px solid var(--color-border-tertiary)", borderRadius: 6, padding: "4px 8px", cursor: "pointer", color: dark ? "#94A3B8" : "var(--color-text-secondary)" }}>
+            <button onClick={() => changeMonth(-1)} style={{ background: dark ? "none" : "#F8FAFC", border: dark ? "1px solid #1C2333" : "1px solid #E2E8F0", borderRadius: 6, padding: "4px 8px", cursor: "pointer", color: dark ? "#94A3B8" : "#475569" }}>
               <ChevronLeft size={14} />
             </button>
-            <span style={{ fontSize: 13, fontWeight: 500, color: dark ? "#F0F4F8" : "var(--color-text-primary)", minWidth: 90, textAlign: "center" }}>{formatMonth(month)}</span>
-            <button onClick={() => changeMonth(1)} style={{ background: "none", border: dark ? "1px solid #1C2333" : "0.5px solid var(--color-border-tertiary)", borderRadius: 6, padding: "4px 8px", cursor: "pointer", color: dark ? "#94A3B8" : "var(--color-text-secondary)" }}>
+            <span style={{ fontSize: 13, fontWeight: 500, color: dark ? "#F0F4F8" : "#1A202C", minWidth: 90, textAlign: "center" }}>{formatMonth(month)}</span>
+            <button onClick={() => changeMonth(1)} style={{ background: dark ? "none" : "#F8FAFC", border: dark ? "1px solid #1C2333" : "1px solid #E2E8F0", borderRadius: 6, padding: "4px 8px", cursor: "pointer", color: dark ? "#94A3B8" : "#475569" }}>
               <ChevronRight size={14} />
             </button>
           </div>
           <button
             onClick={() => setDark(d => !d)}
-            style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: "pointer", border: dark ? "1px solid #C9A84C44" : "0.5px solid var(--color-border-secondary)", background: dark ? "#0D1117" : "var(--color-background-secondary)", color: dark ? "#C9A84C" : "var(--color-text-primary)" }}
+            style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: "pointer", border: dark ? "1px solid #C9A84C44" : "1px solid #B45309", background: dark ? "#0D1117" : "#FFFBEB", color: dark ? "#C9A84C" : "#92400E" }}
           >
             {dark ? <Sun size={14} /> : <Monitor size={14} />}
             {dark ? "Modo Claro" : "Modo Escuro"}
@@ -385,21 +395,21 @@ export default function KitnetsReportPage() {
 
       {/* Ranking */}
       <CardWrap>
-        <div style={{ fontSize: 12, fontWeight: 500, color: dark ? "#F0F4F8" : "var(--color-text-primary)", marginBottom: 12, paddingBottom: 10, borderBottom: dark ? "1px solid #1C2333" : "0.5px solid var(--color-border-tertiary)" }}>
+        <div style={{ fontSize: 12, fontWeight: 500, color: dark ? "#F0F4F8" : "#1A202C", marginBottom: 12, paddingBottom: 10, borderBottom: dark ? "1px solid #1C2333" : "1px solid #E2E8F0" }}>
           Ranking de performance — {formatMonth(month)}
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 4, fontSize: 10, color: dark ? "#4A5568" : "var(--color-text-tertiary)", paddingBottom: 6, borderBottom: dark ? "1px solid #1C2333" : "0.5px solid var(--color-border-tertiary)", marginBottom: 4 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 4, fontSize: 10, color: dark ? "#4A5568" : "#94A3B8", paddingBottom: 6, borderBottom: dark ? "1px solid #1C2333" : "1px solid #E2E8F0", marginBottom: 4 }}>
           <span>Unidade</span><span>Inquilino</span><span style={{ textAlign: "right" }}>Receita</span><span style={{ textAlign: "right" }}>Status</span>
         </div>
         {ranking.map(r => (
-          <div key={r.code} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 4, fontSize: 12, padding: "6px 0", borderBottom: dark ? "1px solid #0D1117" : "0.5px solid var(--color-border-tertiary)" }}>
-            <span style={{ color: dark ? "#94A3B8" : "var(--color-text-secondary)", fontFamily: "var(--font-mono)" }}>{r.code}</span>
-            <span style={{ color: dark ? "#CBD5E1" : "var(--color-text-primary)" }}>{r.tenant}</span>
+          <div key={r.code} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 4, fontSize: 12, padding: "6px 0", borderBottom: dark ? "1px solid #0D1117" : "1px solid #E2E8F0" }}>
+            <span style={{ color: dark ? "#94A3B8" : "#64748B", fontFamily: "var(--font-mono)" }}>{r.code}</span>
+            <span style={{ color: dark ? "#CBD5E1" : "#1A202C" }}>{r.tenant}</span>
             <span style={{ textAlign: "right", color: r.receita > 0 ? t.gold : t.red, fontFamily: "var(--font-mono)", fontWeight: 500 }}>
               {r.receita > 0 ? formatCurrency(r.receita) : "—"}
             </span>
             <span style={{ textAlign: "right" }}>
-              <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 20, fontWeight: 500, background: r.status === "fechado" ? (dark ? "rgba(16,185,129,0.15)" : "#EAF3DE") : r.status === "aguardando" ? (dark ? "rgba(245,158,11,0.15)" : "#FAEEDA") : (dark ? "rgba(244,63,94,0.15)" : "#FCEBEB"), color: r.status === "fechado" ? t.green : r.status === "aguardando" ? t.gold : t.red }}>
+              <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 20, fontWeight: 500, background: r.status === "fechado" ? (dark ? "rgba(16,185,129,0.15)" : "#ECFDF5") : r.status === "aguardando" ? (dark ? "rgba(245,158,11,0.15)" : "#FFFBEB") : (dark ? "rgba(244,63,94,0.15)" : "#FEF2F2"), color: r.status === "fechado" ? t.green : r.status === "aguardando" ? t.gold : t.red }}>
                 {r.status === "fechado" ? "Fechado" : r.status === "aguardando" ? "Aguardando" : "Vaga"}
               </span>
             </span>
@@ -411,7 +421,7 @@ export default function KitnetsReportPage() {
       <SectionLabel>Bloco 4 — Resultado do mês</SectionLabel>
       <div style={g2}>
         <CardWrap style={{ marginBottom: 0 }}>
-          <div style={{ fontSize: 12, fontWeight: 500, color: dark ? "#F0F4F8" : "var(--color-text-primary)", marginBottom: 12, paddingBottom: 8, borderBottom: dark ? "1px solid #1C2333" : "0.5px solid var(--color-border-tertiary)" }}>Demonstrativo</div>
+          <div style={{ fontSize: 12, fontWeight: 500, color: dark ? "#F0F4F8" : "#1A202C", marginBottom: 12, paddingBottom: 8, borderBottom: dark ? "1px solid #1C2333" : "1px solid #E2E8F0" }}>Demonstrativo</div>
           <Row label="Recebido líquido (s/ ADM)" value={formatCurrency(receita)} color={t.gold} />
           <Row label={`Taxa ADM (informativo)`} value={formatCurrency(admInfo)} color={"#2D3748"} />
           <div style={t.divider} />
@@ -424,7 +434,7 @@ export default function KitnetsReportPage() {
           {custosTotal === 0 && <Row label="Sem despesas categorizadas" value="—" color={"#2D3748"} />}
           <div style={t.divider} />
           <div style={{ ...t.row, borderBottom: "none" }}>
-            <span style={{ ...t.rl, fontWeight: 500, color: dark ? "#F0F4F8" : "var(--color-text-primary)", fontSize: 13 }}>Resultado líquido</span>
+            <span style={{ ...t.rl, fontWeight: 500, color: dark ? "#F0F4F8" : "#1A202C", fontSize: 13 }}>Resultado líquido</span>
             <span style={{ fontSize: 17, fontWeight: 500, color: t.green }}>{formatCurrency(lucroLiquido)}</span>
           </div>
         </CardWrap>
@@ -432,7 +442,7 @@ export default function KitnetsReportPage() {
         {/* Comparativo RWT02 vs RWT03 (só no consolidado) */}
         {complex === "total" ? (
           <CardWrap style={{ marginBottom: 0 }}>
-            <div style={{ fontSize: 12, fontWeight: 500, color: dark ? "#F0F4F8" : "var(--color-text-primary)", marginBottom: 12, paddingBottom: 8, borderBottom: dark ? "1px solid #1C2333" : "0.5px solid var(--color-border-tertiary)" }}>Comparativo RWT02 vs RWT03</div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: dark ? "#F0F4F8" : "#1A202C", marginBottom: 12, paddingBottom: 8, borderBottom: dark ? "1px solid #1C2333" : "1px solid #E2E8F0" }}>Comparativo RWT02 vs RWT03</div>
             {[
               { label: "Investimento", v02: "R$ 1.000.000", v03: "R$ 500.000", c: t.gold },
               { label: "Yield anual", v02: `${(yieldAnual * 1.04).toFixed(1)}%`, v03: `${(yieldAnual * 0.92).toFixed(1)}%`, c: t.purple },
@@ -441,8 +451,8 @@ export default function KitnetsReportPage() {
               { label: "Payback", v02: "6,5 anos", v03: "7,3 anos", c: "#94A3B8" },
               { label: "Margem energia", v02: "84,3%", v03: "83,7%", c: t.green },
             ].map(r => (
-              <div key={r.label} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 4, fontSize: 11, padding: "6px 0", borderBottom: dark ? "1px solid #0D1117" : "0.5px solid var(--color-border-tertiary)" }}>
-                <span style={{ color: dark ? "#4A5568" : "var(--color-text-tertiary)" }}>{r.label}</span>
+              <div key={r.label} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 4, fontSize: 11, padding: "6px 0", borderBottom: dark ? "1px solid #0D1117" : "1px solid #E2E8F0" }}>
+                <span style={{ color: dark ? "#4A5568" : "#94A3B8" }}>{r.label}</span>
                 <span style={{ color: r.c, fontWeight: 500, textAlign: "center" }}>{r.v02}</span>
                 <span style={{ color: r.c, fontWeight: 500, textAlign: "right" }}>{r.v03}</span>
               </div>
@@ -450,7 +460,7 @@ export default function KitnetsReportPage() {
           </CardWrap>
         ) : (
           <CardWrap style={{ marginBottom: 0 }}>
-            <div style={{ fontSize: 12, fontWeight: 500, color: dark ? "#F0F4F8" : "var(--color-text-primary)", marginBottom: 12, paddingBottom: 8, borderBottom: dark ? "1px solid #1C2333" : "0.5px solid var(--color-border-tertiary)" }}>Capital — {complex}</div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: dark ? "#F0F4F8" : "#1A202C", marginBottom: 12, paddingBottom: 8, borderBottom: dark ? "1px solid #1C2333" : "1px solid #E2E8F0" }}>Capital — {complex}</div>
             <Row label="Investimento total" value={formatCurrency(investimento)} color={t.gold} />
             <Row label="ROI acumulado jan/24" value={`${roiPct.toFixed(1)}%`} color={t.purple} />
             <Row label="Yield anual" value={`${yieldAnual.toFixed(1)}%`} color={t.purple} />
@@ -464,10 +474,10 @@ export default function KitnetsReportPage() {
       {/* ── BLOCO 5: GRÁFICO + ANUAL ── */}
       <SectionLabel>Bloco 5 — Performance anual {year}</SectionLabel>
       <CardWrap>
-        <div style={{ fontSize: 12, fontWeight: 500, color: dark ? "#F0F4F8" : "var(--color-text-primary)", marginBottom: 4 }}>Meta vs recebido mensal</div>
+        <div style={{ fontSize: 12, fontWeight: 500, color: dark ? "#F0F4F8" : "#1A202C", marginBottom: 4 }}>Meta vs recebido mensal</div>
         <div style={{ display: "flex", gap: 16, marginBottom: 12 }}>
           {[{ label: "Meta", color: t.gold }, { label: "Recebido", color: t.green }].map(l => (
-            <div key={l.label} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: dark ? "#4A5568" : "var(--color-text-tertiary)" }}>
+            <div key={l.label} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: dark ? "#4A5568" : "#94A3B8" }}>
               <div style={{ width: 10, height: 10, borderRadius: 2, background: l.color }} />{l.label}
             </div>
           ))}
@@ -507,14 +517,14 @@ export default function KitnetsReportPage() {
           <div style={{ fontSize: 22, fontWeight: 500, color: t.green, lineHeight: 1 }}>+ {formatCurrency(saldoSolar)}</div>
           <div style={{ fontSize: 10, color: t.green, marginTop: 4 }}>{solarOpen ? "▲ fechar" : "▼ mês a mês"}</div>
           {solarOpen && (
-            <div style={{ marginTop: 10, paddingTop: 10, borderTop: dark ? "1px solid #1C2333" : "0.5px solid var(--color-border-tertiary)" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", fontSize: 10, color: dark ? "#4A5568" : "var(--color-text-tertiary)", paddingBottom: 4 }}>
+            <div style={{ marginTop: 10, paddingTop: 10, borderTop: dark ? "1px solid #1C2333" : "1px solid #E2E8F0" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", fontSize: 10, color: dark ? "#4A5568" : "#94A3B8", paddingBottom: 4 }}>
                 <span>Mês</span><span style={{ textAlign: "right" }}>Cobrado</span><span style={{ textAlign: "right" }}>CELESC</span><span style={{ textAlign: "right" }}>Saldo</span>
               </div>
               {solarMeses.filter(s => s.cobrado > 0 || s.fatura > 0).map(s => (
-                <div key={s.mes} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", fontSize: 11, padding: "3px 0", borderBottom: dark ? "1px solid #080C10" : "0.5px solid var(--color-border-tertiary)" }}>
-                  <span style={{ color: dark ? "#94A3B8" : "var(--color-text-secondary)" }}>{s.mes}</span>
-                  <span style={{ textAlign: "right", color: dark ? "#F0F4F8" : "var(--color-text-primary)", fontWeight: 500 }}>{formatCurrency(s.cobrado)}</span>
+                <div key={s.mes} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", fontSize: 11, padding: "3px 0", borderBottom: dark ? "1px solid #080C10" : "1px solid #E2E8F0" }}>
+                  <span style={{ color: dark ? "#94A3B8" : "#64748B" }}>{s.mes}</span>
+                  <span style={{ textAlign: "right", color: dark ? "#F0F4F8" : "#1A202C", fontWeight: 500 }}>{formatCurrency(s.cobrado)}</span>
                   <span style={{ textAlign: "right", color: t.red }}>{formatCurrency(s.fatura)}</span>
                   <span style={{ textAlign: "right", color: t.green, fontWeight: 500 }}>{formatCurrency(s.saldo)}</span>
                 </div>
@@ -538,22 +548,22 @@ export default function KitnetsReportPage() {
 
       {/* Barra payback */}
       <CardWrap>
-        <div style={{ fontSize: 12, fontWeight: 500, color: dark ? "#F0F4F8" : "var(--color-text-primary)", marginBottom: 14 }}>Evolução da recuperação do investimento</div>
+        <div style={{ fontSize: 12, fontWeight: 500, color: dark ? "#F0F4F8" : "#1A202C", marginBottom: 14 }}>Evolução da recuperação do investimento</div>
         {[
           { label: "Recuperado até hoje", pct: roiPct, color: t.green, value: formatCurrency(investimento * roiPct / 100) },
           { label: `Projeção final ${year}`, pct: Math.min(roiPct + yieldAnual / 2, 100), color: t.blue, value: formatCurrency(investimento * (roiPct + yieldAnual / 2) / 100) },
           { label: "Payback completo", pct: 100, color: t.gold, value: `~${new Date().getFullYear() + Math.round(paybackAnos)} · ${paybackAnos.toFixed(1)} anos` },
         ].map(b => (
           <div key={b.label} style={{ marginBottom: 14 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: dark ? "#4A5568" : "var(--color-text-tertiary)", marginBottom: 4 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: dark ? "#4A5568" : "#94A3B8", marginBottom: 4 }}>
               <span>{b.label}</span><span style={{ color: b.color, fontWeight: 500 }}>{b.value}</span>
             </div>
-            <div style={{ height: 10, background: dark ? "#0D1117" : "var(--color-background-secondary)", borderRadius: 5, overflow: "hidden" }}>
+            <div style={{ height: 10, background: dark ? "#0D1117" : "#F1F5F9", borderRadius: 5, overflow: "hidden" }}>
               <div style={{ height: "100%", width: `${Math.min(b.pct, 100)}%`, background: b.color, borderRadius: 5 }} />
             </div>
           </div>
         ))}
-        <div style={{ fontSize: 11, color: dark ? "#2D3748" : "var(--color-text-tertiary)", marginTop: 4 }}>
+        <div style={{ fontSize: 11, color: dark ? "#2D3748" : "#94A3B8", marginTop: 4 }}>
           * Com 28 unidades em 2026, o payback pode ser antecipado para ~4,5 anos
         </div>
       </CardWrap>

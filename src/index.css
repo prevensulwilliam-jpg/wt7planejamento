@@ -105,6 +105,48 @@
   animation: shimmer 1.5s infinite;
 }
 
+/* ── CEO Dashboard Light Mode Override ── */
+body.ceo-light-mode {
+  background: #FFFFFF !important;
+}
+body.ceo-light-mode .min-h-screen {
+  background: #FFFFFF !important;
+}
+/* Sidebar override */
+body.ceo-light-mode aside.fixed {
+  background: #FAFBFC !important;
+  border-right: 1px solid #E5E7EB !important;
+}
+body.ceo-light-mode aside.fixed p {
+  color: #9CA3AF !important;
+}
+body.ceo-light-mode aside.fixed a {
+  color: #6B7280 !important;
+}
+body.ceo-light-mode aside.fixed a[style*="rgba(201,168,76"] {
+  background: rgba(186,117,23,0.08) !important;
+  color: #92400E !important;
+  border-left-color: #B45309 !important;
+}
+/* Topbar override */
+body.ceo-light-mode header.hidden.lg\:flex {
+  border-bottom: 1px solid #E5E7EB !important;
+  background: #FAFBFC !important;
+}
+body.ceo-light-mode header.hidden.lg\:flex button {
+  color: #6B7280 !important;
+}
+/* Scrollbar light */
+body.ceo-light-mode ::-webkit-scrollbar-track {
+  background: #F3F4F6;
+}
+body.ceo-light-mode ::-webkit-scrollbar-thumb {
+  background: #D1D5DB;
+}
+body.ceo-light-mode ::-webkit-scrollbar-thumb:hover {
+  background: #9CA3AF;
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
