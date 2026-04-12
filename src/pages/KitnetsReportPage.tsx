@@ -122,60 +122,50 @@ function useCelescMonth(month: string) {
 // ─── Estilos por tema ───
 function getTheme(dark: boolean) {
   return {
-    wrap: dark
-      ? { background: "#080C10", minHeight: "100vh", padding: "0" }
-      : { background: "linear-gradient(135deg, #F8FAFF 0%, #EEF2FF 40%, #FDF4FF 100%)", minHeight: "100vh", padding: "0" },
+    wrap: dark ? { background: "#080C10", minHeight: "100vh", padding: "0" } : {},
     outer: dark
       ? { background: "#080C10", color: "#F0F4F8" }
-      : { background: "transparent", color: "#1E293B" },
+      : { background: "transparent", color: "var(--color-text-primary)" },
     header: dark
       ? { background: "#0D1117", borderBottom: "1px solid #1C2333", padding: "16px 24px" }
-      : { background: "rgba(255,255,255,0.7)", backdropFilter: "blur(12px)", borderBottom: "1px solid rgba(99,102,241,0.12)", padding: "16px 24px", borderRadius: "0 0 16px 16px" },
+      : { borderBottom: "0.5px solid var(--color-border-tertiary)", padding: "16px 0", marginBottom: 16 },
     card: dark
       ? { background: "#0D1117", border: "1px solid #1C2333", borderRadius: 10 }
-      : { background: "rgba(255,255,255,0.85)", backdropFilter: "blur(8px)", border: "1px solid rgba(99,102,241,0.1)", borderRadius: 14, boxShadow: "0 2px 12px rgba(99,102,241,0.06)" },
+      : { background: "var(--color-background-primary)", border: "0.5px solid var(--color-border-tertiary)", borderRadius: 12 },
     kpi: dark
       ? { background: "#080C10", border: "1px solid #1C2333", borderRadius: 8, padding: "14px 16px" }
-      : { background: "rgba(255,255,255,0.9)", border: "1px solid rgba(99,102,241,0.08)", borderRadius: 12, padding: "14px 16px", boxShadow: "0 1px 6px rgba(99,102,241,0.05)" },
+      : { background: "var(--color-background-secondary)", borderRadius: 8, padding: "14px 16px" },
     kpiAccent: dark
       ? { background: "#080C10", border: "1px solid #C9A84C44", borderRadius: 8, padding: "14px 16px" }
-      : { background: "linear-gradient(135deg, rgba(245,158,11,0.06) 0%, rgba(234,88,12,0.04) 100%)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: 12, padding: "14px 16px", boxShadow: "0 1px 8px rgba(245,158,11,0.08)" },
-    label: dark
-      ? { color: "#4A5568", fontSize: 10, textTransform: "uppercase" as const, letterSpacing: "0.08em" }
-      : { color: "#6366F1", fontSize: 10, textTransform: "uppercase" as const, letterSpacing: "0.08em", fontWeight: 600 },
-    value: dark
-      ? { color: "#F0F4F8", fontSize: 26, fontWeight: 500, lineHeight: 1 }
-      : { color: "#1E293B", fontSize: 26, fontWeight: 600, lineHeight: 1 },
-    sub: dark
-      ? { color: "#2D3748", fontSize: 10, marginTop: 3 }
-      : { color: "#94A3B8", fontSize: 10, marginTop: 3 },
+      : { background: "var(--color-background-primary)", border: "0.5px solid #BA751744", borderTopWidth: 3, borderTopColor: "#BA7517", borderRadius: 12, padding: "14px 16px" },
+    label: dark ? { color: "#4A5568", fontSize: 10, textTransform: "uppercase" as const, letterSpacing: "0.08em" } : { color: "var(--color-text-tertiary)", fontSize: 11 },
+    value: dark ? { color: "#F0F4F8", fontSize: 26, fontWeight: 500, lineHeight: 1 } : { color: "var(--color-text-primary)", fontSize: 24, fontWeight: 500 },
+    sub: dark ? { color: "#2D3748", fontSize: 10, marginTop: 3 } : { color: "var(--color-text-tertiary)", fontSize: 11, marginTop: 3 },
     sectionLabel: dark
       ? { fontSize: 10, textTransform: "uppercase" as const, letterSpacing: "0.1em", color: "#2D3748", marginBottom: 8 }
-      : { fontSize: 10, textTransform: "uppercase" as const, letterSpacing: "0.12em", color: "#6366F1", marginBottom: 8, fontWeight: 700 },
+      : { fontSize: 11, textTransform: "uppercase" as const, letterSpacing: "0.08em", color: "var(--color-text-tertiary)", marginBottom: 8, fontWeight: 500 },
     row: dark
       ? { display: "flex" as const, justifyContent: "space-between" as const, padding: "7px 0", borderBottom: "1px solid #0D1117" }
-      : { display: "flex" as const, justifyContent: "space-between" as const, padding: "8px 0", borderBottom: "1px solid rgba(99,102,241,0.06)" },
-    rl: dark ? { fontSize: 11, color: "#4A5568" } : { fontSize: 12, color: "#64748B" },
-    rv: dark ? { fontSize: 12, fontWeight: 500, color: "#94A3B8" } : { fontSize: 13, fontWeight: 600, color: "#334155" },
+      : { display: "flex" as const, justifyContent: "space-between" as const, padding: "7px 0", borderBottom: "0.5px solid var(--color-border-tertiary)" },
+    rl: dark ? { fontSize: 11, color: "#4A5568" } : { fontSize: 12, color: "var(--color-text-secondary)" },
+    rv: dark ? { fontSize: 12, fontWeight: 500, color: "#94A3B8" } : { fontSize: 13, fontWeight: 500, color: "var(--color-text-primary)" },
     tab: (active: boolean) => dark
       ? { padding: "8px 20px", fontSize: 13, fontWeight: 500, cursor: "pointer", border: "none", background: "none", color: active ? "#C9A84C" : "#4A5568", borderBottom: active ? "2px solid #C9A84C" : "2px solid transparent", marginBottom: -1 }
-      : { padding: "8px 20px", fontSize: 13, fontWeight: 600, cursor: "pointer", border: "none", background: active ? "linear-gradient(135deg, #6366F1, #8B5CF6)" : "none", color: active ? "#FFF" : "#6366F1", borderBottom: "2px solid transparent", borderRadius: active ? 8 : 0, marginBottom: -1 },
+      : { padding: "8px 20px", fontSize: 13, fontWeight: 500, cursor: "pointer", border: "none", background: "none", color: active ? "var(--color-text-primary)" : "var(--color-text-secondary)", borderBottom: active ? "2px solid #BA7517" : "2px solid transparent", marginBottom: -1 },
     tabBar: dark
       ? { display: "flex" as const, gap: 4, borderBottom: "1px solid #1C2333", marginBottom: 20 }
-      : { display: "flex" as const, gap: 6, borderBottom: "1px solid rgba(99,102,241,0.1)", marginBottom: 20, paddingBottom: 4 },
-    divider: dark
-      ? { height: 1, background: "#1C2333", margin: "8px 0" }
-      : { height: 1, background: "linear-gradient(90deg, rgba(99,102,241,0.1), rgba(236,72,153,0.1))", margin: "8px 0" },
-    gold: dark ? "#C9A84C" : "#D97706",
-    green: dark ? "#10B981" : "#059669",
-    red: dark ? "#F43F5E" : "#DC2626",
-    purple: dark ? "#8B5CF6" : "#7C3AED",
-    blue: dark ? "#60A5FA" : "#2563EB",
-    muted: dark ? "#94A3B8" : "#94A3B8",
-    gridColor: dark ? "rgba(255,255,255,0.05)" : "rgba(99,102,241,0.06)",
+      : { display: "flex" as const, gap: 4, borderBottom: "0.5px solid var(--color-border-tertiary)", marginBottom: 20 },
+    divider: dark ? { height: 1, background: "#1C2333", margin: "8px 0" } : { height: "0.5px", background: "var(--color-border-tertiary)", margin: "8px 0" },
+    gold: "#C9A84C",
+    green: dark ? "#10B981" : "#3B6D11",
+    red: dark ? "#F43F5E" : "#993C1D",
+    purple: dark ? "#8B5CF6" : "#534AB7",
+    blue: dark ? "#60A5FA" : "#185FA5",
+    muted: dark ? "#94A3B8" : "var(--color-text-secondary)",
+    gridColor: dark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.06)",
     tooltipStyle: dark
       ? { background: "#0D1117", border: "1px solid #1C2333", color: "#F0F4F8", fontSize: 12 }
-      : { background: "#FFF", border: "1px solid rgba(99,102,241,0.15)", color: "#1E293B", fontSize: 12, borderRadius: 10, boxShadow: "0 4px 16px rgba(99,102,241,0.1)" },
+      : { background: "var(--color-background-primary)", border: "0.5px solid var(--color-border-tertiary)", color: "var(--color-text-primary)", fontSize: 12 },
   };
 }
 
@@ -354,10 +344,10 @@ export default function KitnetsReportPage() {
           {/* Toggle tema */}
           <button
             onClick={() => setDark(d => !d)}
-            style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: "pointer", border: dark ? "1px solid #C9A84C44" : "1px solid rgba(99,102,241,0.2)", background: dark ? "#0D1117" : "rgba(255,255,255,0.8)", color: dark ? "#C9A84C" : "#6366F1" }}
+            style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: "pointer", border: dark ? "1px solid #C9A84C44" : "0.5px solid var(--color-border-secondary)", background: dark ? "#0D1117" : "var(--color-background-secondary)", color: dark ? "#C9A84C" : "var(--color-text-primary)" }}
           >
             {dark ? <Sun size={14} /> : <Monitor size={14} />}
-            {dark ? "Modo Claro" : "Modo Escuro"}
+            {dark ? "Layout C" : "Layout A"}
           </button>
         </div>
       </div>
