@@ -66,6 +66,20 @@ export const EXPENSE_CATEGORY_MAP: Record<string, { emoji: string; name: string;
   veiculo:              { emoji: "🚗", name: "Veículo",                color: "#94A3B8" },
   viagens:              { emoji: "✈️", name: "Viagens",                color: "#3B82F6" },
   outros:               { emoji: "📦", name: "Outros",                 color: "#4A5568" },
+  // Categorias por edificação (kitnets)
+  celesc_apt:           { emoji: "⚡", name: "CELESC Apt",              color: "#F59E0B" },
+  celesc_rwt02:         { emoji: "⚡", name: "CELESC RWT02",            color: "#F59E0B" },
+  celesc_rwt03:         { emoji: "⚡", name: "CELESC RWT03",            color: "#F59E0B" },
+  semasa_rwt02:         { emoji: "💧", name: "SEMASA RWT02",            color: "#3B82F6" },
+  semasa_rwt03:         { emoji: "💧", name: "SEMASA RWT03",            color: "#3B82F6" },
+  iptu_rwt02:           { emoji: "🧾", name: "IPTU RWT02",              color: "#F43F5E" },
+  iptu_rwt03:           { emoji: "🧾", name: "IPTU RWT03",              color: "#F43F5E" },
+  ambiental_rwt02:      { emoji: "🌿", name: "Ambiental RWT02",         color: "#10B981" },
+  ambiental_rwt03:      { emoji: "🌿", name: "Ambiental RWT03",         color: "#10B981" },
+  internet_rwt02:       { emoji: "🌐", name: "Internet RWT02",          color: "#3B82F6" },
+  internet_rwt03:       { emoji: "🌐", name: "Internet RWT03",          color: "#3B82F6" },
+  manutencao_rwt02:     { emoji: "🔧", name: "Manutenção RWT02",        color: "#F97316" },
+  manutencao_rwt03:     { emoji: "🔧", name: "Manutenção RWT03",        color: "#F97316" },
 };
 
 // Função helper para buscar exibição de receita
