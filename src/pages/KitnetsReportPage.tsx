@@ -122,47 +122,47 @@ function useCelescMonth(month: string) {
 // ─── Estilos por tema ───
 function getTheme(dark: boolean) {
   return {
-    wrap: dark ? { background: "#080C10", minHeight: "100vh", padding: "0" } : {},
+    wrap: dark ? { background: "#080C10", minHeight: "100vh", padding: "0" } : { background: "#FFFFFF", minHeight: "100vh", padding: "0" },
     outer: dark
       ? { background: "#080C10", color: "#F0F4F8" }
-      : { background: "transparent", color: "var(--color-text-primary)" },
+      : { background: "#FFFFFF", color: "#1A202C" },
     card: dark
       ? { background: "#0D1117", border: "1px solid #1C2333", borderRadius: 10 }
-      : { background: "var(--color-background-primary)", border: "0.5px solid var(--color-border-tertiary)", borderRadius: 12 },
+      : { background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: 12 },
     kpi: dark
       ? { background: "#080C10", border: "1px solid #1C2333", borderRadius: 8, padding: "14px 16px" }
-      : { background: "var(--color-background-secondary)", borderRadius: 8, padding: "14px 16px" },
+      : { background: "#F1F5F9", border: "1px solid #E2E8F0", borderRadius: 8, padding: "14px 16px" },
     kpiAccent: dark
       ? { background: "#080C10", border: "1px solid #C9A84C44", borderRadius: 8, padding: "14px 16px" }
-      : { background: "var(--color-background-primary)", border: "0.5px solid #BA751744", borderTopWidth: 3, borderTopColor: "#BA7517", borderRadius: 12, padding: "14px 16px" },
-    label: dark ? { color: "#4A5568", fontSize: 10, textTransform: "uppercase" as const, letterSpacing: "0.08em" } : { color: "var(--color-text-tertiary)", fontSize: 11 },
-    value: dark ? { color: "#F0F4F8", fontSize: 26, fontWeight: 500, lineHeight: 1 } : { color: "var(--color-text-primary)", fontSize: 24, fontWeight: 500 },
-    sub: dark ? { color: "#2D3748", fontSize: 10, marginTop: 3 } : { color: "var(--color-text-tertiary)", fontSize: 11, marginTop: 3 },
+      : { background: "#FFFBEB", border: "1px solid #D4A853", borderRadius: 12, padding: "14px 16px" },
+    label: dark ? { color: "#4A5568", fontSize: 10, textTransform: "uppercase" as const, letterSpacing: "0.08em" } : { color: "#64748B", fontSize: 11, textTransform: "uppercase" as const, letterSpacing: "0.08em" },
+    value: dark ? { color: "#F0F4F8", fontSize: 26, fontWeight: 500, lineHeight: 1 } : { color: "#1A202C", fontSize: 24, fontWeight: 600 },
+    sub: dark ? { color: "#2D3748", fontSize: 10, marginTop: 3 } : { color: "#94A3B8", fontSize: 11, marginTop: 3 },
     sectionLabel: dark
       ? { fontSize: 10, textTransform: "uppercase" as const, letterSpacing: "0.1em", color: "#2D3748", marginBottom: 8 }
-      : { fontSize: 11, textTransform: "uppercase" as const, letterSpacing: "0.08em", color: "var(--color-text-tertiary)", marginBottom: 8, fontWeight: 500 },
+      : { fontSize: 11, textTransform: "uppercase" as const, letterSpacing: "0.08em", color: "#64748B", marginBottom: 8, fontWeight: 500 },
     row: dark
       ? { display: "flex" as const, justifyContent: "space-between" as const, padding: "7px 0", borderBottom: "1px solid #0D1117" }
-      : { display: "flex" as const, justifyContent: "space-between" as const, padding: "7px 0", borderBottom: "0.5px solid var(--color-border-tertiary)" },
-    rl: dark ? { fontSize: 11, color: "#4A5568" } : { fontSize: 12, color: "var(--color-text-secondary)" },
-    rv: dark ? { fontSize: 12, fontWeight: 500, color: "#94A3B8" } : { fontSize: 13, fontWeight: 500, color: "var(--color-text-primary)" },
+      : { display: "flex" as const, justifyContent: "space-between" as const, padding: "7px 0", borderBottom: "1px solid #E2E8F0" },
+    rl: dark ? { fontSize: 11, color: "#4A5568" } : { fontSize: 12, color: "#64748B" },
+    rv: dark ? { fontSize: 12, fontWeight: 500, color: "#94A3B8" } : { fontSize: 13, fontWeight: 500, color: "#1E293B" },
     tab: (active: boolean) => dark
       ? { padding: "8px 20px", fontSize: 13, fontWeight: 500, cursor: "pointer", border: "none", background: "none", color: active ? "#C9A84C" : "#4A5568", borderBottom: active ? "2px solid #C9A84C" : "2px solid transparent", marginBottom: -1 }
-      : { padding: "8px 20px", fontSize: 13, fontWeight: 500, cursor: "pointer", border: "none", background: "none", color: active ? "var(--color-text-primary)" : "var(--color-text-secondary)", borderBottom: active ? "2px solid #BA7517" : "2px solid transparent", marginBottom: -1 },
+      : { padding: "8px 20px", fontSize: 13, fontWeight: 500, cursor: "pointer", border: "none", background: "none", color: active ? "#1A202C" : "#94A3B8", borderBottom: active ? "2px solid #BA7517" : "2px solid transparent", marginBottom: -1 },
     tabBar: dark
       ? { display: "flex" as const, gap: 4, borderBottom: "1px solid #1C2333", marginBottom: 20 }
-      : { display: "flex" as const, gap: 4, borderBottom: "0.5px solid var(--color-border-tertiary)", marginBottom: 20 },
-    divider: dark ? { height: 1, background: "#1C2333", margin: "8px 0" } : { height: "0.5px", background: "var(--color-border-tertiary)", margin: "8px 0" },
+      : { display: "flex" as const, gap: 4, borderBottom: "1px solid #E2E8F0", marginBottom: 20 },
+    divider: dark ? { height: 1, background: "#1C2333", margin: "8px 0" } : { height: 1, background: "#E2E8F0", margin: "8px 0" },
     gold: "#C9A84C",
     green: dark ? "#10B981" : "#3B6D11",
     red: dark ? "#F43F5E" : "#993C1D",
     purple: dark ? "#8B5CF6" : "#534AB7",
     blue: dark ? "#60A5FA" : "#185FA5",
-    muted: dark ? "#94A3B8" : "var(--color-text-secondary)",
+    muted: dark ? "#94A3B8" : "#64748B",
     gridColor: dark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.06)",
     tooltipStyle: dark
       ? { background: "#0D1117", border: "1px solid #1C2333", color: "#F0F4F8", fontSize: 12 }
-      : { background: "var(--color-background-primary)", border: "0.5px solid var(--color-border-tertiary)", color: "var(--color-text-primary)", fontSize: 12 },
+      : { background: "#FFFFFF", border: "1px solid #E2E8F0", color: "#1A202C", fontSize: 12 },
   };
 }
 
