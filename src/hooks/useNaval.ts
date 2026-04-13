@@ -35,7 +35,7 @@ export function useNavalContext() {
             revenueBySource: kpis.revenueBySource,
             expenseByCategory: kpis.expenseByCategory,
             kitnets: {
-              total: kitnets?.length ?? 13,
+              totalKitnets: kitnets?.length ?? 13,
               occupied: summary.occupied,
               total: summary.total,
               vacant: summary.vacant,

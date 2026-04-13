@@ -637,7 +637,7 @@ export default function KitnetsReportPage() {
       </div>
 
       {/* ── BLOCO 5: GRÁFICO + ANUAL ── */}
-      <SectionLabel>Bloco 5 — Performance anual {year}</SectionLabel>
+      <SectionLabel>{`Bloco 5 — Performance anual ${year}`}</SectionLabel>
       <CardWrap>
         <div style={{ fontSize: 12, fontWeight: 500, color: dark ? "#F0F4F8" : "#1A202C", marginBottom: 4 }}>Meta vs recebido mensal</div>
         <div style={{ display: "flex", gap: 16, marginBottom: 12 }}>
@@ -652,7 +652,7 @@ export default function KitnetsReportPage() {
             <CartesianGrid strokeDasharray="3 3" stroke={t.gridColor} />
             <XAxis dataKey="mes" stroke={dark ? "#2D3748" : "#888780"} tick={{ fontSize: 11, fill: dark ? "#4A5568" : "#888780" }} />
             <YAxis tickFormatter={v => `${(v / 1000).toFixed(0)}k`} stroke={dark ? "#2D3748" : "#888780"} tick={{ fontSize: 11, fill: dark ? "#4A5568" : "#888780" }} />
-            <Tooltip formatter={(v: number) => formatCurrency(v)} contentStyle={t.tooltipStyle} />
+            <Tooltip formatter={(v: number | string) => formatCurrency(Number(v))} contentStyle={t.tooltipStyle} />
             <Bar dataKey="meta" name="Meta" fill={dark ? "rgba(201,168,76,0.25)" : "rgba(186,117,23,0.2)"} stroke={t.gold} strokeWidth={1} radius={[4, 4, 0, 0]} />
             <Bar dataKey="recebido" name="Recebido" fill={t.green} opacity={dark ? 1 : 0.8} radius={[4, 4, 0, 0]} />
           </BarChart>
