@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -19,7 +19,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Plus, Download, Save, Printer, CheckCircle, XCircle, AlertCircle, ArrowLeftRight, Zap, Trash2 } from "lucide-react";
 import { abrirReciboConsolidado } from "@/lib/relatorioFechamento";
 import type { Tables } from "@/integrations/supabase/types";
-import { useMemo } from "react";
+
 import { useSearchParams } from "react-router-dom";
 import { useBankTransactions } from "@/hooks/useBankReconciliation";
 
