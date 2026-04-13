@@ -286,7 +286,7 @@ function KitnetGrid({ kitnets, onManage, entries, prevEntries }: { kitnets: Tabl
             </div>
             <p className="text-sm text-muted-foreground truncate">{tenantName || "—"}</p>
             {k.tenant_phone && isOccupied && <p className="text-xs text-muted-foreground">{k.tenant_phone}</p>}
-            <p className="font-mono text-lg text-foreground mt-1">{formatCurrency(displayValue)}</p>
+            <p className="font-mono text-lg mt-1" style={{ color: !isOccupied ? '#4A5568' : '#E2E8F0' }}>{formatCurrency(displayValue)}</p>
 
             {/* Sub-badge: conciliado / lançado / aguardando / vaga */}
             {isOccupied && isReconciled ? (
