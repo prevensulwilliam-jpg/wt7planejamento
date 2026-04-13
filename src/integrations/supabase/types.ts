@@ -374,6 +374,30 @@ export type Database = {
         }
         Relationships: []
       }
+      ceo_config: {
+        Row: {
+          config_key: string
+          config_value: Json
+          id: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          config_key: string
+          config_value?: Json
+          id?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          config_key?: string
+          config_value?: Json
+          id?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       classification_patterns: {
         Row: {
           auto_apply: boolean | null
@@ -808,6 +832,7 @@ export type Database = {
           period_end: string | null
           period_start: string | null
           reconciled: boolean | null
+          reconciled_at: string | null
           reference_month: string | null
           rent_gross: number | null
           semasa: number | null
@@ -828,6 +853,7 @@ export type Database = {
           period_end?: string | null
           period_start?: string | null
           reconciled?: boolean | null
+          reconciled_at?: string | null
           reference_month?: string | null
           rent_gross?: number | null
           semasa?: number | null
@@ -848,6 +874,7 @@ export type Database = {
           period_end?: string | null
           period_start?: string | null
           reconciled?: boolean | null
+          reconciled_at?: string | null
           reference_month?: string | null
           rent_gross?: number | null
           semasa?: number | null
