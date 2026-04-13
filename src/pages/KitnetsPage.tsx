@@ -12,7 +12,7 @@ import { KpiCard } from "@/components/wt7/KpiCard";
 import { WtBadge } from "@/components/wt7/WtBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { KitnetModal } from "@/components/wt7/KitnetModal";
-import { useKitnets, useKitnetEntries, useKitnetSummary, useCreateKitnetEntry, useEnergyReadings, useCelescInvoices, useSaveEnergyReadings, useUnreconciledEntries, usePrevMonth, useDeleteKitnetEntry, useReconcileWithTransactions, useLockedMonth, useLockMonth, useUnlockMonth, useKitnetAlertsForMonth, useKitnetMonthStatuses } from "@/hooks/useKitnets";
+import { useKitnets, useKitnetEntries, useKitnetSummary, useCreateKitnetEntry, useEnergyReadings, useCelescInvoices, useSaveEnergyReadings, useUnreconciledEntries, usePrevMonth, useDeleteKitnetEntry, useReconcileWithTransactions, useLockedMonth, useLockMonth, useUnlockMonth, useKitnetAlertsForMonth, useKitnetMonthStatuses, useKitnetMonthDataMap } from "@/hooks/useKitnets";
 import { formatCurrency, formatMonth, getCurrentMonth, formatDate } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -182,6 +182,7 @@ function OverviewTab({ month, setMonth, isLocked }: { month: string; setMonth: (
   const prevMonth = usePrevMonth(month);
   const { data: prevEntries } = useKitnetEntries(prevMonth);
   const { data: monthStatuses } = useKitnetMonthStatuses(month);
+  const { data: monthDataMap } = useKitnetMonthDataMap(month);
   const rwt02 = (kitnets ?? []).filter(k => k.residencial_code === "RWT02");
   const rwt03 = (kitnets ?? []).filter(k => k.residencial_code === "RWT03");
 
@@ -236,13 +237,13 @@ function OverviewTab({ month, setMonth, isLocked }: { month: string; setMonth: (
       {/* RWT02 */}
       <div>
         <h2 className="font-display font-bold text-lg text-foreground mb-3">RWT02 — Rua Amauri de Souza, 08</h2>
-        <KitnetGrid kitnets={rwt02} onManage={setSelected} entries={entries ?? []} prevEntries={prevEntries ?? []} monthStatuses={monthStatuses ?? {}} isLocked={isLocked} />
+        <KitnetGrid kitnets={rwt02} onManage={setSelected} entries={entries ?? []} prevEntries={prevEntries ?? []} monthStatuses={monthStatuses ?? {}} monthDataMap={monthDataMap ?? {}} isLocked={isLocked} />
       </div>
 
       {/* RWT03 */}
       <div>
         <h2 className="font-display font-bold text-lg text-foreground mb-3">RWT03 — Rua Manoel Corrêa, 125</h2>
-        <KitnetGrid kitnets={rwt03} onManage={setSelected} entries={entries ?? []} prevEntries={prevEntries ?? []} monthStatuses={monthStatuses ?? {}} isLocked={isLocked} />
+        <KitnetGrid kitnets={rwt03} onManage={setSelected} entries={entries ?? []} prevEntries={prevEntries ?? []} monthStatuses={monthStatuses ?? {}} monthDataMap={monthDataMap ?? {}} isLocked={isLocked} />
       </div>
 
       {selected && (
@@ -257,7 +258,7 @@ function OverviewTab({ month, setMonth, isLocked }: { month: string; setMonth: (
   );
 }
 
-function KitnetGrid({ kitnets, onManage, entries, prevEntries, monthStatuses, isLocked }: { kitnets: Tables<"kitnets">[]; onManage: (k: Tables<"kitnets">) => void; entries: any[]; prevEntries: any[]; monthStatuses: Record<string, string>; isLocked: boolean }) {
+function KitnetGrid({ kitnets, onManage, entries, prevEntries, monthStatuses, monthDataMap, isLocked }: { kitnets: Tables<"kitnets">[]; onManage: (k: Tables<"kitnets">) => void; entries: any[]; prevEntries: any[]; monthStatuses: Record<string, string>; monthDataMap: Record<string, any>; isLocked: boolean }) {
   if (!kitnets.length) {
     return <p className="text-muted-foreground text-sm">Nenhuma kitnet cadastrada.</p>;
   }
@@ -274,12 +275,17 @@ function KitnetGrid({ kitnets, onManage, entries, prevEntries, monthStatuses, is
         const s = isOccupied
           ? (hasEntry ? statusLabels.occupied : { label: "Aguardando", variant: "gold" as const })
           : statusLabels[effectiveStatus] ?? statusLabels.vacant;
-        // Nome: só mostra se kitnet está occupied/maintenance
-        const tenantName = isOccupied ? (k.tenant_name || null) : null;
-        // Valor: total_liquid se tem fechamento, senão rent_value do contrato
+        // Dados efetivos do mês: snapshot mais recente ≤ mês, fallback para global
+        const md = monthDataMap[k.id];
+        const effectiveName  = md?.tenant_name  ?? k.tenant_name;
+        const effectivePhone = md?.tenant_phone ?? k.tenant_phone;
+        const effectiveRent  = md?.rent_value   ?? k.rent_value ?? 0;
+        // Nome: só mostra se occupied/maintenance
+        const tenantName = isOccupied ? (effectiveName || null) : null;
+        // Valor: total_liquid se tem fechamento, senão rent_value efetivo
         const displayValue = isOccupied
-          ? (fechamento?.total_liquid ?? k.rent_value ?? 0)
-          : (k.rent_value ?? 0);
+          ? (fechamento?.total_liquid ?? effectiveRent)
+          : effectiveRent;
         return (
           <PremiumCard key={k.id} className="relative p-4">
             <div className="flex items-center justify-between mb-2">
@@ -287,7 +293,7 @@ function KitnetGrid({ kitnets, onManage, entries, prevEntries, monthStatuses, is
               <WtBadge variant={s.variant}>{s.label}</WtBadge>
             </div>
             <p className="text-sm text-muted-foreground truncate">{tenantName || "—"}</p>
-            {k.tenant_phone && isOccupied && <p className="text-xs text-muted-foreground">{k.tenant_phone}</p>}
+            {effectivePhone && isOccupied && <p className="text-xs text-muted-foreground">{effectivePhone}</p>}
             <p className="font-mono text-lg mt-1" style={{ color: (!isOccupied || !hasEntry) ? '#4A5568' : '#E2E8F0' }}>{formatCurrency(displayValue)}</p>
 
             {/* Sub-badge: conciliado / lançado / aguardando / vaga */}

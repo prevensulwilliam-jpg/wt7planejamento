@@ -22,6 +22,8 @@ import {
   useLockedMonth,
   useKitnetMonthStatus,
   useUpsertKitnetMonthStatus,
+  useKitnetEffectiveData,
+  useUpsertKitnetMonthData,
 } from "@/hooks/useKitnets";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatCurrency, formatMonth, getCurrentMonth } from "@/lib/formatters";
@@ -73,21 +75,32 @@ export function KitnetModal({ kitnet, onClose, onUpdated, defaultMonth }: Props)
 // ─── ABA DADOS ───
 function DadosTab({ kitnet, onUpdated, defaultMonth }: { kitnet: Tables<"kitnets">; onUpdated: () => void; defaultMonth?: string }) {
   const { toast } = useToast();
-  const updateMut = useUpdateKitnet();
+  const upsertMonthData   = useUpsertKitnetMonthData();
   const upsertMonthStatus = useUpsertKitnetMonthStatus();
+  const updateMut         = useUpdateKitnet(); // só usado sem contexto de mês
 
-  // Carrega o status atual do mês (override) — fallback para global
+  // Dados efetivos do mês (snapshot mais recente ≤ defaultMonth)
+  const { data: effectiveData } = useKitnetEffectiveData(kitnet.id, defaultMonth ?? "");
+  // Status efetivo do mês
   const { data: monthStatusData } = useKitnetMonthStatus(kitnet.id, defaultMonth ?? "");
-  const currentMonthStatus = monthStatusData?.status ?? kitnet.status ?? "vacant";
 
   const [form, setForm] = useState({
-    tenant_name: kitnet.tenant_name ?? "",
+    tenant_name:  kitnet.tenant_name  ?? "",
     tenant_phone: kitnet.tenant_phone ?? "",
-    rent_value: String(kitnet.rent_value ?? ""),
-    status: currentMonthStatus,
+    rent_value:   String(kitnet.rent_value ?? ""),
+    status:       kitnet.status ?? "vacant",
   });
 
-  // Sync status when month data loads
+  // Quando os dados do mês carregam, preenche o form com os valores efetivos
+  useEffect(() => {
+    setForm(f => ({
+      ...f,
+      tenant_name:  effectiveData?.tenant_name  ?? kitnet.tenant_name  ?? "",
+      tenant_phone: effectiveData?.tenant_phone ?? kitnet.tenant_phone ?? "",
+      rent_value:   String(effectiveData?.rent_value ?? kitnet.rent_value ?? ""),
+    }));
+  }, [effectiveData]);
+
   useEffect(() => {
     setForm(f => ({ ...f, status: monthStatusData?.status ?? kitnet.status ?? "vacant" }));
   }, [monthStatusData, kitnet.status]);
@@ -96,23 +109,29 @@ function DadosTab({ kitnet, onUpdated, defaultMonth }: { kitnet: Tables<"kitnets
 
   const handleSave = async () => {
     try {
-      // Dados globais da kitnet (nome, telefone, valor)
-      await updateMut.mutateAsync({
-        id: kitnet.id,
-        tenant_name: form.tenant_name || null,
-        tenant_phone: form.tenant_phone || null,
-        rent_value: Number(form.rent_value) || null,
-      });
-      // Status: salva por mês (se temos um mês de contexto)
       if (defaultMonth) {
+        // Salva dados por mês (não altera kitnets globalmente)
+        await upsertMonthData.mutateAsync({
+          kitnetId:     kitnet.id,
+          month:        defaultMonth,
+          tenant_name:  form.tenant_name  || null,
+          tenant_phone: form.tenant_phone || null,
+          rent_value:   Number(form.rent_value) || null,
+        });
         await upsertMonthStatus.mutateAsync({
           kitnetId: kitnet.id,
-          month: defaultMonth,
-          status: form.status,
+          month:    defaultMonth,
+          status:   form.status,
         });
       } else {
-        // Sem contexto de mês: atualiza global
-        await updateMut.mutateAsync({ id: kitnet.id, status: form.status });
+        // Sem contexto de mês: atualiza global (cadastro inicial)
+        await updateMut.mutateAsync({
+          id:           kitnet.id,
+          tenant_name:  form.tenant_name  || null,
+          tenant_phone: form.tenant_phone || null,
+          rent_value:   Number(form.rent_value) || null,
+          status:       form.status,
+        });
       }
       toast({ title: "Dados salvos!" });
       onUpdated();
@@ -121,10 +140,15 @@ function DadosTab({ kitnet, onUpdated, defaultMonth }: { kitnet: Tables<"kitnets
     }
   };
 
-  const isSaving = updateMut.isPending || upsertMonthStatus.isPending;
+  const isSaving = upsertMonthData.isPending || upsertMonthStatus.isPending || updateMut.isPending;
 
   return (
     <div className="space-y-4 mt-4">
+      {defaultMonth && (
+        <p className="text-xs px-3 py-1.5 rounded-lg" style={{ background: 'rgba(99,102,241,0.08)', color: '#A5B4FC', border: '1px solid rgba(99,102,241,0.2)' }}>
+          Editando dados de <strong>{defaultMonth.slice(5, 7)}/{defaultMonth.slice(0, 4)}</strong> — não afeta outros meses
+        </p>
+      )}
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Nome do Inquilino</label>
@@ -472,6 +496,9 @@ function FechamentoForm({ kitnet, onSaved, onCancel, initialData, entryId, defau
   const [month] = useState(defaultMonth ?? getCurrentMonth());
   const { data: lastReading } = useLastEnergyReading(kitnet.id);
   const { data: invoices } = useCelescInvoices(month);
+  // Usa rent_value efetivo do mês (snapshot) para pré-preencher aluguel bruto
+  const { data: effectiveData } = useKitnetEffectiveData(kitnet.id, month);
+  const effectiveRentValue = effectiveData?.rent_value ?? kitnet.rent_value ?? 0;
 
   const [form, setForm] = useState({
     period_start: initialData?.period_start ?? "",
@@ -542,6 +569,17 @@ function FechamentoForm({ kitnet, onSaved, onCancel, initialData, entryId, defau
   const discount = Number(form.discount_amount) || 0;
   const surcharge = Number(form.surcharge_amount) || 0;
   const totalLiquid = rentGross + iptu + celesc + semasa - adm - discount + surcharge;
+
+  // Quando rent_value efetivo do mês carrega, pré-preenche rent_gross (só novo fechamento)
+  useEffect(() => {
+    if (!isEditMode && effectiveRentValue > 0) {
+      setForm(f => ({
+        ...f,
+        rent_gross: String(effectiveRentValue),
+        adm_fee: (effectiveRentValue * 0.1).toFixed(2),
+      }));
+    }
+  }, [effectiveRentValue]);
 
   useEffect(() => {
     setForm(f => ({ ...f, adm_fee: (rentGross * 0.1).toFixed(2) }));

@@ -635,3 +635,76 @@ export function useUpsertKitnetMonthStatus() {
     },
   });
 }
+
+// ─── Dados por Mês (tenant_name / tenant_phone / rent_value) ─────────────────
+
+type MonthData = { kitnet_id: string; reference_month: string; tenant_name: string | null; tenant_phone: string | null; rent_value: number | null };
+
+/**
+ * Retorna mapa kitnet_id → dados efetivos para o mês (herança: busca o snapshot
+ * mais recente ≤ month para cada kitnet).
+ */
+export function useKitnetMonthDataMap(month: string) {
+  return useQuery({
+    queryKey: ["kitnet_month_data_map", month],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("kitnet_month_data")
+        .select("kitnet_id, reference_month, tenant_name, tenant_phone, rent_value")
+        .lte("reference_month", month)
+        .order("reference_month", { ascending: false });
+      if (error) throw error;
+      // Agrupa por kitnet_id → pega o primeiro (mais recente) de cada
+      const map: Record<string, MonthData> = {};
+      for (const row of (data ?? []) as MonthData[]) {
+        if (!map[row.kitnet_id]) map[row.kitnet_id] = row;
+      }
+      return map;
+    },
+    enabled: !!month,
+  });
+}
+
+/**
+ * Retorna os dados efetivos de uma única kitnet para um mês (snapshot mais recente ≤ month).
+ */
+export function useKitnetEffectiveData(kitnetId: string | null, month: string) {
+  return useQuery({
+    queryKey: ["kitnet_effective_data", kitnetId, month],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("kitnet_month_data")
+        .select("tenant_name, tenant_phone, rent_value, reference_month")
+        .eq("kitnet_id", kitnetId)
+        .lte("reference_month", month)
+        .order("reference_month", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data as { tenant_name: string | null; tenant_phone: string | null; rent_value: number | null; reference_month: string } | null;
+    },
+    enabled: !!kitnetId && !!month,
+  });
+}
+
+/** Upsert: cria/atualiza snapshot de dados para um mês específico de uma kitnet. */
+export function useUpsertKitnetMonthData() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      kitnetId, month, tenant_name, tenant_phone, rent_value,
+    }: { kitnetId: string; month: string; tenant_name: string | null; tenant_phone: string | null; rent_value: number | null }) => {
+      const { error } = await (supabase as any)
+        .from("kitnet_month_data")
+        .upsert(
+          { kitnet_id: kitnetId, reference_month: month, tenant_name, tenant_phone, rent_value, updated_at: new Date().toISOString() },
+          { onConflict: "kitnet_id,reference_month" }
+        );
+      if (error) throw error;
+    },
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["kitnet_month_data_map"] });
+      qc.invalidateQueries({ queryKey: ["kitnet_effective_data", vars.kitnetId] });
+    },
+  });
+}
