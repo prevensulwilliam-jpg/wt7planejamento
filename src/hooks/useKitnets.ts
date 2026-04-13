@@ -572,3 +572,61 @@ export function useKitnetAlertsForMonth(month: string) {
     enabled: !!month,
   });
 }
+
+// ─── Status por Mês por Kitnet ───────────────────────────────────────────────
+
+/** Retorna mapa kitnet_id → status para um mês específico */
+export function useKitnetMonthStatuses(month: string) {
+  return useQuery({
+    queryKey: ["kitnet_month_status", month],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("kitnet_month_status")
+        .select("kitnet_id, status")
+        .eq("reference_month", month);
+      if (error) throw error;
+      const map: Record<string, string> = {};
+      (data ?? []).forEach((r: any) => { map[r.kitnet_id] = r.status; });
+      return map;
+    },
+    enabled: !!month,
+  });
+}
+
+/** Retorna o status de uma kitnet para um mês específico (ou null se não há override) */
+export function useKitnetMonthStatus(kitnetId: string | null, month: string) {
+  return useQuery({
+    queryKey: ["kitnet_month_status_single", kitnetId, month],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("kitnet_month_status")
+        .select("status")
+        .eq("kitnet_id", kitnetId)
+        .eq("reference_month", month)
+        .maybeSingle();
+      if (error) throw error;
+      return (data as { status: string } | null);
+    },
+    enabled: !!kitnetId && !!month,
+  });
+}
+
+/** Upsert: define o status de uma kitnet para um mês específico */
+export function useUpsertKitnetMonthStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ kitnetId, month, status }: { kitnetId: string; month: string; status: string }) => {
+      const { error } = await (supabase as any)
+        .from("kitnet_month_status")
+        .upsert(
+          { kitnet_id: kitnetId, reference_month: month, status, updated_at: new Date().toISOString() },
+          { onConflict: "kitnet_id,reference_month" }
+        );
+      if (error) throw error;
+    },
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["kitnet_month_status", vars.month] });
+      qc.invalidateQueries({ queryKey: ["kitnet_month_status_single", vars.kitnetId, vars.month] });
+    },
+  });
+}

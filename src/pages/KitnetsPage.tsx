@@ -12,7 +12,7 @@ import { KpiCard } from "@/components/wt7/KpiCard";
 import { WtBadge } from "@/components/wt7/WtBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { KitnetModal } from "@/components/wt7/KitnetModal";
-import { useKitnets, useKitnetEntries, useKitnetSummary, useCreateKitnetEntry, useEnergyReadings, useCelescInvoices, useSaveEnergyReadings, useUnreconciledEntries, usePrevMonth, useDeleteKitnetEntry, useReconcileWithTransactions, useLockedMonth, useLockMonth, useUnlockMonth, useKitnetAlertsForMonth } from "@/hooks/useKitnets";
+import { useKitnets, useKitnetEntries, useKitnetSummary, useCreateKitnetEntry, useEnergyReadings, useCelescInvoices, useSaveEnergyReadings, useUnreconciledEntries, usePrevMonth, useDeleteKitnetEntry, useReconcileWithTransactions, useLockedMonth, useLockMonth, useUnlockMonth, useKitnetAlertsForMonth, useKitnetMonthStatuses } from "@/hooks/useKitnets";
 import { formatCurrency, formatMonth, getCurrentMonth, formatDate } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -181,6 +181,7 @@ function OverviewTab({ month, setMonth }: { month: string; setMonth: (v: string)
 
   const prevMonth = usePrevMonth(month);
   const { data: prevEntries } = useKitnetEntries(prevMonth);
+  const { data: monthStatuses } = useKitnetMonthStatuses(month);
   const rwt02 = (kitnets ?? []).filter(k => k.residencial_code === "RWT02");
   const rwt03 = (kitnets ?? []).filter(k => k.residencial_code === "RWT03");
 
@@ -235,13 +236,13 @@ function OverviewTab({ month, setMonth }: { month: string; setMonth: (v: string)
       {/* RWT02 */}
       <div>
         <h2 className="font-display font-bold text-lg text-foreground mb-3">RWT02 — Rua Amauri de Souza, 08</h2>
-        <KitnetGrid kitnets={rwt02} onManage={setSelected} entries={entries ?? []} prevEntries={prevEntries ?? []} />
+        <KitnetGrid kitnets={rwt02} onManage={setSelected} entries={entries ?? []} prevEntries={prevEntries ?? []} monthStatuses={monthStatuses ?? {}} />
       </div>
 
       {/* RWT03 */}
       <div>
         <h2 className="font-display font-bold text-lg text-foreground mb-3">RWT03 — Rua Manoel Corrêa, 125</h2>
-        <KitnetGrid kitnets={rwt03} onManage={setSelected} entries={entries ?? []} prevEntries={prevEntries ?? []} />
+        <KitnetGrid kitnets={rwt03} onManage={setSelected} entries={entries ?? []} prevEntries={prevEntries ?? []} monthStatuses={monthStatuses ?? {}} />
       </div>
 
       {selected && (
@@ -256,7 +257,7 @@ function OverviewTab({ month, setMonth }: { month: string; setMonth: (v: string)
   );
 }
 
-function KitnetGrid({ kitnets, onManage, entries, prevEntries }: { kitnets: Tables<"kitnets">[]; onManage: (k: Tables<"kitnets">) => void; entries: any[]; prevEntries: any[] }) {
+function KitnetGrid({ kitnets, onManage, entries, prevEntries, monthStatuses }: { kitnets: Tables<"kitnets">[]; onManage: (k: Tables<"kitnets">) => void; entries: any[]; prevEntries: any[]; monthStatuses: Record<string, string> }) {
   if (!kitnets.length) {
     return <p className="text-muted-foreground text-sm">Nenhuma kitnet cadastrada.</p>;
   }
@@ -264,14 +265,15 @@ function KitnetGrid({ kitnets, onManage, entries, prevEntries }: { kitnets: Tabl
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
       {kitnets.map(k => {
         const fechamento = entries.find(e => e.kitnet_id === k.id);
-        // Status do BANCO é a fonte de verdade — fechamento NÃO muda o status
-        const isOccupied = k.status === "occupied" || k.status === "maintenance";
+        // Status: override do mês (kitnet_month_status) tem prioridade, fallback para global (kitnets.status)
+        const effectiveStatus = monthStatuses[k.id] ?? k.status ?? "vacant";
+        const isOccupied = effectiveStatus === "occupied" || effectiveStatus === "maintenance";
         const hasEntry = !!fechamento;
         const isReconciled = !!fechamento?.reconciled;
         // Badge: status real do banco
         const s = isOccupied
           ? (hasEntry ? statusLabels.occupied : { label: "Aguardando", variant: "gold" as const })
-          : statusLabels[k.status ?? "vacant"] ?? statusLabels.vacant;
+          : statusLabels[effectiveStatus] ?? statusLabels.vacant;
         // Nome: só mostra se kitnet está occupied/maintenance
         const tenantName = isOccupied ? (k.tenant_name || null) : null;
         // Valor: total_liquid se tem fechamento, senão rent_value do contrato

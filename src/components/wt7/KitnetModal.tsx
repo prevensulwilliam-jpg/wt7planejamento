@@ -20,6 +20,8 @@ import {
   useLastEnergyReading,
   useCelescInvoices,
   useLockedMonth,
+  useKitnetMonthStatus,
+  useUpsertKitnetMonthStatus,
 } from "@/hooks/useKitnets";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatCurrency, formatMonth, getCurrentMonth } from "@/lib/formatters";
@@ -59,7 +61,7 @@ export function KitnetModal({ kitnet, onClose, onUpdated, defaultMonth }: Props)
             <TabsTrigger value="contrato" className="flex-1">Contrato</TabsTrigger>
             <TabsTrigger value="fechamentos" className="flex-1">Fechamentos</TabsTrigger>
           </TabsList>
-          <TabsContent value="dados"><DadosTab kitnet={kitnet} onUpdated={onUpdated} /></TabsContent>
+          <TabsContent value="dados"><DadosTab kitnet={kitnet} onUpdated={onUpdated} defaultMonth={defaultMonth} /></TabsContent>
           <TabsContent value="contrato"><ContratoTab kitnet={kitnet} onUpdated={onUpdated} /></TabsContent>
           <TabsContent value="fechamentos"><FechamentosTab kitnet={kitnet} defaultMonth={defaultMonth} /></TabsContent>
         </Tabs>
@@ -69,38 +71,57 @@ export function KitnetModal({ kitnet, onClose, onUpdated, defaultMonth }: Props)
 }
 
 // ─── ABA DADOS ───
-function DadosTab({ kitnet, onUpdated }: { kitnet: Tables<"kitnets">; onUpdated: () => void }) {
+function DadosTab({ kitnet, onUpdated, defaultMonth }: { kitnet: Tables<"kitnets">; onUpdated: () => void; defaultMonth?: string }) {
   const { toast } = useToast();
   const updateMut = useUpdateKitnet();
+  const upsertMonthStatus = useUpsertKitnetMonthStatus();
+
+  // Carrega o status atual do mês (override) — fallback para global
+  const { data: monthStatusData } = useKitnetMonthStatus(kitnet.id, defaultMonth ?? "");
+  const currentMonthStatus = monthStatusData?.status ?? kitnet.status ?? "vacant";
+
   const [form, setForm] = useState({
     tenant_name: kitnet.tenant_name ?? "",
     tenant_phone: kitnet.tenant_phone ?? "",
     rent_value: String(kitnet.rent_value ?? ""),
-    status: kitnet.status ?? "vacant",
+    status: currentMonthStatus,
   });
+
+  // Sync status when month data loads
+  useEffect(() => {
+    setForm(f => ({ ...f, status: monthStatusData?.status ?? kitnet.status ?? "vacant" }));
+  }, [monthStatusData, kitnet.status]);
 
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
 
   const handleSave = async () => {
-    // Status é global — confirmação quando muda
-    if (form.status !== kitnet.status) {
-      const statusLabel = form.status === "vacant" ? "Vaga" : form.status === "occupied" ? "Ocupada" : "Manutenção";
-      if (!window.confirm(`Alterar status para "${statusLabel}" afeta TODOS os meses desta kitnet. Confirmar?`)) return;
-    }
     try {
+      // Dados globais da kitnet (nome, telefone, valor)
       await updateMut.mutateAsync({
         id: kitnet.id,
         tenant_name: form.tenant_name || null,
         tenant_phone: form.tenant_phone || null,
         rent_value: Number(form.rent_value) || null,
-        status: form.status,
       });
+      // Status: salva por mês (se temos um mês de contexto)
+      if (defaultMonth) {
+        await upsertMonthStatus.mutateAsync({
+          kitnetId: kitnet.id,
+          month: defaultMonth,
+          status: form.status,
+        });
+      } else {
+        // Sem contexto de mês: atualiza global
+        await updateMut.mutateAsync({ id: kitnet.id, status: form.status });
+      }
       toast({ title: "Dados salvos!" });
       onUpdated();
     } catch (e: any) {
       toast({ title: "Erro", description: e.message, variant: "destructive" });
     }
   };
+
+  const isSaving = updateMut.isPending || upsertMonthStatus.isPending;
 
   return (
     <div className="space-y-4 mt-4">
@@ -120,7 +141,9 @@ function DadosTab({ kitnet, onUpdated }: { kitnet: Tables<"kitnets">; onUpdated:
           <Input type="number" value={form.rent_value} onChange={e => set("rent_value", e.target.value)} className="bg-background border-border text-foreground" />
         </div>
         <div>
-          <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Status</label>
+          <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            {defaultMonth ? `Status — ${defaultMonth.slice(5, 7)}/${defaultMonth.slice(0, 4)}` : "Status"}
+          </label>
           <Select value={form.status} onValueChange={v => set("status", v)}>
             <SelectTrigger className="bg-background border-border text-foreground"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -129,9 +152,6 @@ function DadosTab({ kitnet, onUpdated }: { kitnet: Tables<"kitnets">; onUpdated:
               <SelectItem value="maintenance">Manutenção</SelectItem>
             </SelectContent>
           </Select>
-          <p className="text-xs mt-1" style={{ color: '#F59E0B' }}>
-            ⚠ Status global — afeta todos os meses
-          </p>
         </div>
       </div>
       {(kitnet.deposit_bank || kitnet.deposit_agency || kitnet.deposit_account) && (
@@ -142,8 +162,8 @@ function DadosTab({ kitnet, onUpdated }: { kitnet: Tables<"kitnets">; onUpdated:
           </p>
         </div>
       )}
-      <GoldButton onClick={handleSave} disabled={updateMut.isPending} className="w-full justify-center">
-        {updateMut.isPending ? "Salvando..." : "Salvar Dados"}
+      <GoldButton onClick={handleSave} disabled={isSaving} className="w-full justify-center">
+        {isSaving ? "Salvando..." : "Salvar Dados"}
       </GoldButton>
     </div>
   );
