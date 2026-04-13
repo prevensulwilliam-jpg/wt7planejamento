@@ -526,19 +526,22 @@ function ConciliacaoDialog({ open, onClose, month }: { open: boolean; onClose: (
   // selectedTxIds: lista de IDs de transações vinculadas a cada fechamento
   const [selectedTxIds, setSelectedTxIds] = useState<Record<string, string[]>>({});
 
-  // Inicializa com sugestão automática quando entries/suggestions carregam
+  // Inicializa/atualiza sugestão automática quando entries ou credits carregam
   useEffect(() => {
     if (!entries.length) return;
     setSelectedTxIds(prev => {
       const next = { ...prev };
       entries.forEach((e: any) => {
-        if (next[e.id] === undefined) {
+        // Aplica sugestão se: nunca inicializado OU seleção ainda vazia e surgiu match
+        const notSet = next[e.id] === undefined;
+        const emptyButHasMatch = Array.isArray(next[e.id]) && next[e.id].length === 0 && !!suggestions[e.id];
+        if (notSet || emptyButHasMatch) {
           next[e.id] = suggestions[e.id] ? [suggestions[e.id]!] : [];
         }
       });
       return next;
     });
-  }, [suggestions]);
+  }, [suggestions, entries]);
 
   const getTxIds = (entryId: string) => selectedTxIds[entryId] ?? [];
 
