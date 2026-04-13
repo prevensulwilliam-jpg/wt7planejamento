@@ -23,7 +23,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatCurrency, formatMonth, getCurrentMonth } from "@/lib/formatters";
 import { DEFAULT_ENERGY_TARIFF } from "@/lib/constants";
-import { Upload, FileText, Trash2, Plus, Zap, Printer, Pencil } from "lucide-react";
+import { Upload, FileText, Trash2, Plus, Zap, Printer, Pencil, ChevronDown, ChevronUp } from "lucide-react";
 import { abrirReciboIndividual } from "@/lib/relatorioFechamento";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -366,6 +366,29 @@ function FechamentosTab({ kitnet, defaultMonth }: { kitnet: Tables<"kitnets">; d
             {(displayed as any).semasa > 0 && <span>SEMASA: <span className="text-foreground font-mono">{formatCurrency((displayed as any).semasa)}</span></span>}
             {(displayed as any).iptu_taxa > 0 && <span>IPTU/Lixo: <span className="text-foreground font-mono">{formatCurrency((displayed as any).iptu_taxa)}</span></span>}
           </div>
+          {/* Desconto */}
+          {(displayed as any).discount_amount > 0 && (
+            <div className="rounded-md px-3 py-2 text-xs" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>
+              <span style={{ color: '#F59E0B' }}>↓ Desconto: </span>
+              <span className="font-mono font-medium" style={{ color: '#F59E0B' }}>− {formatCurrency((displayed as any).discount_amount)}</span>
+              {(displayed as any).discount_reason && <span className="text-muted-foreground ml-2">— {(displayed as any).discount_reason}</span>}
+            </div>
+          )}
+          {/* Acréscimo */}
+          {(displayed as any).surcharge_amount > 0 && (
+            <div className="rounded-md px-3 py-2 text-xs" style={{ background: 'rgba(244,63,94,0.07)', border: '1px solid rgba(244,63,94,0.2)' }}>
+              <span style={{ color: '#F43F5E' }}>↑ Acréscimo: </span>
+              <span className="font-mono font-medium" style={{ color: '#F43F5E' }}>+ {formatCurrency((displayed as any).surcharge_amount)}</span>
+              {(displayed as any).surcharge_reason && <span className="text-muted-foreground ml-2">— {(displayed as any).surcharge_reason}</span>}
+            </div>
+          )}
+          {/* Observação */}
+          {(displayed as any).notes && (
+            <div className="rounded-md px-3 py-2 text-xs" style={{ background: 'rgba(96,165,250,0.07)', border: '1px solid rgba(96,165,250,0.2)' }}>
+              <span style={{ color: '#60A5FA' }}>✎ </span>
+              <span className="text-muted-foreground">{(displayed as any).notes}</span>
+            </div>
+          )}
           <div className="pt-2 border-t border-border flex items-center justify-between">
             <p className="text-xs text-muted-foreground uppercase tracking-wider">Total Líquido</p>
             <p className="font-mono font-bold text-2xl" style={{ color: '#E8C97A' }}>{formatCurrency((displayed as any).total_liquid ?? 0)}</p>
@@ -408,7 +431,16 @@ function FechamentoForm({ kitnet, onSaved, onCancel, initialData, entryId, defau
     semasa: String(initialData?.semasa ?? 0),
     adm_fee: String(initialData?.adm_fee ?? ((kitnet.rent_value ?? 0) * 0.1).toFixed(2)),
     reference_month: initialData?.reference_month ?? (defaultMonth ?? getCurrentMonth()),
+    discount_amount: String(initialData?.discount_amount ?? ""),
+    discount_reason: initialData?.discount_reason ?? "",
+    surcharge_amount: String(initialData?.surcharge_amount ?? ""),
+    surcharge_reason: initialData?.surcharge_reason ?? "",
+    notes: initialData?.notes ?? "",
   });
+
+  const [discountOpen, setDiscountOpen] = useState(!!(initialData?.discount_amount));
+  const [surchargeOpen, setSurchargeOpen] = useState(!!(initialData?.surcharge_amount));
+  const [notesOpen, setNotesOpen] = useState(!!(initialData?.notes));
   const [celescMode, setCelescMode] = useState<"idle" | "loading" | "found" | "manual">("idle");
   const [celescFoundInfo, setCelescFoundInfo] = useState<{ kwh: number; amount: number; tariff: number } | null>(null);
   const [readingCurrent, setReadingCurrent] = useState("");
@@ -456,7 +488,9 @@ function FechamentoForm({ kitnet, onSaved, onCancel, initialData, entryId, defau
   const celesc = Number(form.celesc) || 0;
   const semasa = Number(form.semasa) || 0;
   const adm = Number(form.adm_fee) || 0;
-  const totalLiquid = rentGross + iptu + celesc + semasa - adm;
+  const discount = Number(form.discount_amount) || 0;
+  const surcharge = Number(form.surcharge_amount) || 0;
+  const totalLiquid = rentGross + iptu + celesc + semasa - adm - discount + surcharge;
 
   useEffect(() => {
     setForm(f => ({ ...f, adm_fee: (rentGross * 0.1).toFixed(2) }));
@@ -464,6 +498,14 @@ function FechamentoForm({ kitnet, onSaved, onCancel, initialData, entryId, defau
 
   const handleSave = async () => {
     try {
+      const extraFields = {
+        discount_amount: discount > 0 ? discount : null,
+        discount_reason: form.discount_reason || null,
+        surcharge_amount: surcharge > 0 ? surcharge : null,
+        surcharge_reason: form.surcharge_reason || null,
+        notes: form.notes || null,
+      };
+
       if (isEditMode) {
         await updateMut.mutateAsync({
           id: entryId!,
@@ -476,7 +518,8 @@ function FechamentoForm({ kitnet, onSaved, onCancel, initialData, entryId, defau
           semasa: semasa,
           adm_fee: adm,
           total_liquid: totalLiquid,
-        });
+          ...extraFields,
+        } as any);
         toast({ title: "Fechamento atualizado!" });
       } else {
         const { data: { user } } = await supabase.auth.getUser();
@@ -494,7 +537,8 @@ function FechamentoForm({ kitnet, onSaved, onCancel, initialData, entryId, defau
           adm_fee: adm,
           total_liquid: totalLiquid,
           created_by: user?.id,
-        });
+          ...extraFields,
+        } as any);
         toast({ title: "Fechamento salvo!" });
       }
       onSaved(form.reference_month);
@@ -624,9 +668,172 @@ function FechamentoForm({ kitnet, onSaved, onCancel, initialData, entryId, defau
         <Input type="number" value={form.adm_fee} onChange={e => set("adm_fee", e.target.value)} className="bg-background border-border text-foreground" />
       </div>
 
-      <PremiumCard glowColor="hsl(43 52% 54%)" className="text-center py-3">
-        <p className="text-xs uppercase tracking-wider text-muted-foreground">Total Líquido</p>
-        <p className="font-mono text-2xl font-bold mt-1" style={{ color: '#E8C97A' }}>{formatCurrency(totalLiquid)}</p>
+      {/* ─── Desconto ─── */}
+      <div className="rounded-lg overflow-hidden" style={{ border: '1px solid rgba(245,158,11,0.25)' }}>
+        <button
+          type="button"
+          onClick={() => setDiscountOpen(v => !v)}
+          className="w-full flex items-center justify-between px-3 py-2.5 text-xs font-medium transition-colors"
+          style={{ background: discountOpen ? 'rgba(245,158,11,0.08)' : '#080C10', borderLeft: '3px solid rgba(245,158,11,0.5)' }}
+        >
+          <span style={{ color: '#F59E0B' }}>↓ Desconto de Aluguel</span>
+          <div className="flex items-center gap-2">
+            {discount > 0 && <span className="font-mono text-xs px-2 py-0.5 rounded" style={{ background: 'rgba(245,158,11,0.12)', color: '#F59E0B' }}>− {formatCurrency(discount)}</span>}
+            {discountOpen ? <ChevronUp className="w-3.5 h-3.5" style={{ color: '#4A5568' }} /> : <ChevronDown className="w-3.5 h-3.5" style={{ color: '#4A5568' }} />}
+          </div>
+        </button>
+        {discountOpen && (
+          <div className="px-3 py-3 space-y-2" style={{ background: '#080C10', borderTop: '1px solid rgba(245,158,11,0.15)' }}>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-muted-foreground uppercase tracking-wider">Tipo</label>
+                <select
+                  value={form.discount_reason.startsWith("Acordo") || form.discount_reason === "" ? form.discount_reason || "" : "__custom"}
+                  onChange={e => set("discount_reason", e.target.value)}
+                  className="w-full mt-1 px-2 py-1.5 rounded-md text-xs bg-background border-border text-foreground"
+                  style={{ border: '1px solid rgba(245,158,11,0.3)' }}
+                >
+                  <option value="">Selecione...</option>
+                  <option value="Acordo com inquilino">Acordo com inquilino</option>
+                  <option value="Cortesia">Cortesia</option>
+                  <option value="Desconto comercial">Desconto comercial</option>
+                  <option value="Outro">Outro</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground uppercase tracking-wider">Valor (R$)</label>
+                <Input
+                  type="number"
+                  value={form.discount_amount}
+                  onChange={e => set("discount_amount", e.target.value)}
+                  placeholder="0,00"
+                  className="mt-1 bg-background text-foreground"
+                  style={{ borderColor: 'rgba(245,158,11,0.3)' }}
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground uppercase tracking-wider">Motivo / Detalhe</label>
+              <Input
+                value={form.discount_reason}
+                onChange={e => set("discount_reason", e.target.value)}
+                placeholder="Ex: Pagamento parcial — saldo a cobrar em março"
+                className="mt-1 bg-background border-border text-foreground text-xs"
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ─── Acréscimo ─── */}
+      <div className="rounded-lg overflow-hidden" style={{ border: '1px solid rgba(244,63,94,0.2)' }}>
+        <button
+          type="button"
+          onClick={() => setSurchargeOpen(v => !v)}
+          className="w-full flex items-center justify-between px-3 py-2.5 text-xs font-medium transition-colors"
+          style={{ background: surchargeOpen ? 'rgba(244,63,94,0.07)' : '#080C10', borderLeft: '3px solid rgba(244,63,94,0.5)' }}
+        >
+          <span style={{ color: '#F43F5E' }}>↑ Acréscimo de Aluguel</span>
+          <div className="flex items-center gap-2">
+            {surcharge > 0 && <span className="font-mono text-xs px-2 py-0.5 rounded" style={{ background: 'rgba(244,63,94,0.1)', color: '#F43F5E' }}>+ {formatCurrency(surcharge)}</span>}
+            {surchargeOpen ? <ChevronUp className="w-3.5 h-3.5" style={{ color: '#4A5568' }} /> : <ChevronDown className="w-3.5 h-3.5" style={{ color: '#4A5568' }} />}
+          </div>
+        </button>
+        {surchargeOpen && (
+          <div className="px-3 py-3 space-y-2" style={{ background: '#080C10', borderTop: '1px solid rgba(244,63,94,0.15)' }}>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-muted-foreground uppercase tracking-wider">Tipo</label>
+                <select
+                  value={form.surcharge_reason}
+                  onChange={e => set("surcharge_reason", e.target.value)}
+                  className="w-full mt-1 px-2 py-1.5 rounded-md text-xs bg-background text-foreground"
+                  style={{ border: '1px solid rgba(244,63,94,0.3)' }}
+                >
+                  <option value="">Selecione...</option>
+                  <option value="Multa por atraso">Multa por atraso</option>
+                  <option value="Juros">Juros</option>
+                  <option value="Reparo cobrado ao inquilino">Reparo cobrado ao inquilino</option>
+                  <option value="Saldo mês anterior">Saldo mês anterior</option>
+                  <option value="Outro">Outro</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground uppercase tracking-wider">Valor (R$)</label>
+                <Input
+                  type="number"
+                  value={form.surcharge_amount}
+                  onChange={e => set("surcharge_amount", e.target.value)}
+                  placeholder="0,00"
+                  className="mt-1 bg-background text-foreground"
+                  style={{ borderColor: 'rgba(244,63,94,0.3)' }}
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground uppercase tracking-wider">Motivo / Detalhe</label>
+              <Input
+                value={form.surcharge_reason}
+                onChange={e => set("surcharge_reason", e.target.value)}
+                placeholder="Ex: Multa por atraso de 5 dias"
+                className="mt-1 bg-background border-border text-foreground text-xs"
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ─── Observação ─── */}
+      <div className="rounded-lg overflow-hidden" style={{ border: '1px solid rgba(96,165,250,0.2)' }}>
+        <button
+          type="button"
+          onClick={() => setNotesOpen(v => !v)}
+          className="w-full flex items-center justify-between px-3 py-2.5 text-xs font-medium transition-colors"
+          style={{ background: notesOpen ? 'rgba(96,165,250,0.07)' : '#080C10', borderLeft: '3px solid rgba(96,165,250,0.4)' }}
+        >
+          <span style={{ color: '#60A5FA' }}>✎ Observação</span>
+          <div className="flex items-center gap-2">
+            {form.notes && <span className="text-xs px-2 py-0.5 rounded" style={{ background: 'rgba(96,165,250,0.1)', color: '#60A5FA' }}>1 nota</span>}
+            {notesOpen ? <ChevronUp className="w-3.5 h-3.5" style={{ color: '#4A5568' }} /> : <ChevronDown className="w-3.5 h-3.5" style={{ color: '#4A5568' }} />}
+          </div>
+        </button>
+        {notesOpen && (
+          <div className="px-3 py-3" style={{ background: '#080C10', borderTop: '1px solid rgba(96,165,250,0.15)' }}>
+            <textarea
+              value={form.notes}
+              onChange={e => set("notes", e.target.value)}
+              placeholder="Ex: Acordo verbal em 03/02 — pagará saldo restante junto com março..."
+              rows={3}
+              className="w-full px-3 py-2 rounded-md text-xs bg-background text-foreground resize-none"
+              style={{ border: '1px solid rgba(96,165,250,0.3)', outline: 'none', fontFamily: 'inherit' }}
+            />
+          </div>
+        )}
+      </div>
+
+      <PremiumCard glowColor="hsl(43 52% 54%)" className="py-3 px-4">
+        <p className="text-xs uppercase tracking-wider text-muted-foreground text-center">Total Líquido</p>
+        <p className="font-mono text-2xl font-bold mt-1 text-center" style={{ color: '#E8C97A' }}>{formatCurrency(totalLiquid)}</p>
+        {(discount > 0 || surcharge > 0) && (
+          <div className="mt-2 pt-2 border-t border-border space-y-1">
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>Bruto − encargos</span>
+              <span className="font-mono">{formatCurrency(rentGross + iptu + celesc + semasa - adm)}</span>
+            </div>
+            {discount > 0 && (
+              <div className="flex justify-between text-xs" style={{ color: '#F59E0B' }}>
+                <span>− Desconto</span>
+                <span className="font-mono">− {formatCurrency(discount)}</span>
+              </div>
+            )}
+            {surcharge > 0 && (
+              <div className="flex justify-between text-xs" style={{ color: '#F43F5E' }}>
+                <span>+ Acréscimo</span>
+                <span className="font-mono">+ {formatCurrency(surcharge)}</span>
+              </div>
+            )}
+          </div>
+        )}
       </PremiumCard>
 
       <GoldButton onClick={handleSave} disabled={isSaving} className="w-full justify-center">
