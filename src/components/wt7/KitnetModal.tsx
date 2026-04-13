@@ -697,6 +697,7 @@ function FechamentoForm({ kitnet, onSaved, onCancel, initialData, entryId, defau
                   <option value="Acordo com inquilino">Acordo com inquilino</option>
                   <option value="Cortesia">Cortesia</option>
                   <option value="Desconto comercial">Desconto comercial</option>
+                  <option value="Manutenção">Manutenção 🔧</option>
                   <option value="Outro">Outro</option>
                 </select>
               </div>
