@@ -459,3 +459,116 @@ export function useEnergyReadingsSummary(month: string) {
     enabled: !!month,
   });
 }
+
+// ─── Month Lock ───
+
+export function useLockedMonth(month: string) {
+  return useQuery({
+    queryKey: ["locked_months", month],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("locked_months")
+        .select("*")
+        .eq("reference_month", month)
+        .eq("is_locked", true)
+        .maybeSingle();
+      if (error) throw error;
+      return data as { id: string; reference_month: string; locked_by: string; locked_at: string } | null;
+    },
+    enabled: !!month,
+  });
+}
+
+export function useLockMonth() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (month: string) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      // Upsert locked state
+      const { error } = await (supabase as any)
+        .from("locked_months")
+        .upsert({ reference_month: month, locked_by: user?.id, locked_at: new Date().toISOString(), is_locked: true }, { onConflict: "reference_month" });
+      if (error) throw error;
+      // Log
+      await (supabase as any).from("month_lock_log").insert({ reference_month: month, action: "lock", performed_by: user?.id });
+    },
+    onSuccess: (_d, month) => qc.invalidateQueries({ queryKey: ["locked_months", month] }),
+  });
+}
+
+export function useUnlockMonth() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (month: string) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { error } = await (supabase as any)
+        .from("locked_months")
+        .update({ is_locked: false })
+        .eq("reference_month", month);
+      if (error) throw error;
+      await (supabase as any).from("month_lock_log").insert({ reference_month: month, action: "unlock", performed_by: user?.id });
+    },
+    onSuccess: (_d, month) => qc.invalidateQueries({ queryKey: ["locked_months", month] }),
+  });
+}
+
+// ─── Kitnet Alerts (saldo pendente entre meses) ───
+
+export function useKitnetAlerts(kitnetId: string | null, month: string) {
+  return useQuery({
+    queryKey: ["kitnet_alerts", kitnetId, month],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("kitnet_alerts")
+        .select("*")
+        .eq("kitnet_id", kitnetId)
+        .eq("alert_month", month)
+        .eq("resolved", false);
+      if (error) throw error;
+      return data as { id: string; pending_amount: number; source_month: string; alert_type: string }[];
+    },
+    enabled: !!kitnetId && !!month,
+  });
+}
+
+export function useCreateKitnetAlert() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { kitnet_id: string; source_entry_id: string; alert_month: string; source_month: string; pending_amount: number }) => {
+      const { error } = await (supabase as any).from("kitnet_alerts").insert(payload);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["kitnet_alerts"] }),
+  });
+}
+
+export function useResolveKitnetAlert() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (alertId: string) => {
+      const { error } = await (supabase as any)
+        .from("kitnet_alerts")
+        .update({ resolved: true, resolved_at: new Date().toISOString() })
+        .eq("id", alertId);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["kitnet_alerts"] }),
+  });
+}
+
+// Busca alertas de saldo pendente para exibir na tabela de lançamentos (por mês)
+export function useKitnetAlertsForMonth(month: string) {
+  return useQuery({
+    queryKey: ["kitnet_alerts_month", month],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("kitnet_alerts")
+        .select("*")
+        .eq("alert_month", month)
+        .eq("resolved", false);
+      if (error) throw error;
+      return (data ?? []) as { id: string; kitnet_id: string; pending_amount: number; source_month: string }[];
+    },
+    enabled: !!month,
+  });
+}

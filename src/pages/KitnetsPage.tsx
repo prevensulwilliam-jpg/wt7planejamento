@@ -12,11 +12,11 @@ import { KpiCard } from "@/components/wt7/KpiCard";
 import { WtBadge } from "@/components/wt7/WtBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { KitnetModal } from "@/components/wt7/KitnetModal";
-import { useKitnets, useKitnetEntries, useKitnetSummary, useCreateKitnetEntry, useEnergyReadings, useCelescInvoices, useSaveEnergyReadings, useUnreconciledEntries, usePrevMonth, useDeleteKitnetEntry, useReconcileWithTransactions } from "@/hooks/useKitnets";
+import { useKitnets, useKitnetEntries, useKitnetSummary, useCreateKitnetEntry, useEnergyReadings, useCelescInvoices, useSaveEnergyReadings, useUnreconciledEntries, usePrevMonth, useDeleteKitnetEntry, useReconcileWithTransactions, useLockedMonth, useLockMonth, useUnlockMonth, useKitnetAlertsForMonth } from "@/hooks/useKitnets";
 import { formatCurrency, formatMonth, getCurrentMonth, formatDate } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Plus, Download, Save, Printer, CheckCircle, XCircle, AlertCircle, ArrowLeftRight, Zap, Trash2 } from "lucide-react";
+import { Plus, Download, Save, Printer, CheckCircle, XCircle, AlertCircle, ArrowLeftRight, Zap, Trash2, Lock, Unlock } from "lucide-react";
 import { abrirReciboConsolidado } from "@/lib/relatorioFechamento";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -33,23 +33,133 @@ export default function KitnetsPage() {
   const [month, setMonth] = useState(getCurrentMonth());
   const [searchParams] = useSearchParams();
   const defaultTab = searchParams.get("tab") ?? "overview";
+  const { toast } = useToast();
+
+  const { data: lockData, isLoading: lockLoading } = useLockedMonth(month);
+  const lockMut = useLockMonth();
+  const unlockMut = useUnlockMonth();
+  const isLocked = !!lockData;
+
+  const [lockDialogOpen, setLockDialogOpen] = useState(false);
+
+  const handleLockClick = () => {
+    if (isLocked) {
+      setLockDialogOpen(true);
+    } else {
+      setLockDialogOpen(true);
+    }
+  };
+
+  const handleConfirmLock = async () => {
+    try {
+      await lockMut.mutateAsync(month);
+      toast({ title: "🔒 Mês fechado", description: `${formatMonth(month)} bloqueado com sucesso.` });
+    } catch (e: any) {
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    } finally {
+      setLockDialogOpen(false);
+    }
+  };
+
+  const handleConfirmUnlock = async () => {
+    try {
+      await unlockMut.mutateAsync(month);
+      toast({ title: "🔓 Mês reaberto", description: `${formatMonth(month)} desbloqueado.` });
+    } catch (e: any) {
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    } finally {
+      setLockDialogOpen(false);
+    }
+  };
+
+  const handleLockedTabClick = () => {
+    toast({ title: "🔒 Cadeado Fechado", description: `${formatMonth(month)} está bloqueado. Clique no cadeado para reabrir.` });
+  };
 
   return (
     <div className="space-y-6">
       <h1 className="font-display font-bold text-2xl text-foreground">Kitnets</h1>
       <Tabs defaultValue={defaultTab}>
-        <TabsList className="bg-card border border-border">
-          <TabsTrigger value="overview">Visão Geral</TabsTrigger>
-          <TabsTrigger value="entries">Lançamentos</TabsTrigger>
-          <TabsTrigger value="report">Relatório Mensal</TabsTrigger>
-          <TabsTrigger value="energia">Energia Solar</TabsTrigger>
-        </TabsList>
+        <div className="flex items-center gap-3 flex-wrap">
+          <TabsList className="bg-card border border-border">
+            <TabsTrigger value="overview">Visão Geral</TabsTrigger>
+            <TabsTrigger
+              value="entries"
+              onClick={isLocked ? (e) => { e.preventDefault(); handleLockedTabClick(); } : undefined}
+              style={isLocked ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
+            >Lançamentos</TabsTrigger>
+            <TabsTrigger
+              value="report"
+              onClick={isLocked ? (e) => { e.preventDefault(); handleLockedTabClick(); } : undefined}
+              style={isLocked ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
+            >Relatório Mensal</TabsTrigger>
+            <TabsTrigger
+              value="energia"
+              onClick={isLocked ? (e) => { e.preventDefault(); handleLockedTabClick(); } : undefined}
+              style={isLocked ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
+            >Energia Solar</TabsTrigger>
+          </TabsList>
+
+          {/* Lock button — sempre visível, ao lado direito */}
+          <button
+            onClick={handleLockClick}
+            disabled={lockLoading || lockMut.isPending || unlockMut.isPending}
+            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-40"
+            style={isLocked
+              ? { background: 'rgba(247,201,72,0.12)', color: '#F7C948', border: '1px solid rgba(247,201,72,0.4)' }
+              : { background: 'rgba(74,85,104,0.15)', color: '#718096', border: '1px solid rgba(74,85,104,0.3)' }
+            }
+            title={isLocked ? "Mês fechado — clique para reabrir" : "Fechar mês"}
+          >
+            {isLocked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
+            {isLocked ? `🔒 ${formatMonth(month)}` : "Fechar Mês"}
+          </button>
+        </div>
 
         <TabsContent value="overview"><OverviewTab month={month} setMonth={setMonth} /></TabsContent>
         <TabsContent value="entries"><EntriesTab month={month} setMonth={setMonth} /></TabsContent>
         <TabsContent value="report"><ReportTab month={month} setMonth={setMonth} /></TabsContent>
         <TabsContent value="energia"><EnergiaTab month={month} /></TabsContent>
       </Tabs>
+
+      {/* Dialog lock/unlock */}
+      <Dialog open={lockDialogOpen} onOpenChange={setLockDialogOpen}>
+        <DialogContent className="bg-card border-border max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-foreground">
+              {isLocked ? "🔓 Reabrir mês?" : "🔒 Fechar mês?"}
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            {isLocked
+              ? `${formatMonth(month)} está fechado. Reabrir permitirá edições nos lançamentos. Esta ação ficará registrada no histórico.`
+              : `Fechar ${formatMonth(month)} bloqueará as abas Lançamentos, Relatório Mensal e Energia Solar. Apenas a Visão Geral e a troca de mês continuarão funcionando.`
+            }
+          </p>
+          <DialogFooter className="gap-2">
+            <button
+              onClick={() => setLockDialogOpen(false)}
+              className="px-4 py-2 rounded-lg text-sm"
+              style={{ background: '#1A2332', border: '1px solid #2D3748', color: '#90A0B7' }}
+            >Cancelar</button>
+            {isLocked ? (
+              <button
+                onClick={handleConfirmUnlock}
+                disabled={unlockMut.isPending}
+                className="px-4 py-2 rounded-lg text-sm font-semibold"
+                style={{ background: 'rgba(244,63,94,0.12)', border: '1px solid rgba(244,63,94,0.35)', color: '#F87171' }}
+              >{unlockMut.isPending ? "Reabrindo..." : "🔓 Reabrir mesmo assim"}</button>
+            ) : (
+              <button
+                onClick={handleConfirmLock}
+                disabled={lockMut.isPending}
+                className="px-4 py-2 rounded-lg text-sm font-semibold"
+                style={{ background: 'rgba(247,201,72,0.15)', border: '1px solid rgba(247,201,72,0.4)', color: '#F7C948' }}
+              >{lockMut.isPending ? "Fechando..." : "🔒 Fechar Mês"}</button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -209,6 +319,7 @@ function KitnetGrid({ kitnets, onManage, entries, prevEntries }: { kitnets: Tabl
 function EntriesTab({ month, setMonth }: { month: string; setMonth: (m: string) => void }) {
   const { data: entries, isLoading } = useKitnetEntries(month);
   const { data: kitnets } = useKitnets();
+  const { data: alerts = [] } = useKitnetAlertsForMonth(month);
   const [open, setOpen] = useState(false);
   const [conciliarOpen, setConciliarOpen] = useState(false);
   const [form, setForm] = useState({ kitnet_id: "", rent_gross: "", reference_month: month, period_start: "", period_end: "" });
@@ -294,7 +405,20 @@ function EntriesTab({ month, setMonth }: { month: string; setMonth: (m: string) 
                   <TableCell className="text-muted-foreground">{e.kitnets?.tenant_name ?? "—"}</TableCell>
                   <TableCell className="font-mono text-foreground">{formatCurrency(e.rent_gross ?? 0)}</TableCell>
                   <TableCell className="font-mono text-foreground">{formatCurrency(e.adm_fee ?? 0)}</TableCell>
-                  <TableCell className="font-mono text-foreground">{formatCurrency(e.total_liquid ?? 0)}</TableCell>
+                  <TableCell className="font-mono text-foreground">
+                    <div>{formatCurrency(e.total_liquid ?? 0)}</div>
+                    {(() => {
+                      const alert = alerts.find(a => a.kitnet_id === e.kitnet_id);
+                      if (!alert) return null;
+                      const srcMonth = alert.source_month ? alert.source_month.slice(5, 7) + '/' + alert.source_month.slice(2, 4) : '';
+                      return (
+                        <div className="flex items-center gap-1 mt-0.5 px-1.5 py-0.5 rounded text-xs font-semibold"
+                          style={{ background: 'rgba(244,63,94,0.08)', border: '1px solid rgba(244,63,94,0.25)', color: '#F87171', width: 'fit-content' }}>
+                          ⚠️ Pendente contr.: {formatCurrency(alert.pending_amount)} · {srcMonth}
+                        </div>
+                      );
+                    })()}
+                  </TableCell>
                   <TableCell className="text-muted-foreground text-sm">
                     {e.period_start ? formatDate(e.period_start) : "—"} → {e.period_end ? formatDate(e.period_end) : "—"}
                   </TableCell>
