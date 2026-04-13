@@ -123,6 +123,9 @@ const CSS = `
   tr.adm-row td {
     color: #aa0000;
   }
+  tr.manut-row td {
+    color: #b45309;
+  }
   tr.total-row td {
     font-size: 14px;
     font-weight: 700;
@@ -209,6 +212,7 @@ function reciboBlock(kitnet: any, f: any): string {
   const celesc = f.celesc        ?? 0;
   const semasa = f.semasa        ?? 0;
   const adm    = f.adm_fee       ?? 0;
+  const manut  = (f.discount_reason === "Manutenção" && f.discount_amount > 0) ? (f.discount_amount ?? 0) : 0;
   const total  = f.total_liquid  ?? 0;
 
   const periodo = (f.period_start && f.period_end)
@@ -271,6 +275,12 @@ function reciboBlock(kitnet: any, f: any): string {
     <td class="col-sinal">−</td>
     <td class="col-valor">${fmt(adm)}</td>
   </tr>
+  ${manut > 0 ? `
+  <tr class="manut-row">
+    <td class="col-label">Manutenção 🔧</td>
+    <td class="col-sinal">−</td>
+    <td class="col-valor">${fmt(manut)}</td>
+  </tr>` : ""}
   <tr class="total-row">
     <td class="col-label">Total Líquido</td>
     <td class="col-sinal"></td>
@@ -333,14 +343,18 @@ export function abrirReciboConsolidado(
       acc.celesc += f.celesc      ?? 0;
       acc.semasa += f.semasa      ?? 0;
       acc.adm    += f.adm_fee     ?? 0;
+      acc.manut  += (f.discount_reason === "Manutenção" && f.discount_amount > 0) ? (f.discount_amount ?? 0) : 0;
       acc.total  += f.total_liquid ?? 0;
       return acc;
     },
-    { bruto: 0, iptu: 0, celesc: 0, semasa: 0, adm: 0, total: 0 }
+    { bruto: 0, iptu: 0, celesc: 0, semasa: 0, adm: 0, manut: 0, total: 0 }
   );
+  const hasManut = tot.manut > 0 || sorted.some(({ fechamento: f }) => f.discount_reason === "Manutenção" && f.discount_amount > 0);
 
   // ── Linhas da tabela sumário ──
-  const linhas = sorted.map(({ kitnet, fechamento: f }) => `
+  const linhas = sorted.map(({ kitnet, fechamento: f }) => {
+    const fManut = (f.discount_reason === "Manutenção" && f.discount_amount > 0) ? (f.discount_amount ?? 0) : 0;
+    return `
   <tr>
     <td>${kitnet.code ?? "—"}</td>
     <td>${kitnet.tenant_name ?? "—"}</td>
@@ -349,8 +363,10 @@ export function abrirReciboConsolidado(
     <td>${fmt(f.celesc ?? 0)}</td>
     <td>${fmt(f.semasa ?? 0)}</td>
     <td>${fmt(f.adm_fee ?? 0)}</td>
+    ${hasManut ? `<td style="color:#b45309;">${fManut > 0 ? fmt(fManut) : "—"}</td>` : ""}
     <td><strong>${fmt(f.total_liquid ?? 0)}</strong></td>
-  </tr>`).join("\n");
+  </tr>`;
+  }).join("\n");
 
   const consolidado = `
 <div class="consolidado-title">Relatório Consolidado de Repasse</div>
@@ -366,6 +382,7 @@ export function abrirReciboConsolidado(
       <th>CELESC</th>
       <th>SEMASA</th>
       <th>ADM</th>
+      ${hasManut ? "<th>Manut.</th>" : ""}
       <th>Líquido</th>
     </tr>
   </thead>
@@ -378,6 +395,7 @@ export function abrirReciboConsolidado(
       <td>${fmt(tot.celesc)}</td>
       <td>${fmt(tot.semasa)}</td>
       <td>${fmt(tot.adm)}</td>
+      ${hasManut ? `<td>${fmt(tot.manut)}</td>` : ""}
       <td>${fmt(tot.total)}</td>
     </tr>
   </tfoot>
