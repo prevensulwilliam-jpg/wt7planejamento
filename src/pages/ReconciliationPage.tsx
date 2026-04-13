@@ -460,7 +460,7 @@ function ImportTab({ accounts }: { accounts: any[] }) {
           source: r.source, amount: r.amount, description: r.description,
         }));
         const kitnetEntries = (keRes.data ?? []).map((k: any) => ({
-          amount: k.total_liquid ?? k.rent_gross, kitnet_id: k.kitnet_id,
+          amount: k.total_liquid, kitnet_id: k.kitnet_id,
           tenant_name: k.kitnets?.tenant_name,
         }));
 

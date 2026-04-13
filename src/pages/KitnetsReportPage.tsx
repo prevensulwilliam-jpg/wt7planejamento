@@ -2,23 +2,10 @@ import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useKitnets, useKitnetEntries, usePrevMonth } from "@/hooks/useKitnets";
+import { useCeoConfig, useUpdateCeoConfig } from "@/hooks/useCeoConfig";
 import { formatCurrency, formatMonth, getCurrentMonth } from "@/lib/formatters";
-import { ChevronLeft, ChevronRight, Monitor, Sun } from "lucide-react";
+import { ChevronLeft, ChevronRight, Monitor, Sun, Settings, X, Plus, Trash2 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-
-// ─── Constantes de investimento ───
-const INVESTIMENTO = { RWT02: 1_000_000, RWT03: 500_000, total: 1_500_000 };
-const META_MENSAL = { RWT02: 14_400, RWT03: 6_700, total: 21_100 };
-const META_ANUAL = META_MENSAL.total * 12;
-// Lucro histórico estimado: 2024 + 2025 a 80% da meta 2026
-const LUCRO_HISTORICO = (META_MENSAL.total * 0.8) * 24;
-// Crescimento futuro (unidades)
-const CRESCIMENTO = [
-  { ano: "Hoje", unidades: 13 },
-  { ano: "2026", unidades: 28 },
-  { ano: "2027", unidades: 43 },
-  { ano: "2028", unidades: 58 },
-];
 
 function getYearMonths(year: number) {
   return Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, "0")}`);
@@ -166,11 +153,170 @@ function getTheme(dark: boolean) {
   };
 }
 
+// ─── Comparativo dinâmico RWT02 vs RWT03 ───
+function ComparativoCard({ dark, t, kitnets, entries, energyReadings, celescMonth, INVESTIMENTO, META_MENSAL, LUCRO_HISTORICO, CDI_TAXA }: any) {
+  const calc = (complex: "RWT02" | "RWT03") => {
+    const fk = kitnets.filter((k: any) => k.residencial_code === complex);
+    const fe = (entries as any[]).filter((e: any) => e.kitnets?.residencial_code === complex);
+    const total = fk.length || 1;
+    const ocupadas = fk.filter((k: any) => k.status === "occupied" || k.status === "maintenance").length;
+    const receita = fe.reduce((s: number, e: any) => s + (e.total_liquid ?? 0), 0);
+    const inv = complex === "RWT02" ? INVESTIMENTO.RWT02 : INVESTIMENTO.RWT03;
+    const lucroHist = inv > 0 ? (LUCRO_HISTORICO * (inv / INVESTIMENTO.total)) : 0;
+    const roiAcum = inv > 0 ? (lucroHist / inv) * 100 : 0;
+    const yieldM = inv > 0 ? (receita / inv) * 100 : 0;
+    const yieldA = yieldM * 12;
+    const payback = yieldA > 0 ? 100 / yieldA : 0;
+    const er = (energyReadings as any[]).filter((e: any) => e.kitnets?.residencial_code === complex);
+    const cobrado = er.reduce((s: number, e: any) => s + (e.amount_to_charge ?? 0), 0);
+    const fatura = (celescMonth as any[]).filter((c: any) => c.residencial_code === complex).reduce((s: number, c: any) => s + (c.invoice_total ?? 0), 0);
+    const margem = cobrado > 0 ? ((cobrado - fatura) / cobrado) * 100 : 0;
+    return { ocupacao: (ocupadas / total) * 100, unidades: `${ocupadas}/${total}`, investimento: inv, yieldAnual: yieldA, roiAcum, payback, margem };
+  };
+  const r02 = calc("RWT02");
+  const r03 = calc("RWT03");
+  const rows = [
+    { label: "Investimento", v02: formatCurrency(r02.investimento), v03: formatCurrency(r03.investimento), c: t.gold },
+    { label: "Yield anual", v02: `${r02.yieldAnual.toFixed(1)}%`, v03: `${r03.yieldAnual.toFixed(1)}%`, c: t.purple },
+    { label: "Ocupação", v02: `${r02.ocupacao.toFixed(0)}% (${r02.unidades})`, v03: `${r03.ocupacao.toFixed(0)}% (${r03.unidades})`, c: t.green },
+    { label: "ROI acumulado", v02: `${r02.roiAcum.toFixed(1)}%`, v03: `${r03.roiAcum.toFixed(1)}%`, c: t.purple },
+    { label: "Payback", v02: `${r02.payback.toFixed(1)} anos`, v03: `${r03.payback.toFixed(1)} anos`, c: "#94A3B8" },
+    { label: "Margem energia", v02: `${r02.margem.toFixed(1)}%`, v03: `${r03.margem.toFixed(1)}%`, c: t.green },
+  ];
+  return (
+    <div style={{ ...(dark ? { background: "#0D1117", border: "1px solid #1C2333", borderRadius: 10 } : { background: "#FFFFFF", border: "1px solid #E2E8F0", borderRadius: 12, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }), padding: 16, marginBottom: 0 }}>
+      <div style={{ fontSize: 12, fontWeight: 500, color: dark ? "#F0F4F8" : "#1A202C", marginBottom: 12, paddingBottom: 8, borderBottom: dark ? "1px solid #1C2333" : "1px solid #E2E8F0" }}>Comparativo RWT02 vs RWT03</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 4, fontSize: 10, color: dark ? "#4A5568" : "#94A3B8", paddingBottom: 6, marginBottom: 4 }}>
+        <span></span><span style={{ textAlign: "center", fontWeight: 600 }}>RWT02</span><span style={{ textAlign: "right", fontWeight: 600 }}>RWT03</span>
+      </div>
+      {rows.map(r => (
+        <div key={r.label} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 4, fontSize: 11, padding: "6px 0", borderBottom: dark ? "1px solid #0D1117" : "1px solid #E2E8F0" }}>
+          <span style={{ color: dark ? "#4A5568" : "#94A3B8" }}>{r.label}</span>
+          <span style={{ color: r.c, fontWeight: 500, textAlign: "center" }}>{r.v02}</span>
+          <span style={{ color: r.c, fontWeight: 500, textAlign: "right" }}>{r.v03}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Modal de configuração do CEO ───
+function CeoConfigModal({ open, onClose, dark }: { open: boolean; onClose: () => void; dark: boolean }) {
+  const { data: config } = useCeoConfig();
+  const updateMut = useUpdateCeoConfig();
+  const [inv02, setInv02] = useState("");
+  const [inv03, setInv03] = useState("");
+  const [meta02, setMeta02] = useState("");
+  const [meta03, setMeta03] = useState("");
+  const [lucroHist, setLucroHist] = useState("");
+  const [lucroNota, setLucroNota] = useState("");
+  const [cdi, setCdi] = useState("");
+  const [projecoes, setProjecoes] = useState<{ ano: string; unidades: number }[]>([]);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (config) {
+      setInv02(String(config.investimento.RWT02));
+      setInv03(String(config.investimento.RWT03));
+      setMeta02(String(config.meta_mensal.RWT02));
+      setMeta03(String(config.meta_mensal.RWT03));
+      setLucroHist(String(config.lucro_historico.valor));
+      setLucroNota(config.lucro_historico.nota);
+      setCdi(String(config.cdi_referencia.taxa));
+      setProjecoes([...config.projecao_crescimento]);
+    }
+  }, [config]);
+
+  if (!open) return null;
+
+  const bg = dark ? "#0D1117" : "#FFFFFF";
+  const border = dark ? "#1C2333" : "#E2E8F0";
+  const text = dark ? "#F0F4F8" : "#1A202C";
+  const muted = dark ? "#4A5568" : "#94A3B8";
+  const inputStyle = { width: "100%", padding: "6px 10px", borderRadius: 6, border: `1px solid ${border}`, background: dark ? "#080C10" : "#F8FAFC", color: text, fontSize: 13, outline: "none" };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await updateMut.mutateAsync({ key: "investimento", value: { RWT02: Number(inv02), RWT03: Number(inv03) } });
+      await updateMut.mutateAsync({ key: "meta_mensal", value: { RWT02: Number(meta02), RWT03: Number(meta03) } });
+      await updateMut.mutateAsync({ key: "lucro_historico", value: { valor: Number(lucroHist), nota: lucroNota } });
+      await updateMut.mutateAsync({ key: "cdi_referencia", value: { taxa: Number(cdi) } });
+      await updateMut.mutateAsync({ key: "projecao_crescimento", value: projecoes });
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.6)" }} onClick={onClose}>
+      <div style={{ background: bg, border: `1px solid ${border}`, borderRadius: 14, padding: 24, width: 480, maxHeight: "85vh", overflowY: "auto", boxShadow: "0 8px 30px rgba(0,0,0,0.3)" }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <span style={{ fontSize: 16, fontWeight: 600, color: text }}>Configurações CEO</span>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: muted }}><X size={18} /></button>
+        </div>
+
+        {/* Investimento */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: muted, marginBottom: 8 }}>Investimento patrimonial</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <div><label style={{ fontSize: 10, color: muted }}>RWT02</label><input style={inputStyle} value={inv02} onChange={e => setInv02(e.target.value)} /></div>
+            <div><label style={{ fontSize: 10, color: muted }}>RWT03</label><input style={inputStyle} value={inv03} onChange={e => setInv03(e.target.value)} /></div>
+          </div>
+        </div>
+
+        {/* Metas mensais */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: muted, marginBottom: 8 }}>Meta mensal (R$)</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <div><label style={{ fontSize: 10, color: muted }}>RWT02</label><input style={inputStyle} value={meta02} onChange={e => setMeta02(e.target.value)} /></div>
+            <div><label style={{ fontSize: 10, color: muted }}>RWT03</label><input style={inputStyle} value={meta03} onChange={e => setMeta03(e.target.value)} /></div>
+          </div>
+        </div>
+
+        {/* Lucro histórico */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: muted, marginBottom: 8 }}>Lucro histórico acumulado (ROI base)</div>
+          <input style={{ ...inputStyle, marginBottom: 6 }} value={lucroHist} onChange={e => setLucroHist(e.target.value)} placeholder="Valor em R$" />
+          <input style={inputStyle} value={lucroNota} onChange={e => setLucroNota(e.target.value)} placeholder="Nota/observação" />
+        </div>
+
+        {/* CDI */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: muted, marginBottom: 8 }}>CDI referência (%)</div>
+          <input style={inputStyle} value={cdi} onChange={e => setCdi(e.target.value)} />
+        </div>
+
+        {/* Projeções */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: muted, marginBottom: 8 }}>Projeção de crescimento (unidades)</div>
+          {projecoes.map((p, i) => (
+            <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8, marginBottom: 6, alignItems: "center" }}>
+              <input style={inputStyle} value={p.ano} onChange={e => { const np = [...projecoes]; np[i] = { ...np[i], ano: e.target.value }; setProjecoes(np); }} placeholder="Ano" />
+              <input style={inputStyle} type="number" value={p.unidades} onChange={e => { const np = [...projecoes]; np[i] = { ...np[i], unidades: Number(e.target.value) }; setProjecoes(np); }} placeholder="Unidades" />
+              <button onClick={() => setProjecoes(projecoes.filter((_, j) => j !== i))} style={{ background: "none", border: "none", cursor: "pointer", color: "#F43F5E", padding: 4 }}><Trash2 size={14} /></button>
+            </div>
+          ))}
+          <button onClick={() => setProjecoes([...projecoes, { ano: "", unidades: 0 }])} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: `1px dashed ${border}`, borderRadius: 6, padding: "6px 12px", fontSize: 11, color: muted, cursor: "pointer", width: "100%" }}>
+            <Plus size={12} /> Adicionar linha
+          </button>
+        </div>
+
+        <button onClick={handleSave} disabled={saving} style={{ width: "100%", padding: "10px 16px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, background: dark ? "#C9A84C" : "#B45309", color: dark ? "#080C10" : "#FFFFFF" }}>
+          {saving ? "Salvando..." : "Salvar configurações"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function KitnetsReportPage() {
   const [month, setMonth] = useState(getCurrentMonth());
   const [complex, setComplex] = useState<"total" | "RWT02" | "RWT03">("total");
   const [dark, setDark] = useState(true);
   const [solarOpen, setSolarOpen] = useState(false);
+  const [configOpen, setConfigOpen] = useState(false);
 
   // Toggle body class for sidebar/layout light mode
   useEffect(() => {
@@ -185,6 +331,23 @@ export default function KitnetsReportPage() {
   const year = parseInt(month.split("-")[0]);
   const t = getTheme(dark);
   const yearMonths = getYearMonths(year);
+
+  // ─── Configurações dinâmicas do CEO ───
+  const { data: ceoConfig } = useCeoConfig();
+  const INVESTIMENTO = useMemo(() => {
+    const inv = ceoConfig?.investimento ?? { RWT02: 1_000_000, RWT03: 500_000 };
+    return { ...inv, total: inv.RWT02 + inv.RWT03 };
+  }, [ceoConfig]);
+  const META_MENSAL = useMemo(() => {
+    const meta = ceoConfig?.meta_mensal ?? { RWT02: 14_400, RWT03: 6_700 };
+    return { ...meta, total: meta.RWT02 + meta.RWT03 };
+  }, [ceoConfig]);
+  const LUCRO_HISTORICO = ceoConfig?.lucro_historico?.valor ?? 405_120;
+  const CRESCIMENTO = ceoConfig?.projecao_crescimento ?? [
+    { ano: "Hoje", unidades: 13 }, { ano: "2026", unidades: 28 },
+    { ano: "2027", unidades: 43 }, { ano: "2028", unidades: 58 },
+  ];
+  const CDI_TAXA = ceoConfig?.cdi_referencia?.taxa ?? 10.5;
 
   const { data: kitnets = [] } = useKitnets();
   const { data: entries = [] } = useKitnetEntries(month);
@@ -238,13 +401,21 @@ export default function KitnetsReportPage() {
   const margemEnergia = cobradoInquilinos > 0 ? (saldoSolar / cobradoInquilinos) * 100 : 0;
   const pctLucro = lucroLiquido > 0 ? (saldoSolar / lucroLiquido) * 100 : 0;
 
-  // ─── Solar mês a mês (ano) ───
+  // ─── Solar mês a mês (ano) — usa energy_readings.amount_to_charge ───
+  const { data: yearEnergyReadings = [] } = useQuery({
+    queryKey: ["energy_readings_year_ceo", year],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("energy_readings").select("*, kitnets(residencial_code)").gte("reference_month", `${year}-01`).lte("reference_month", `${year}-12`);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
   const solarMeses = useMemo(() => yearMonths.map(m => {
-    const er = (yearEntries as any[]).filter(e => e.reference_month === m);
-    const cobrado = er.reduce((s: number, e: any) => s + (e.celesc ?? 0), 0);
+    const er = (yearEnergyReadings as any[]).filter(e => e.reference_month === m && (complex === "total" || e.kitnets?.residencial_code === complex));
+    const cobrado = er.reduce((s: number, e: any) => s + (e.amount_to_charge ?? 0), 0);
     const fatura = celescYear.filter((c: any) => c.reference_month === m && (complex === "total" || c.residencial_code === complex)).reduce((s: number, c: any) => s + (c.invoice_total ?? 0), 0);
     return { mes: formatMonth(m).slice(0, 3), cobrado, fatura, saldo: cobrado - fatura };
-  }), [yearEntries, celescYear, yearMonths, complex]);
+  }), [yearEnergyReadings, celescYear, yearMonths, complex]);
 
   // ─── Ocupação / inadimplência ───
   const totalUnidades = filteredKitnets.length || 1;
@@ -355,8 +526,16 @@ export default function KitnetsReportPage() {
             {dark ? <Sun size={14} /> : <Monitor size={14} />}
             {dark ? "Modo Claro" : "Modo Escuro"}
           </button>
+          <button
+            onClick={() => setConfigOpen(true)}
+            style={{ display: "flex", alignItems: "center", gap: 4, padding: "6px 10px", borderRadius: 8, fontSize: 12, cursor: "pointer", border: dark ? "1px solid #1C2333" : "1px solid #E2E8F0", background: "none", color: dark ? "#4A5568" : "#94A3B8" }}
+            title="Configurações CEO"
+          >
+            <Settings size={14} />
+          </button>
         </div>
       </div>
+      <CeoConfigModal open={configOpen} onClose={() => setConfigOpen(false)} dark={dark} />
 
       {/* Tabs complexo */}
       <div style={t.tabBar}>
@@ -439,25 +618,10 @@ export default function KitnetsReportPage() {
           </div>
         </CardWrap>
 
-        {/* Comparativo RWT02 vs RWT03 (só no consolidado) */}
+        {/* Comparativo RWT02 vs RWT03 (só no consolidado) — 100% dinâmico */}
         {complex === "total" ? (
-          <CardWrap style={{ marginBottom: 0 }}>
-            <div style={{ fontSize: 12, fontWeight: 500, color: dark ? "#F0F4F8" : "#1A202C", marginBottom: 12, paddingBottom: 8, borderBottom: dark ? "1px solid #1C2333" : "1px solid #E2E8F0" }}>Comparativo RWT02 vs RWT03</div>
-            {[
-              { label: "Investimento", v02: "R$ 1.000.000", v03: "R$ 500.000", c: t.gold },
-              { label: "Yield anual", v02: `${(yieldAnual * 1.04).toFixed(1)}%`, v03: `${(yieldAnual * 0.92).toFixed(1)}%`, c: t.purple },
-              { label: "Ocupação", v02: "100%", v03: "80%", c: t.green },
-              { label: "ROI acumulado", v02: "32,4%", v03: "30,5%", c: t.purple },
-              { label: "Payback", v02: "6,5 anos", v03: "7,3 anos", c: "#94A3B8" },
-              { label: "Margem energia", v02: "84,3%", v03: "83,7%", c: t.green },
-            ].map(r => (
-              <div key={r.label} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 4, fontSize: 11, padding: "6px 0", borderBottom: dark ? "1px solid #0D1117" : "1px solid #E2E8F0" }}>
-                <span style={{ color: dark ? "#4A5568" : "#94A3B8" }}>{r.label}</span>
-                <span style={{ color: r.c, fontWeight: 500, textAlign: "center" }}>{r.v02}</span>
-                <span style={{ color: r.c, fontWeight: 500, textAlign: "right" }}>{r.v03}</span>
-              </div>
-            ))}
-          </CardWrap>
+          <ComparativoCard dark={dark} t={t} kitnets={kitnets} entries={entries} energyReadings={energyReadings} celescMonth={celescMonth} INVESTIMENTO={INVESTIMENTO} META_MENSAL={META_MENSAL} LUCRO_HISTORICO={LUCRO_HISTORICO} CDI_TAXA={CDI_TAXA} />
+
         ) : (
           <CardWrap style={{ marginBottom: 0 }}>
             <div style={{ fontSize: 12, fontWeight: 500, color: dark ? "#F0F4F8" : "#1A202C", marginBottom: 12, paddingBottom: 8, borderBottom: dark ? "1px solid #1C2333" : "1px solid #E2E8F0" }}>Capital — {complex}</div>
@@ -540,10 +704,10 @@ export default function KitnetsReportPage() {
       {/* ── BLOCO 7: CAPITAL ── */}
       <SectionLabel>Bloco 7 — Capital (holding)</SectionLabel>
       <div style={g4}>
-        <KPI label="Investimento total" value={formatCurrency(investimento)} color={t.gold} sub={complex === "total" ? "RWT02 R$1M + RWT03 R$500k" : `${complex}`} accent />
+        <KPI label="Investimento total" value={formatCurrency(investimento)} color={t.gold} sub={complex === "total" ? `RWT02 ${formatCurrency(INVESTIMENTO.RWT02)} + RWT03 ${formatCurrency(INVESTIMENTO.RWT03)}` : `${complex}`} accent />
         <KPI label="ROI acumulado" value={`${roiPct.toFixed(1)}%`} color={t.purple} sub={`${formatCurrency(investimento * roiPct / 100)} recuperado`} accent />
         <KPI label="Payback estimado" value={`${paybackAnos.toFixed(1)} anos`} color={t.blue} sub={`~${Math.round(paybackAnos * 12)} meses`} accent />
-        <KPI label="Yield anual" value={`${yieldAnual.toFixed(1)}%`} color={t.purple} sub={`vs CDI ~10,5% · +${(yieldAnual - 10.5).toFixed(1)}pp`} accent />
+        <KPI label="Yield anual" value={`${yieldAnual.toFixed(1)}%`} color={t.purple} sub={`vs CDI ~${CDI_TAXA}% · +${(yieldAnual - CDI_TAXA).toFixed(1)}pp`} accent />
       </div>
 
       {/* Barra payback */}

@@ -482,7 +482,8 @@ function FechamentoForm({ kitnet, onSaved, onCancel, initialData, entryId, defau
         const { data: { user } } = await supabase.auth.getUser();
         await createMut.mutateAsync({
           kitnet_id: kitnet.id,
-          tenant_name: kitnet.tenant_name ?? null,
+          _kitnetCode: kitnet.code,
+          _tenantName: kitnet.tenant_name ?? undefined,
           reference_month: form.reference_month,
           period_start: form.period_start || null,
           period_end: form.period_end || null,
