@@ -19,11 +19,12 @@ import {
   useDeleteKitnetEntry,
   useLastEnergyReading,
   useCelescInvoices,
+  useLockedMonth,
 } from "@/hooks/useKitnets";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatCurrency, formatMonth, getCurrentMonth } from "@/lib/formatters";
 import { DEFAULT_ENERGY_TARIFF } from "@/lib/constants";
-import { Upload, FileText, Trash2, Plus, Zap, Printer, Pencil, ChevronDown, ChevronUp } from "lucide-react";
+import { Upload, FileText, Trash2, Plus, Zap, Printer, Pencil, ChevronDown, ChevronUp, Lock } from "lucide-react";
 import { abrirReciboIndividual } from "@/lib/relatorioFechamento";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -81,6 +82,11 @@ function DadosTab({ kitnet, onUpdated }: { kitnet: Tables<"kitnets">; onUpdated:
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
 
   const handleSave = async () => {
+    // Status é global — confirmação quando muda
+    if (form.status !== kitnet.status) {
+      const statusLabel = form.status === "vacant" ? "Vaga" : form.status === "occupied" ? "Ocupada" : "Manutenção";
+      if (!window.confirm(`Alterar status para "${statusLabel}" afeta TODOS os meses desta kitnet. Confirmar?`)) return;
+    }
     try {
       await updateMut.mutateAsync({
         id: kitnet.id,
@@ -123,6 +129,9 @@ function DadosTab({ kitnet, onUpdated }: { kitnet: Tables<"kitnets">; onUpdated:
               <SelectItem value="maintenance">Manutenção</SelectItem>
             </SelectContent>
           </Select>
+          <p className="text-xs mt-1" style={{ color: '#F59E0B' }}>
+            ⚠ Status global — afeta todos os meses
+          </p>
         </div>
       </div>
       {(kitnet.deposit_bank || kitnet.deposit_agency || kitnet.deposit_account) && (
@@ -247,6 +256,10 @@ function FechamentosTab({ kitnet, defaultMonth }: { kitnet: Tables<"kitnets">; d
 
   const displayed = fechamentos?.find((f: any) => f.reference_month === displayMonth) ?? null;
 
+  // ── Verificação do cadeado para o mês exibido ──
+  const { data: lockData } = useLockedMonth(displayMonth ?? "");
+  const isMonthLocked = !!(lockData as any)?.is_locked;
+
   const handleEdit = (entry: any) => {
     setShowForm(false);
     setEditingEntry(entry);
@@ -262,6 +275,15 @@ function FechamentosTab({ kitnet, defaultMonth }: { kitnet: Tables<"kitnets">; d
 
   return (
     <div className="space-y-4 mt-4">
+      {/* Banner de mês fechado */}
+      {isMonthLocked && (
+        <div className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-xs font-medium"
+          style={{ background: 'rgba(247,201,72,0.1)', border: '1px solid rgba(247,201,72,0.35)', color: '#F7C948' }}>
+          <Lock className="w-3.5 h-3.5 flex-shrink-0" />
+          Mês fechado — edições bloqueadas
+        </div>
+      )}
+
       <div className="flex items-center justify-between gap-3">
         {/* Seletor de mês — oculto quando form de novo fechamento está aberto */}
         <div className="flex items-center gap-2">
@@ -283,7 +305,11 @@ function FechamentosTab({ kitnet, defaultMonth }: { kitnet: Tables<"kitnets">; d
             </>
           )}
         </div>
-        <GoldButton onClick={handleNewFechamento}>
+        <GoldButton
+          onClick={isMonthLocked ? () => toast({ title: "🔒 Mês fechado", description: "Desbloqueie o mês para criar novos fechamentos." }) : handleNewFechamento}
+          disabled={false}
+          style={isMonthLocked ? { opacity: 0.45, cursor: 'not-allowed' } : undefined}
+        >
           <Plus className="w-4 h-4 mr-1" />
           {showForm ? "Cancelar" : "Novo Fechamento"}
         </GoldButton>
@@ -327,6 +353,7 @@ function FechamentosTab({ kitnet, defaultMonth }: { kitnet: Tables<"kitnets">; d
               )}
               <button
                 onClick={async () => {
+                  if (isMonthLocked) { toast({ title: "🔒 Mês fechado", description: "Desbloqueie o mês para apagar fechamentos." }); return; }
                   if (!window.confirm("Deseja realmente apagar este fechamento?")) return;
                   try {
                     await deleteEntry.mutateAsync(displayed.id);
@@ -336,16 +363,20 @@ function FechamentosTab({ kitnet, defaultMonth }: { kitnet: Tables<"kitnets">; d
                   }
                 }}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-                style={{ background: 'rgba(239,68,68,0.12)', color: '#F87171', border: '1px solid rgba(239,68,68,0.3)' }}
-                title="Apagar fechamento"
+                style={isMonthLocked
+                  ? { background: 'rgba(239,68,68,0.05)', color: '#9CA3AF', border: '1px solid rgba(100,100,100,0.2)', cursor: 'not-allowed', opacity: 0.5 }
+                  : { background: 'rgba(239,68,68,0.12)', color: '#F87171', border: '1px solid rgba(239,68,68,0.3)' }}
+                title={isMonthLocked ? "Mês fechado" : "Apagar fechamento"}
               >
                 <Trash2 className="w-3.5 h-3.5" /> Apagar
               </button>
               <button
-                onClick={() => handleEdit(displayed)}
+                onClick={() => { if (isMonthLocked) { toast({ title: "🔒 Mês fechado", description: "Desbloqueie o mês para editar fechamentos." }); return; } handleEdit(displayed); }}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-                style={{ background: 'rgba(99,102,241,0.12)', color: '#A5B4FC', border: '1px solid rgba(99,102,241,0.3)' }}
-                title="Editar fechamento"
+                style={isMonthLocked
+                  ? { background: 'rgba(99,102,241,0.05)', color: '#9CA3AF', border: '1px solid rgba(100,100,100,0.2)', cursor: 'not-allowed', opacity: 0.5 }
+                  : { background: 'rgba(99,102,241,0.12)', color: '#A5B4FC', border: '1px solid rgba(99,102,241,0.3)' }}
+                title={isMonthLocked ? "Mês fechado" : "Editar fechamento"}
               >
                 <Pencil className="w-3.5 h-3.5" /> Editar
               </button>
