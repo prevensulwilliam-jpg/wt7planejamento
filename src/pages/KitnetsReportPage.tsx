@@ -391,8 +391,9 @@ export default function KitnetsReportPage() {
   const ambiental = sumExpenses(expensesMonth, complex, "ambiental_rwt");
   const internet = sumExpenses(expensesMonth, complex, "internet_rwt");
   const manutencao = sumExpenses(expensesMonth, complex, "manutencao_rwt");
-  const custosTotal = celescCusto + semasa + iptu + ambiental + internet + manutencao;
-  const lucroLiquido = receita - custosTotal;
+  const custosOperacionais = celescCusto + semasa + iptu + ambiental + internet + manutencao;
+  const custosTotal = custosOperacionais + admInfo;
+  const lucroLiquido = receita - custosOperacionais;
 
   // ─── Solar ───
   const cobradoInquilinos = filteredEnergy.reduce((s: number, e: any) => s + (e.amount_to_charge ?? 0), 0);
