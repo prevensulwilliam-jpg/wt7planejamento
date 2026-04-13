@@ -158,18 +158,19 @@ function KitnetGrid({ kitnets, onManage, entries, prevEntries }: { kitnets: Tabl
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
       {kitnets.map(k => {
         const fechamento = entries.find(e => e.kitnet_id === k.id);
-        const prevFechamento = prevEntries.find(e => e.kitnet_id === k.id);
-        // Ocupada = status no banco é occupied (definido manualmente)
+        // Status do BANCO é a fonte de verdade — fechamento NÃO muda o status
         const isOccupied = k.status === "occupied" || k.status === "maintenance";
-        // Recebido = tem fechamento no mês atual
         const isReceived = !!fechamento;
-        // Badge: recebido = verde, ocupada sem fechar = âmbar, vaga = vermelho
-        const s = isReceived ? statusLabels.occupied : isOccupied ? { label: "Aguardando", variant: "gold" as const } : statusLabels.vacant;
-        // Nome: do cadastro da kitnet (fonte única de verdade)
-        // Se vaga, não mostra nome mesmo que tenha no cadastro (pode ter ficado residual)
-        const tenantName = isOccupied || isReceived ? (k.tenant_name || null) : null;
-        // Valor principal: total_liquid quando fechado, rent_value (contrato) quando aguardando
-        const displayValue = fechamento?.total_liquid ?? k.rent_value ?? 0;
+        // Badge: status real do banco
+        const s = isOccupied
+          ? (isReceived ? statusLabels.occupied : { label: "Aguardando", variant: "gold" as const })
+          : statusLabels[k.status ?? "vacant"] ?? statusLabels.vacant;
+        // Nome: só mostra se kitnet está occupied/maintenance
+        const tenantName = isOccupied ? (k.tenant_name || null) : null;
+        // Valor: total_liquid se tem fechamento, senão rent_value do contrato
+        const displayValue = isOccupied
+          ? (fechamento?.total_liquid ?? k.rent_value ?? 0)
+          : (k.rent_value ?? 0);
         return (
           <PremiumCard key={k.id} className="relative p-4">
             <div className="flex items-center justify-between mb-2">
@@ -180,8 +181,8 @@ function KitnetGrid({ kitnets, onManage, entries, prevEntries }: { kitnets: Tabl
             {k.tenant_phone && isOccupied && <p className="text-xs text-muted-foreground">{k.tenant_phone}</p>}
             <p className="font-mono text-lg text-foreground mt-1">{formatCurrency(displayValue)}</p>
 
-            {/* Badge de fechamento */}
-            {fechamento ? (
+            {/* Sub-badge: postado / aguardando / vaga */}
+            {isOccupied && isReceived ? (
               <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg mt-1" style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)' }}>
                 <span style={{ color: '#10B981' }}>✓</span>
                 <span className="text-xs font-medium" style={{ color: '#10B981' }}>

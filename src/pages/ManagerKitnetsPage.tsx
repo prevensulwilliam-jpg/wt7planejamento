@@ -210,12 +210,16 @@ function KitnetsTab({ month }: { month: string }) {
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
               {units.map(k => {
                 const fechamento = (entries as any[] ?? []).find(e => e.kitnet_id === k.id);
-                const prevFechamento = (prevEntries as any[] ?? []).find(e => e.kitnet_id === k.id);
                 const isOccupied = k.status === "occupied" || k.status === "maintenance";
                 const isReceived = !!fechamento;
-                const s = isReceived ? statusLabels.occupied : isOccupied ? { label: "Aguardando", variant: "gold" as const } : statusLabels.vacant;
-                const tenantName = isOccupied || isReceived ? (k.tenant_name || null) : null;
-                const displayValue = fechamento?.total_liquid ?? k.rent_value ?? 0;
+                // Badge: status do BANCO é verdade — fechamento não muda status
+                const s = isOccupied
+                  ? (isReceived ? statusLabels.occupied : { label: "Aguardando", variant: "gold" as const })
+                  : statusLabels[k.status ?? "vacant"] ?? statusLabels.vacant;
+                const tenantName = isOccupied ? (k.tenant_name || null) : null;
+                const displayValue = isOccupied
+                  ? (fechamento?.total_liquid ?? k.rent_value ?? 0)
+                  : (k.rent_value ?? 0);
                 return (
                   <PremiumCard key={k.id} className="relative p-4">
                     <div className="flex items-center justify-between mb-2">
@@ -226,11 +230,11 @@ function KitnetsTab({ month }: { month: string }) {
                     {k.tenant_phone && isOccupied && <p className="text-xs text-muted-foreground">{k.tenant_phone}</p>}
                     <p className="font-mono text-lg text-foreground mt-1">{formatCurrency(displayValue)}</p>
 
-                    {fechamento ? (
+                    {isOccupied && isReceived ? (
                       <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg mt-1" style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)' }}>
                         <span style={{ color: '#10B981' }}>✓</span>
                         <span className="text-xs font-medium" style={{ color: '#10B981' }}>
-                          Fechado · {formatCurrency(fechamento.total_liquid ?? 0)}
+                          Postado · {formatCurrency(fechamento.total_liquid ?? 0)}
                         </span>
                       </div>
                     ) : isOccupied ? (
