@@ -266,10 +266,11 @@ function KitnetGrid({ kitnets, onManage, entries, prevEntries }: { kitnets: Tabl
         const fechamento = entries.find(e => e.kitnet_id === k.id);
         // Status do BANCO é a fonte de verdade — fechamento NÃO muda o status
         const isOccupied = k.status === "occupied" || k.status === "maintenance";
-        const isReceived = !!fechamento;
+        const hasEntry = !!fechamento;
+        const isReconciled = !!fechamento?.reconciled;
         // Badge: status real do banco
         const s = isOccupied
-          ? (isReceived ? statusLabels.occupied : { label: "Aguardando", variant: "gold" as const })
+          ? (hasEntry ? statusLabels.occupied : { label: "Aguardando", variant: "gold" as const })
           : statusLabels[k.status ?? "vacant"] ?? statusLabels.vacant;
         // Nome: só mostra se kitnet está occupied/maintenance
         const tenantName = isOccupied ? (k.tenant_name || null) : null;
@@ -287,13 +288,17 @@ function KitnetGrid({ kitnets, onManage, entries, prevEntries }: { kitnets: Tabl
             {k.tenant_phone && isOccupied && <p className="text-xs text-muted-foreground">{k.tenant_phone}</p>}
             <p className="font-mono text-lg text-foreground mt-1">{formatCurrency(displayValue)}</p>
 
-            {/* Sub-badge: postado / aguardando / vaga */}
-            {isOccupied && isReceived ? (
+            {/* Sub-badge: conciliado / lançado / aguardando / vaga */}
+            {isOccupied && isReconciled ? (
               <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg mt-1" style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)' }}>
                 <span style={{ color: '#10B981' }}>✓</span>
                 <span className="text-xs font-medium" style={{ color: '#10B981' }}>
-                  Postado · {formatCurrency(fechamento.total_liquid ?? 0)}
+                  Conciliado · {formatCurrency(fechamento.total_liquid ?? 0)}
                 </span>
+              </div>
+            ) : isOccupied && hasEntry ? (
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg mt-1" style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.25)' }}>
+                <span className="text-xs font-medium" style={{ color: '#FBB724' }}>⏳ Lançado · {formatCurrency(fechamento.total_liquid ?? 0)}</span>
               </div>
             ) : isOccupied ? (
               <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg mt-1" style={{ background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.3)' }}>
