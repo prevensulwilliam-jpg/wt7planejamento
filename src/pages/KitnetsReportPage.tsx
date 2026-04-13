@@ -637,7 +637,7 @@ export default function KitnetsReportPage() {
       </div>
 
       {/* ── BLOCO 5: GRÁFICO + ANUAL ── */}
-      <SectionLabel>Bloco 5 — Performance anual {String(year)}</SectionLabel>
+      <SectionLabel>{`Bloco 5 — Performance anual ${year}`}</SectionLabel>
       <CardWrap>
         <div style={{ fontSize: 12, fontWeight: 500, color: dark ? "#F0F4F8" : "#1A202C", marginBottom: 4 }}>Meta vs recebido mensal</div>
         <div style={{ display: "flex", gap: 16, marginBottom: 12 }}>
