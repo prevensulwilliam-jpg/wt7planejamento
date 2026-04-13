@@ -12,7 +12,7 @@ import { KpiCard } from "@/components/wt7/KpiCard";
 import { WtBadge } from "@/components/wt7/WtBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { KitnetModal } from "@/components/wt7/KitnetModal";
-import { useKitnets, useKitnetEntries, useKitnetSummary, useCreateKitnetEntry, useEnergyReadings, useCelescInvoices, useSaveEnergyReadings, useUnreconciledEntries, useReconcileKitnetEntry, usePrevMonth, useDeleteKitnetEntry } from "@/hooks/useKitnets";
+import { useKitnets, useKitnetEntries, useKitnetSummary, useCreateKitnetEntry, useEnergyReadings, useCelescInvoices, useSaveEnergyReadings, useUnreconciledEntries, usePrevMonth, useDeleteKitnetEntry, useReconcileWithTransactions } from "@/hooks/useKitnets";
 import { formatCurrency, formatMonth, getCurrentMonth, formatDate } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -371,63 +371,89 @@ function EntriesTab({ month, setMonth }: { month: string; setMonth: (m: string) 
   );
 }
 
-// ─── Dialog de Conciliação (chamado a partir de Lançamentos) ───
+// ─── Dialog de Conciliação com suporte a múltiplos extratos ───
 function ConciliacaoDialog({ open, onClose, month }: { open: boolean; onClose: () => void; month: string }) {
   const { data: entries = [], isLoading } = useUnreconciledEntries(month);
   const { data: txRaw = [] } = useBankTransactions({ month });
-  const reconcileMut = useReconcileKitnetEntry();
+  const reconcileMut = useReconcileWithTransactions();
   const { toast } = useToast();
 
+  // Apenas créditos não ignorados do extrato
   const credits = useMemo(
     () => (txRaw as any[]).filter(t => t.type === "credit" && t.status !== "ignored"),
     [txRaw]
   );
 
+  // Sugestão automática por valor exato (1 transação = total)
   const suggestions = useMemo(() => {
-    const map: Record<string, any> = {};
+    const map: Record<string, string | null> = {};
     entries.forEach((e: any) => {
-      const match = credits.find(
-        t => Math.abs(Number(t.amount) - Number(e.total_liquid)) < 0.02
-      );
-      map[e.id] = match ?? null;
+      const match = credits.find(t => Math.abs(Number(t.amount) - Number(e.total_liquid)) < 0.02);
+      map[e.id] = match?.id ?? null;
     });
     return map;
   }, [entries, credits]);
 
-  const [selected, setSelected] = useState<Record<string, string | null>>({});
+  // selectedTxIds: lista de IDs de transações vinculadas a cada fechamento
+  const [selectedTxIds, setSelectedTxIds] = useState<Record<string, string[]>>({});
 
-  const txForEntry = (entryId: string): any | null =>
-    selected[entryId] !== undefined
-      ? credits.find(t => t.id === selected[entryId]) ?? null
-      : suggestions[entryId];
+  // Inicializa com sugestão automática quando entries/suggestions carregam
+  useEffect(() => {
+    if (!entries.length) return;
+    setSelectedTxIds(prev => {
+      const next = { ...prev };
+      entries.forEach((e: any) => {
+        if (next[e.id] === undefined) {
+          next[e.id] = suggestions[e.id] ? [suggestions[e.id]!] : [];
+        }
+      });
+      return next;
+    });
+  }, [suggestions]);
+
+  const getTxIds = (entryId: string) => selectedTxIds[entryId] ?? [];
+
+  const addTx = (entryId: string, txId: string) => {
+    setSelectedTxIds(prev => ({ ...prev, [entryId]: [...(prev[entryId] ?? []), txId] }));
+  };
+
+  const removeTx = (entryId: string, txId: string) => {
+    setSelectedTxIds(prev => ({ ...prev, [entryId]: (prev[entryId] ?? []).filter(id => id !== txId) }));
+  };
+
+  const getSum = (entryId: string) =>
+    getTxIds(entryId).reduce((sum, txId) => {
+      const tx = credits.find(t => t.id === txId);
+      return sum + (tx ? Number(tx.amount) : 0);
+    }, 0);
 
   const handleReconcile = async (entry: any) => {
-    const tx = txForEntry(entry.id);
     try {
-      await reconcileMut.mutateAsync({ entryId: entry.id, bankTransactionId: tx?.id ?? null });
+      await reconcileMut.mutateAsync({ entryId: entry.id, transactionIds: getTxIds(entry.id) });
       toast({ title: `${entry.kitnets?.code} conciliado!` });
     } catch (e: any) {
-      toast({ title: "Erro", description: (e as any).message, variant: "destructive" });
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
     }
   };
 
-  const handleIgnore = async (entry: any) => {
+  const handleSemExtrato = async (entry: any) => {
     try {
-      await reconcileMut.mutateAsync({ entryId: entry.id, bankTransactionId: null });
+      await reconcileMut.mutateAsync({ entryId: entry.id, transactionIds: [] });
       toast({ title: `${entry.kitnets?.code} marcado sem extrato` });
     } catch (e: any) {
-      toast({ title: "Erro", description: (e as any).message, variant: "destructive" });
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
     }
   };
 
-  const handleConciliarTodos = async () => {
+  const handleConciliarTodosExatos = async () => {
     const exatos = entries.filter((e: any) => {
-      const tx = txForEntry(e.id);
+      const ids = getTxIds(e.id);
+      if (ids.length !== 1) return false;
+      const tx = credits.find(t => t.id === ids[0]);
       return tx && Math.abs(Number(tx.amount) - Number(e.total_liquid)) < 0.02;
     });
     for (const entry of exatos) {
-      const tx = txForEntry(entry.id);
-      await reconcileMut.mutateAsync({ entryId: entry.id, bankTransactionId: tx.id });
+      await reconcileMut.mutateAsync({ entryId: entry.id, transactionIds: getTxIds(entry.id) });
     }
     toast({ title: `${exatos.length} lançamento(s) conciliado(s) automaticamente` });
   };
@@ -435,7 +461,9 @@ function ConciliacaoDialog({ open, onClose, month }: { open: boolean; onClose: (
   if (!open) return null;
 
   const exactCount = entries.filter((e: any) => {
-    const tx = txForEntry(e.id);
+    const ids = getTxIds(e.id);
+    if (ids.length !== 1) return false;
+    const tx = credits.find(t => t.id === ids[0]);
     return tx && Math.abs(Number(tx.amount) - Number(e.total_liquid)) < 0.02;
   }).length;
 
@@ -445,7 +473,7 @@ function ConciliacaoDialog({ open, onClose, month }: { open: boolean; onClose: (
         <DialogHeader>
           <DialogTitle className="text-foreground flex items-center gap-2">
             <ArrowLeftRight className="w-5 h-5" style={{ color: '#10B981' }} />
-            Conciliar Extrato — {formatMonth(month)}
+            Conciliar com Extratos — {formatMonth(month)}
           </DialogTitle>
         </DialogHeader>
 
@@ -461,10 +489,10 @@ function ConciliacaoDialog({ open, onClose, month }: { open: boolean; onClose: (
             {exactCount > 0 && (
               <div className="flex items-center justify-between px-3 py-2 rounded-lg" style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}>
                 <span className="text-sm" style={{ color: '#10B981' }}>
-                  {exactCount} {exactCount === 1 ? 'match' : 'matches'} exato{exactCount > 1 ? 's' : ''} encontrado{exactCount > 1 ? 's' : ''}
+                  {exactCount} match{exactCount > 1 ? 'es' : ''} exato{exactCount > 1 ? 's' : ''} encontrado{exactCount > 1 ? 's' : ''}
                 </span>
                 <button
-                  onClick={handleConciliarTodos}
+                  onClick={handleConciliarTodosExatos}
                   disabled={reconcileMut.isPending}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium"
                   style={{ background: 'rgba(16,185,129,0.15)', color: '#10B981', border: '1px solid rgba(16,185,129,0.3)' }}
@@ -475,72 +503,127 @@ function ConciliacaoDialog({ open, onClose, month }: { open: boolean; onClose: (
             )}
 
             {entries.map((entry: any) => {
-              const tx = txForEntry(entry.id);
-              const diff = tx ? Math.abs(Number(tx.amount) - Number(entry.total_liquid)) : null;
-              const exactMatch = diff !== null && diff < 0.02;
+              const txIds = getTxIds(entry.id);
+              const soma = getSum(entry.id);
+              const expected = Number(entry.total_liquid ?? 0);
+              const diff = soma - expected;
+              const isExact = Math.abs(diff) < 0.02;
+              const isOver = diff > 0.02;
+              const isPartial = soma > 0 && !isExact && !isOver;
+              const isEmpty = soma === 0;
+
+              // Transações disponíveis para adicionar (exclui as já selecionadas)
+              const availableTx = credits.filter(t => !txIds.includes(t.id));
+
+              const somaColor = isExact ? '#10B981' : isOver ? '#F43F5E' : isPartial ? '#F59E0B' : '#4A5568';
+              const canConfirm = txIds.length > 0;
 
               return (
                 <PremiumCard key={entry.id} className="p-4 space-y-3">
+                  {/* Cabeçalho */}
                   <div className="flex items-center justify-between">
                     <div>
                       <span className="font-mono font-bold text-sm" style={{ color: '#E8C97A' }}>{entry.kitnets?.code}</span>
                       <span className="text-xs text-muted-foreground ml-2">{entry.kitnets?.tenant_name ?? "—"}</span>
                     </div>
-                    <span className="font-mono font-bold text-lg text-foreground">{formatCurrency(entry.total_liquid ?? 0)}</span>
+                    <span className="font-mono font-bold text-lg text-foreground">{formatCurrency(expected)}</span>
                   </div>
 
+                  {/* Bloco de extrato */}
                   <div className="rounded-lg p-3 space-y-2" style={{ background: '#080C10', border: '1px solid #1A2535' }}>
-                    <p className="text-xs font-mono uppercase tracking-wider" style={{ color: '#4A5568' }}>Transação do extrato</p>
-                    {tx ? (
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium text-foreground">{tx.description}</p>
-                          <p className="text-xs text-muted-foreground">{tx.date ? formatDate(tx.date) : "—"} · {formatCurrency(tx.amount)}</p>
-                        </div>
-                        {exactMatch ? (
-                          <span className="flex items-center gap-1 text-xs font-medium" style={{ color: '#10B981' }}>
-                            <CheckCircle className="w-3.5 h-3.5" /> Valor exato
-                          </span>
-                        ) : (
-                          <span className="flex items-center gap-1 text-xs font-medium" style={{ color: '#F59E0B' }}>
-                            <AlertCircle className="w-3.5 h-3.5" /> Difere {formatCurrency(diff ?? 0)}
-                          </span>
-                        )}
+                    <p className="text-xs font-mono uppercase tracking-wider" style={{ color: '#4A5568' }}>
+                      Transações do extrato vinculadas
+                    </p>
+
+                    {/* Lista de transações selecionadas */}
+                    {txIds.length > 0 ? (
+                      <div className="space-y-1.5">
+                        {txIds.map(txId => {
+                          const tx = credits.find(t => t.id === txId);
+                          if (!tx) return null;
+                          return (
+                            <div key={txId} className="flex items-center gap-2 px-2 py-1.5 rounded-md" style={{ background: '#0D1117', border: '1px solid #1C2333' }}>
+                              <span className="text-xs text-muted-foreground flex-1 truncate">{tx.description}</span>
+                              <span className="text-xs text-muted-foreground whitespace-nowrap">{tx.date ? formatDate(tx.date) : "—"}</span>
+                              <span className="font-mono text-sm font-medium whitespace-nowrap" style={{ color: '#10B981' }}>{formatCurrency(tx.amount)}</span>
+                              <button
+                                onClick={() => removeTx(entry.id, txId)}
+                                className="text-xs rounded px-1 transition-colors"
+                                style={{ color: '#2D3748' }}
+                                onMouseEnter={e => (e.currentTarget.style.color = '#F43F5E')}
+                                onMouseLeave={e => (e.currentTarget.style.color = '#2D3748')}
+                                title="Remover"
+                              >×</button>
+                            </div>
+                          );
+                        })}
                       </div>
                     ) : (
-                      <p className="text-xs text-muted-foreground italic">Nenhuma transação encontrada com este valor</p>
+                      <p className="text-xs italic" style={{ color: '#2D3748' }}>Nenhuma transação selecionada</p>
                     )}
-                    <Select
-                      value={selected[entry.id] ?? (suggestions[entry.id]?.id ?? "__none")}
-                      onValueChange={v => setSelected(s => ({ ...s, [entry.id]: v === "__none" ? null : v }))}
-                    >
-                      <SelectTrigger className="w-full text-xs bg-background border-border text-foreground h-8">
-                        <SelectValue placeholder="Selecionar outra transação..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none">— Sem vínculo —</SelectItem>
-                        {credits.map((t: any) => (
-                          <SelectItem key={t.id} value={t.id}>
-                            {t.date ? formatDate(t.date) : "?"} · {formatCurrency(t.amount)} · {t.description?.slice(0, 40)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+
+                    {/* Dropdown para adicionar transação */}
+                    {availableTx.length > 0 && (
+                      <Select value="" onValueChange={v => { if (v) addTx(entry.id, v); }}>
+                        <SelectTrigger className="w-full text-xs bg-background border-border text-muted-foreground h-8 border-dashed">
+                          <SelectValue placeholder="+ Adicionar transação do extrato..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableTx.map((t: any) => (
+                            <SelectItem key={t.id} value={t.id}>
+                              {t.date ? formatDate(t.date) : "?"} · {formatCurrency(t.amount)} · {t.description?.slice(0, 40)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+
+                    {/* Barra de soma */}
+                    <div className="pt-2 border-t" style={{ borderColor: '#1C2333' }}>
+                      <div className="flex items-center justify-between text-xs">
+                        <span style={{ color: '#4A5568' }}>Soma selecionada</span>
+                        <span className="font-mono font-semibold" style={{ color: somaColor }}>{formatCurrency(soma)}</span>
+                      </div>
+                      <div className="text-xs mt-1" style={{ color: somaColor }}>
+                        {isEmpty && '— Selecione ao menos uma transação'}
+                        {isExact && `✓ Valor exato — R$ 0,00 de diferença`}
+                        {isPartial && `⚠ Faltam ${formatCurrency(Math.abs(diff))} para completar`}
+                        {isOver && `⚠ Excede em ${formatCurrency(diff)} — verifique os valores`}
+                      </div>
+                      <div className="h-1 rounded-full mt-2" style={{ background: '#1C2333', overflow: 'hidden' }}>
+                        <div
+                          className="h-full rounded-full transition-all"
+                          style={{
+                            width: expected > 0 ? `${Math.min(100, (soma / expected) * 100).toFixed(1)}%` : '0%',
+                            background: somaColor,
+                          }}
+                        />
+                      </div>
+                    </div>
                   </div>
 
+                  {/* Ações */}
                   <div className="flex gap-2 justify-end">
                     <button
-                      onClick={() => handleIgnore(entry)}
+                      onClick={() => handleSemExtrato(entry)}
                       disabled={reconcileMut.isPending}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all"
                       style={{ color: '#64748B', border: '1px solid #1A2535' }}
                     >
                       <XCircle className="w-3.5 h-3.5" /> Sem extrato
                     </button>
-                    <GoldButton onClick={() => handleReconcile(entry)} disabled={reconcileMut.isPending} className="text-xs px-4">
-                      <CheckCircle className="w-3.5 h-3.5 mr-1" />
-                      {tx ? "Confirmar vínculo" : "Marcar conciliado"}
-                    </GoldButton>
+                    <button
+                      onClick={() => handleReconcile(entry)}
+                      disabled={reconcileMut.isPending || !canConfirm}
+                      className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-40"
+                      style={isExact
+                        ? { background: 'rgba(16,185,129,0.15)', color: '#10B981', border: '1px solid rgba(16,185,129,0.4)' }
+                        : { background: 'rgba(201,168,76,0.1)', color: '#C9A84C', border: '1px solid rgba(201,168,76,0.35)' }
+                      }
+                    >
+                      <CheckCircle className="w-3.5 h-3.5" />
+                      {isExact ? 'Confirmar Conciliação' : canConfirm ? 'Confirmar mesmo assim' : 'Confirmar Conciliação'}
+                    </button>
                   </div>
                 </PremiumCard>
               );

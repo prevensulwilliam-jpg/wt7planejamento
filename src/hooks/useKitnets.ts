@@ -354,6 +354,63 @@ export function useReconcileKitnetEntry() {
   });
 }
 
+/** Concilia um fechamento vinculando 1 ou mais transações bancárias */
+export function useReconcileWithTransactions() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      entryId,
+      transactionIds,
+    }: {
+      entryId: string;
+      transactionIds: string[];
+    }) => {
+      // 1. Busca os valores de cada transação selecionada
+      if (transactionIds.length > 0) {
+        const { data: txData, error: txFetchError } = await supabase
+          .from("bank_transactions")
+          .select("id, amount")
+          .in("id", transactionIds);
+        if (txFetchError) throw txFetchError;
+
+        // 2. Insere/atualiza registros em kitnet_entry_transactions
+        const rows = (txData ?? []).map((t: any) => ({
+          kitnet_entry_id: entryId,
+          bank_transaction_id: t.id,
+          amount: Number(t.amount),
+        }));
+        const { error: linkError } = await (supabase as any)
+          .from("kitnet_entry_transactions")
+          .upsert(rows, { onConflict: "kitnet_entry_id,bank_transaction_id" });
+        if (linkError) throw linkError;
+
+        // 3. Marca cada transação como matched
+        await supabase
+          .from("bank_transactions")
+          .update({ status: "matched" })
+          .in("id", transactionIds);
+      }
+
+      // 4. Marca o fechamento como conciliado
+      const { error: updateError } = await supabase
+        .from("kitnet_entries")
+        .update({
+          reconciled: true,
+          bank_transaction_id: transactionIds[0] ?? null,
+          reconciled_at: new Date().toISOString(),
+        } as any)
+        .eq("id", entryId);
+      if (updateError) throw updateError;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["kitnet_entries_unreconciled"] });
+      qc.invalidateQueries({ queryKey: ["kitnet_entries_unreconciled_count"] });
+      qc.invalidateQueries({ queryKey: ["kitnet_entries"] });
+      qc.invalidateQueries({ queryKey: ["bank_transactions"] });
+    },
+  });
+}
+
 // ─── Delete Kitnet Entry ───
 export function useDeleteKitnetEntry() {
   const qc = useQueryClient();
