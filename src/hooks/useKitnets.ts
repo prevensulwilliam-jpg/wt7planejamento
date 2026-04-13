@@ -134,6 +134,7 @@ export function useKitnetSummary(month: string) {
   const received = entryData.length;
 
   return {
+    total: data.length,
     occupied,
     maintenance,
     vacant,
