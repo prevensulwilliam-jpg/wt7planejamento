@@ -24,6 +24,9 @@ import {
   useUpsertKitnetMonthStatus,
   useKitnetEffectiveData,
   useUpsertKitnetMonthData,
+  useKitnetAlerts,
+  useCreateKitnetAlert,
+  useResolveKitnetAlert,
 } from "@/hooks/useKitnets";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatCurrency, formatMonth, getCurrentMonth } from "@/lib/formatters";
@@ -304,6 +307,13 @@ function FechamentosTab({ kitnet, defaultMonth }: { kitnet: Tables<"kitnets">; d
   const { data: lockData } = useLockedMonth(displayMonth ?? "");
   const isMonthLocked = !!(lockData as any)?.is_locked;
 
+  // ── Alertas de saldo pendente no mês exibido ──
+  const { data: pendingAlerts } = useKitnetAlerts(kitnet.id, displayMonth ?? "");
+  const resolveAlert = useResolveKitnetAlert();
+
+  // Saldo pré-preenchido para o novo fechamento (quando usuário clica "Incluir como acréscimo")
+  const [prefilledSurcharge, setPrefilledSurcharge] = useState<{ amount: number; sourceMonth: string; alertId: string } | null>(null);
+
   const handleEdit = (entry: any) => {
     setShowForm(false);
     setEditingEntry(entry);
@@ -359,7 +369,47 @@ function FechamentosTab({ kitnet, defaultMonth }: { kitnet: Tables<"kitnets">; d
         </GoldButton>
       </div>
 
-      {showForm && <FechamentoForm kitnet={kitnet} onSaved={(savedMonth) => { setShowForm(false); if (savedMonth) setSelectedMonth(savedMonth); }} defaultMonth={defaultMonth ?? getCurrentMonth()} />}
+      {/* Banner de saldo pendente — aparece quando há alertas não resolvidos no mês */}
+      {(pendingAlerts ?? []).length > 0 && !showForm && !editingEntry && (
+        <div className="space-y-2">
+          {(pendingAlerts ?? []).map((alert: any) => (
+            <div key={alert.id} className="flex items-start justify-between gap-3 rounded-lg px-3 py-2.5"
+              style={{ background: 'rgba(245,158,11,0.09)', border: '1px solid rgba(245,158,11,0.3)' }}>
+              <div>
+                <p className="text-xs font-semibold" style={{ color: '#F59E0B' }}>
+                  ⚠ Saldo pendente de {formatMonth(alert.source_month)}: {formatCurrency(alert.pending_amount)}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">Clique para incluir como acréscimo no novo fechamento</p>
+              </div>
+              <button
+                onClick={() => {
+                  setPrefilledSurcharge({ amount: alert.pending_amount, sourceMonth: alert.source_month, alertId: alert.id });
+                  setEditingEntry(null);
+                  setShowForm(true);
+                }}
+                className="text-xs px-3 py-1.5 rounded-lg font-medium whitespace-nowrap flex-shrink-0"
+                style={{ background: 'rgba(245,158,11,0.15)', color: '#F59E0B', border: '1px solid rgba(245,158,11,0.35)' }}
+              >
+                + Incluir acréscimo
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showForm && (
+        <FechamentoForm
+          kitnet={kitnet}
+          onSaved={(savedMonth) => {
+            setShowForm(false);
+            setPrefilledSurcharge(null);
+            if (savedMonth) setSelectedMonth(savedMonth);
+          }}
+          defaultMonth={defaultMonth ?? getCurrentMonth()}
+          pendingSurcharge={prefilledSurcharge ?? undefined}
+          onAlertResolved={(alertId) => resolveAlert.mutateAsync(alertId)}
+        />
+      )}
       {editingEntry && (
         <FechamentoForm
           kitnet={kitnet}
@@ -486,13 +536,16 @@ interface FechamentoFormProps {
   initialData?: any;
   entryId?: string;
   defaultMonth?: string;
+  pendingSurcharge?: { amount: number; sourceMonth: string; alertId: string };
+  onAlertResolved?: (alertId: string) => Promise<void>;
 }
 
-function FechamentoForm({ kitnet, onSaved, onCancel, initialData, entryId, defaultMonth }: FechamentoFormProps) {
+function FechamentoForm({ kitnet, onSaved, onCancel, initialData, entryId, defaultMonth, pendingSurcharge, onAlertResolved }: FechamentoFormProps) {
   const isEditMode = !!entryId;
   const { toast } = useToast();
   const createMut = useCreateKitnetEntry();
   const updateMut = useUpdateKitnetEntry();
+  const createAlert = useCreateKitnetAlert();
   const [month] = useState(defaultMonth ?? getCurrentMonth());
   const { data: lastReading } = useLastEnergyReading(kitnet.id);
   const { data: invoices } = useCelescInvoices(month);
@@ -511,13 +564,15 @@ function FechamentoForm({ kitnet, onSaved, onCancel, initialData, entryId, defau
     reference_month: initialData?.reference_month ?? (defaultMonth ?? getCurrentMonth()),
     discount_amount: String(initialData?.discount_amount ?? ""),
     discount_reason: initialData?.discount_reason ?? "",
-    surcharge_amount: String(initialData?.surcharge_amount ?? ""),
-    surcharge_reason: initialData?.surcharge_reason ?? "",
+    surcharge_amount: String(pendingSurcharge?.amount ?? initialData?.surcharge_amount ?? ""),
+    surcharge_reason: pendingSurcharge
+      ? `Saldo mês anterior (${formatMonth(pendingSurcharge.sourceMonth)})`
+      : (initialData?.surcharge_reason ?? ""),
     notes: initialData?.notes ?? "",
   });
 
   const [discountOpen, setDiscountOpen] = useState(!!(initialData?.discount_amount));
-  const [surchargeOpen, setSurchargeOpen] = useState(!!(initialData?.surcharge_amount));
+  const [surchargeOpen, setSurchargeOpen] = useState(!!(initialData?.surcharge_amount) || !!(pendingSurcharge));
   const [notesOpen, setNotesOpen] = useState(!!(initialData?.notes));
   const [celescMode, setCelescMode] = useState<"idle" | "loading" | "found" | "manual">("idle");
   const [celescFoundInfo, setCelescFoundInfo] = useState<{ kwh: number; amount: number; tariff: number } | null>(null);
@@ -612,7 +667,7 @@ function FechamentoForm({ kitnet, onSaved, onCancel, initialData, entryId, defau
         toast({ title: "Fechamento atualizado!" });
       } else {
         const { data: { user } } = await supabase.auth.getUser();
-        await createMut.mutateAsync({
+        const newEntryId = await createMut.mutateAsync({
           kitnet_id: kitnet.id,
           _kitnetCode: kitnet.code,
           _tenantName: kitnet.tenant_name ?? undefined,
@@ -628,7 +683,27 @@ function FechamentoForm({ kitnet, onSaved, onCancel, initialData, entryId, defau
           created_by: user?.id,
           ...extraFields,
         } as any);
-        toast({ title: "Fechamento salvo!" });
+
+        // Se total = 0 e há valor esperado → cria alerta para o mês seguinte
+        if (totalLiquid === 0 && effectiveRentValue > 0) {
+          const [y, m] = form.reference_month.split("-").map(Number);
+          const nextM = new Date(y, m, 1); // m é 1-based, JS usa 0-based → next month
+          const nextMonthKey = `${nextM.getFullYear()}-${String(nextM.getMonth() + 1).padStart(2, "0")}`;
+          // Cria alerta só se não existe ainda para esse kitnet+nextMonth
+          await (supabase as any).from("kitnet_alerts")
+            .upsert(
+              { kitnet_id: kitnet.id, source_entry_id: newEntryId ?? null, alert_month: nextMonthKey, source_month: form.reference_month, pending_amount: effectiveRentValue, alert_type: "pending_balance", resolved: false },
+              { onConflict: "kitnet_id,alert_month,source_month", ignoreDuplicates: true }
+            );
+          toast({ title: "Fechamento salvo!", description: `Alerta de saldo criado para ${formatMonth(nextMonthKey)}.` });
+        } else {
+          toast({ title: "Fechamento salvo!" });
+        }
+
+        // Se havia saldo pendente pré-preenchido → resolve o alerta
+        if (pendingSurcharge && surcharge > 0 && onAlertResolved) {
+          await onAlertResolved(pendingSurcharge.alertId);
+        }
       }
       onSaved(form.reference_month);
     } catch (e: any) {
@@ -640,6 +715,12 @@ function FechamentoForm({ kitnet, onSaved, onCancel, initialData, entryId, defau
 
   return (
     <PremiumCard className="p-4 space-y-3 border border-[#E8C97A]/20">
+      {pendingSurcharge && (
+        <div className="rounded-lg px-3 py-2 text-xs font-medium"
+          style={{ background: 'rgba(245,158,11,0.09)', border: '1px solid rgba(245,158,11,0.3)', color: '#F59E0B' }}>
+          ⚠ Acréscimo pré-preenchido: {formatCurrency(pendingSurcharge.amount)} de saldo pendente de {formatMonth(pendingSurcharge.sourceMonth)}
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
           {isEditMode ? "Editar Fechamento" : "Novo Fechamento"}

@@ -81,7 +81,8 @@ export function useCreateKitnetEntry() {
   return useMutation({
     mutationFn: async (entry: TablesInsert<"kitnet_entries"> & { _kitnetCode?: string; _tenantName?: string }) => {
       const { _kitnetCode, _tenantName, ...entryData } = entry;
-      const { error } = await supabase.from("kitnet_entries").insert(entryData);
+      const { data: inserted, error } = await supabase
+        .from("kitnet_entries").insert(entryData).select("id").single();
       if (error) throw error;
 
       // Auto-create revenue for bank reconciliation matching by value
@@ -110,6 +111,8 @@ export function useCreateKitnetEntry() {
           });
         }
       }
+      // Retorna o ID do fechamento criado para uso pelo chamador (ex: criar alerta)
+      return inserted?.id as string | undefined;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["kitnet_entries"] });
