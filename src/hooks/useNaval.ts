@@ -37,7 +37,7 @@ export function useNavalContext() {
             kitnets: {
               total: kitnets?.length ?? 13,
               occupied: summary.occupied,
-              maintenance: summary.maintenance,
+              total: summary.total,
               vacant: summary.vacant,
               totalRent: summary.totalReceived,
             },
@@ -72,7 +72,7 @@ export function useNavalContext() {
       kpis.expenseByCategory,
       kitnets,
       summary.occupied,
-      summary.maintenance,
+      summary.total,
       summary.vacant,
       summary.totalReceived,
       goals,

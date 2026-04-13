@@ -126,17 +126,20 @@ export function useKitnetSummary(month: string) {
   const data = kitnets.data ?? [];
   const entryData = entries.data ?? [];
 
-  const occupied = data.filter(k => k.status === "occupied").length;
-  const maintenance = data.filter(k => k.status === "maintenance").length;
-  // Vaga = tudo que NÃO é occupied e NÃO é maintenance (inclui null, vacant, etc)
-  const vacant = data.filter(k => k.status !== "occupied" && k.status !== "maintenance").length;
+  // Ocupadas = somente status "occupied"
+  const occupiedKitnets = data.filter(k => k.status === "occupied");
+  const occupied = occupiedKitnets.length;
+  // Vagas = tudo que NÃO é occupied (maintenance, vacant, null, etc)
+  const vacant = data.length - occupied;
+  // Total recebido = soma total_liquid de todos os fechamentos do mês
   const totalReceived = entryData.reduce((s, e) => s + (e.total_liquid ?? 0), 0);
-  const received = entryData.length;
+  // Recebidos = fechamentos de kitnets que estão ocupadas
+  const occupiedIds = new Set(occupiedKitnets.map(k => k.id));
+  const received = entryData.filter(e => occupiedIds.has(e.kitnet_id)).length;
 
   return {
     total: data.length,
     occupied,
-    maintenance,
     vacant,
     totalReceived,
     received,
