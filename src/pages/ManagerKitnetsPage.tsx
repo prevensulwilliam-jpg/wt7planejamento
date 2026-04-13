@@ -209,7 +209,7 @@ function KitnetsTab({ month }: { month: string }) {
                 const isReceived = !!fechamento;
                 const s = isReceived ? statusLabels.occupied : isOccupied ? { label: "Aguardando", variant: "gold" as const } : statusLabels.vacant;
                 const tenantName = (fechamento as any)?.tenant_name || (prevFechamento as any)?.tenant_name || k.tenant_name || null;
-                const rentValue = fechamento?.rent_gross ?? prevFechamento?.rent_gross ?? k.rent_value ?? 0;
+                const rentValue = fechamento?.rent_gross ?? k.rent_value ?? 0;
                 return (
                   <PremiumCard key={k.id} className="relative p-4">
                     <div className="flex items-center justify-between mb-2">

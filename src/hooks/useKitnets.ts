@@ -130,12 +130,14 @@ export function useKitnetSummary(month: string) {
   const maintenance = data.filter(k => k.status === "maintenance").length;
   const vacant = data.filter(k => k.status === "vacant").length;
   const totalReceived = entryData.reduce((s, e) => s + (e.total_liquid ?? 0), 0);
+  const received = entryData.length;
 
   return {
     occupied,
     maintenance,
     vacant,
     totalReceived,
+    received,
     isLoading: kitnets.isLoading || entries.isLoading,
   };
 }

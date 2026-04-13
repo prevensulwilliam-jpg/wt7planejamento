@@ -162,7 +162,8 @@ function KitnetGrid({ kitnets, onManage, entries, prevEntries }: { kitnets: Tabl
         const s = isReceived ? statusLabels.occupied : isOccupied ? { label: "Aguardando", variant: "gold" as const } : statusLabels.vacant;
         // Nome: do entry atual, anterior, ou direto do cadastro
         const tenantName = (fechamento as any)?.tenant_name || (prevFechamento as any)?.tenant_name || k.tenant_name || null;
-        const rentValue = fechamento?.rent_gross ?? prevFechamento?.rent_gross ?? k.rent_value ?? 0;
+        // Valor principal: total_liquid quando fechado, rent_value (contrato) quando aguardando
+        const displayValue = fechamento?.total_liquid ?? k.rent_value ?? 0;
         return (
           <PremiumCard key={k.id} className="relative p-4">
             <div className="flex items-center justify-between mb-2">
@@ -171,14 +172,14 @@ function KitnetGrid({ kitnets, onManage, entries, prevEntries }: { kitnets: Tabl
             </div>
             <p className="text-sm text-muted-foreground truncate">{tenantName || "—"}</p>
             {k.tenant_phone && isOccupied && <p className="text-xs text-muted-foreground">{k.tenant_phone}</p>}
-            <p className="font-mono text-lg text-foreground mt-1">{formatCurrency(rentValue)}</p>
+            <p className="font-mono text-lg text-foreground mt-1">{formatCurrency(displayValue)}</p>
 
             {/* Badge de fechamento */}
             {fechamento ? (
               <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg mt-1" style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)' }}>
                 <span style={{ color: '#10B981' }}>✓</span>
                 <span className="text-xs font-medium" style={{ color: '#10B981' }}>
-                  Fechado · {formatCurrency(fechamento.total_liquid ?? 0)}
+                  Postado · {formatCurrency(fechamento.total_liquid ?? 0)}
                 </span>
               </div>
             ) : isOccupied ? (
