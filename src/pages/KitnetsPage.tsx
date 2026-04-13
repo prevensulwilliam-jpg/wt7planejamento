@@ -116,7 +116,7 @@ export default function KitnetsPage() {
           </button>
         </div>
 
-        <TabsContent value="overview"><OverviewTab month={month} setMonth={setMonth} /></TabsContent>
+        <TabsContent value="overview"><OverviewTab month={month} setMonth={setMonth} isLocked={isLocked} /></TabsContent>
         <TabsContent value="entries"><EntriesTab month={month} setMonth={setMonth} /></TabsContent>
         <TabsContent value="report"><ReportTab month={month} setMonth={setMonth} /></TabsContent>
         <TabsContent value="energia"><EnergiaTab month={month} /></TabsContent>
@@ -165,7 +165,7 @@ export default function KitnetsPage() {
 }
 
 // ─── Overview Tab ───
-function OverviewTab({ month, setMonth }: { month: string; setMonth: (v: string) => void }) {
+function OverviewTab({ month, setMonth, isLocked }: { month: string; setMonth: (v: string) => void; isLocked: boolean }) {
   const { data: kitnets, isLoading, refetch } = useKitnets();
   const summary = useKitnetSummary(month);
   const { data: entries } = useKitnetEntries(month);
@@ -236,13 +236,13 @@ function OverviewTab({ month, setMonth }: { month: string; setMonth: (v: string)
       {/* RWT02 */}
       <div>
         <h2 className="font-display font-bold text-lg text-foreground mb-3">RWT02 — Rua Amauri de Souza, 08</h2>
-        <KitnetGrid kitnets={rwt02} onManage={setSelected} entries={entries ?? []} prevEntries={prevEntries ?? []} monthStatuses={monthStatuses ?? {}} />
+        <KitnetGrid kitnets={rwt02} onManage={setSelected} entries={entries ?? []} prevEntries={prevEntries ?? []} monthStatuses={monthStatuses ?? {}} isLocked={isLocked} />
       </div>
 
       {/* RWT03 */}
       <div>
         <h2 className="font-display font-bold text-lg text-foreground mb-3">RWT03 — Rua Manoel Corrêa, 125</h2>
-        <KitnetGrid kitnets={rwt03} onManage={setSelected} entries={entries ?? []} prevEntries={prevEntries ?? []} monthStatuses={monthStatuses ?? {}} />
+        <KitnetGrid kitnets={rwt03} onManage={setSelected} entries={entries ?? []} prevEntries={prevEntries ?? []} monthStatuses={monthStatuses ?? {}} isLocked={isLocked} />
       </div>
 
       {selected && (
@@ -257,7 +257,7 @@ function OverviewTab({ month, setMonth }: { month: string; setMonth: (v: string)
   );
 }
 
-function KitnetGrid({ kitnets, onManage, entries, prevEntries, monthStatuses }: { kitnets: Tables<"kitnets">[]; onManage: (k: Tables<"kitnets">) => void; entries: any[]; prevEntries: any[]; monthStatuses: Record<string, string> }) {
+function KitnetGrid({ kitnets, onManage, entries, prevEntries, monthStatuses, isLocked }: { kitnets: Tables<"kitnets">[]; onManage: (k: Tables<"kitnets">) => void; entries: any[]; prevEntries: any[]; monthStatuses: Record<string, string>; isLocked: boolean }) {
   if (!kitnets.length) {
     return <p className="text-muted-foreground text-sm">Nenhuma kitnet cadastrada.</p>;
   }
@@ -312,8 +312,14 @@ function KitnetGrid({ kitnets, onManage, entries, prevEntries, monthStatuses }: 
               </div>
             )}
 
-            <GoldButton className="w-full text-xs justify-center mt-2" onClick={() => onManage(k)}>
-              Gerenciar
+            <GoldButton
+              className="w-full text-xs justify-center mt-2"
+              onClick={() => onManage(k)}
+              disabled={isLocked}
+              title={isLocked ? "🔒 Mês fechado" : undefined}
+              style={isLocked ? { opacity: 0.35, cursor: 'not-allowed', filter: 'grayscale(0.6)' } : undefined}
+            >
+              {isLocked ? "🔒 Fechado" : "Gerenciar"}
             </GoldButton>
           </PremiumCard>
         );
