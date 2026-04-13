@@ -128,7 +128,8 @@ export function useKitnetSummary(month: string) {
 
   const occupied = data.filter(k => k.status === "occupied").length;
   const maintenance = data.filter(k => k.status === "maintenance").length;
-  const vacant = data.filter(k => k.status === "vacant").length;
+  // Vaga = tudo que NÃO é occupied e NÃO é maintenance (inclui null, vacant, etc)
+  const vacant = data.filter(k => k.status !== "occupied" && k.status !== "maintenance").length;
   const totalReceived = entryData.reduce((s, e) => s + (e.total_liquid ?? 0), 0);
   const received = entryData.length;
 

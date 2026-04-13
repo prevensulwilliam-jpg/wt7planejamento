@@ -421,7 +421,7 @@ export default function KitnetsReportPage() {
   // ─── Ocupação / inadimplência ───
   const totalUnidades = filteredKitnets.length || 1;
   const ocupadas = filteredKitnets.filter(k => k.status === "occupied" || k.status === "maintenance").length;
-  const vagas = filteredKitnets.filter(k => k.status === "vacant" || !k.status).length;
+  const vagas = filteredKitnets.filter(k => k.status !== "occupied" && k.status !== "maintenance").length;
   const fechados = filteredEntries.length;
   const aguardando = ocupadas - fechados;
   const aluguelMedio = filteredKitnets.reduce((s, k) => s + (k.rent_value ?? 0), 0) / (filteredKitnets.length || 1);

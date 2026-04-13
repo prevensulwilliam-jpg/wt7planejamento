@@ -160,8 +160,9 @@ function KitnetGrid({ kitnets, onManage, entries, prevEntries }: { kitnets: Tabl
         const isReceived = !!fechamento;
         // Badge: recebido = verde, ocupada sem fechar = âmbar, vaga = vermelho
         const s = isReceived ? statusLabels.occupied : isOccupied ? { label: "Aguardando", variant: "gold" as const } : statusLabels.vacant;
-        // Nome: do entry atual, anterior, ou direto do cadastro
-        const tenantName = (fechamento as any)?.tenant_name || (prevFechamento as any)?.tenant_name || k.tenant_name || null;
+        // Nome: do cadastro da kitnet (fonte única de verdade)
+        // Se vaga, não mostra nome mesmo que tenha no cadastro (pode ter ficado residual)
+        const tenantName = isOccupied || isReceived ? (k.tenant_name || null) : null;
         // Valor principal: total_liquid quando fechado, rent_value (contrato) quando aguardando
         const displayValue = fechamento?.total_liquid ?? k.rent_value ?? 0;
         return (
