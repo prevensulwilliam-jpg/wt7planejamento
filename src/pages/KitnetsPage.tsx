@@ -259,7 +259,7 @@ function EntriesTab({ month, setMonth }: { month: string; setMonth: (m: string) 
               style={{ background: 'rgba(16,185,129,0.1)', color: '#10B981', border: '1px solid rgba(16,185,129,0.3)' }}
             >
               <Zap className="w-4 h-4" />
-              Conciliar ({pendentes})
+              Conciliar com Extratos ({pendentes})
             </button>
           )}
           <GoldButton onClick={() => setOpen(true)}><Plus className="w-4 h-4 mr-1" />Novo Lançamento</GoldButton>
@@ -277,25 +277,19 @@ function EntriesTab({ month, setMonth }: { month: string; setMonth: (m: string) 
           <Table>
             <TableHeader>
               <TableRow className="border-border">
-                <TableHead className="text-muted-foreground w-8"></TableHead>
                 <TableHead className="text-muted-foreground">Kitnet</TableHead>
                 <TableHead className="text-muted-foreground">Inquilino</TableHead>
                 <TableHead className="text-muted-foreground">Aluguel Bruto</TableHead>
                 <TableHead className="text-muted-foreground">Taxa ADM</TableHead>
                 <TableHead className="text-muted-foreground">Total Líquido</TableHead>
                 <TableHead className="text-muted-foreground">Período</TableHead>
+                <TableHead className="text-muted-foreground">Conciliação</TableHead>
                 <TableHead className="text-muted-foreground w-8"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {entries.map((e: any) => (
                 <TableRow key={e.id} className="border-border">
-                  <TableCell>
-                    {e.reconciled
-                      ? <CheckCircle className="w-4 h-4" style={{ color: '#10B981' }} title="Conciliado" />
-                      : <AlertCircle className="w-4 h-4" style={{ color: '#F59E0B' }} title="Aguardando conciliação" />
-                    }
-                  </TableCell>
                   <TableCell className="font-mono text-foreground">{e.kitnets?.code ?? "—"}</TableCell>
                   <TableCell className="text-muted-foreground">{e.kitnets?.tenant_name ?? "—"}</TableCell>
                   <TableCell className="font-mono text-foreground">{formatCurrency(e.rent_gross ?? 0)}</TableCell>
@@ -303,6 +297,23 @@ function EntriesTab({ month, setMonth }: { month: string; setMonth: (m: string) 
                   <TableCell className="font-mono text-foreground">{formatCurrency(e.total_liquid ?? 0)}</TableCell>
                   <TableCell className="text-muted-foreground text-sm">
                     {e.period_start ? formatDate(e.period_start) : "—"} → {e.period_end ? formatDate(e.period_end) : "—"}
+                  </TableCell>
+                  <TableCell>
+                    {e.reconciled ? (
+                      <div className="flex items-center gap-1.5">
+                        <CheckCircle className="w-3.5 h-3.5 shrink-0" style={{ color: '#10B981' }} />
+                        <span className="font-mono text-xs" style={{ color: (e as any).reconciled_at ? '#4A5568' : '#2D3748' }}>
+                          {(e as any).reconciled_at
+                            ? new Date((e as any).reconciled_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })
+                            : 'sem data'}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" style={{ color: '#F59E0B' }} />
+                        <span className="text-xs" style={{ color: '#F59E0B' }}>Pendente</span>
+                      </div>
+                    )}
                   </TableCell>
                   <TableCell>
                     <button

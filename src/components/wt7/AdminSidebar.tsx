@@ -20,7 +20,7 @@ const navGroups = [
       { label: "Receitas", icon: TrendingUp, href: "/revenues" },
       { label: "Despesas", icon: TrendingDown, href: "/expenses" },
       { label: "Bancos & Caixas", icon: Landmark, href: "/banks" },
-      { label: "Conciliação", icon: ArrowLeftRight, href: "/reconciliation" },
+      { label: "Conciliação Bancária", icon: ArrowLeftRight, href: "/reconciliation" },
       { label: "Padrões IA", icon: Brain, href: "/patterns" },
       { label: "Categorias", icon: Tag, href: "/categories" },
     ],
