@@ -121,7 +121,7 @@ function OverviewTab({ month, setMonth }: { month: string; setMonth: (v: string)
           <p className="font-mono text-2xl font-bold" style={{ color: '#2DD4BF' }}>
             {summary.received}<span className="text-sm font-normal" style={{ color: '#4A5568' }}>/{summary.occupied}</span>
           </p>
-          <p className="text-xs" style={{ color: '#4A5568' }}>fechamentos no mês</p>
+          <p className="text-xs" style={{ color: '#4A5568' }}>pagamentos / ocupadas</p>
         </div>
         <KpiCard label="Vacâncias" value={summary.vacant} color="red" compact formatAs="number" />
       </div>

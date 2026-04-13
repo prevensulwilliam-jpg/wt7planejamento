@@ -133,9 +133,8 @@ export function useKitnetSummary(month: string) {
   const vacant = data.length - occupied;
   // Total recebido = soma total_liquid de todos os fechamentos do mês
   const totalReceived = entryData.reduce((s, e) => s + (e.total_liquid ?? 0), 0);
-  // Recebidos = fechamentos de kitnets que estão ocupadas
-  const occupiedIds = new Set(occupiedKitnets.map(k => k.id));
-  const received = entryData.filter(e => occupiedIds.has(e.kitnet_id)).length;
+  // Recebidos = total de fechamentos no mês (inclui kitnets que eram ocupadas na época)
+  const received = entryData.length;
 
   return {
     total: data.length,
