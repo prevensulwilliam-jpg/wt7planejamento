@@ -126,15 +126,18 @@ export function useKitnetSummary(month: string) {
   const data = kitnets.data ?? [];
   const entryData = entries.data ?? [];
 
-  // Ocupadas = somente status "occupied"
-  const occupiedKitnets = data.filter(k => k.status === "occupied");
-  const occupied = occupiedKitnets.length;
-  // Vagas = tudo que NÃO é occupied (maintenance, vacant, null, etc)
+  // Ocupadas = occupied + maintenance (alinhado com o grid de cards)
+  const occupied = data.filter(k => k.status === "occupied" || k.status === "maintenance").length;
+  // Vagas = tudo que NÃO é occupied/maintenance
   const vacant = data.length - occupied;
-  // Total recebido = soma total_liquid de todos os fechamentos do mês
-  const totalReceived = entryData.reduce((s, e) => s + (e.total_liquid ?? 0), 0);
-  // Recebidos = total de fechamentos no mês (inclui kitnets que eram ocupadas na época)
-  const received = entryData.length;
+  // Total recebido = soma total_liquid apenas dos fechamentos JÁ conciliados
+  const totalReceived = entryData
+    .filter(e => e.reconciled === true)
+    .reduce((s, e) => s + (e.total_liquid ?? 0), 0);
+  // Recebidos = fechamentos conciliados do mês
+  const received = entryData.filter(e => e.reconciled === true).length;
+  // Total de lançamentos do mês (conciliados + pendentes)
+  const totalEntries = entryData.length;
 
   return {
     total: data.length,
@@ -142,6 +145,7 @@ export function useKitnetSummary(month: string) {
     vacant,
     totalReceived,
     received,
+    totalEntries,
     isLoading: kitnets.isLoading || entries.isLoading,
   };
 }
@@ -331,7 +335,7 @@ export function useReconcileKitnetEntry() {
     }) => {
       const { error } = await supabase
         .from("kitnet_entries")
-        .update({ reconciled: true, bank_transaction_id: bankTransactionId })
+        .update({ reconciled: true, bank_transaction_id: bankTransactionId, reconciled_at: new Date().toISOString() } as any)
         .eq("id", entryId);
       if (error) throw error;
       // Marca a transação bancária como matched se vinculada
