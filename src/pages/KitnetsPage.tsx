@@ -183,6 +183,12 @@ function OverviewTab({ month, setMonth, isLocked }: { month: string; setMonth: (
   const { data: prevEntries } = useKitnetEntries(prevMonth);
   const { data: monthStatuses } = useKitnetMonthStatuses(month);
   const { data: monthDataMap } = useKitnetMonthDataMap(month);
+  // Alertas de saldo pendente para o mês atual → mapa kitnet_id → pending_amount
+  const { data: rawAlerts } = useKitnetAlertsForMonth(month);
+  const alertsMap = (rawAlerts ?? []).reduce<Record<string, number>>((acc, a) => {
+    acc[a.kitnet_id] = (acc[a.kitnet_id] ?? 0) + a.pending_amount;
+    return acc;
+  }, {});
   const rwt02 = (kitnets ?? []).filter(k => k.residencial_code === "RWT02");
   const rwt03 = (kitnets ?? []).filter(k => k.residencial_code === "RWT03");
 
@@ -237,13 +243,13 @@ function OverviewTab({ month, setMonth, isLocked }: { month: string; setMonth: (
       {/* RWT02 */}
       <div>
         <h2 className="font-display font-bold text-lg text-foreground mb-3">RWT02 — Rua Amauri de Souza, 08</h2>
-        <KitnetGrid kitnets={rwt02} onManage={setSelected} entries={entries ?? []} prevEntries={prevEntries ?? []} monthStatuses={monthStatuses ?? {}} monthDataMap={monthDataMap ?? {}} isLocked={isLocked} />
+        <KitnetGrid kitnets={rwt02} onManage={setSelected} entries={entries ?? []} prevEntries={prevEntries ?? []} monthStatuses={monthStatuses ?? {}} monthDataMap={monthDataMap ?? {}} alertsMap={alertsMap} isLocked={isLocked} />
       </div>
 
       {/* RWT03 */}
       <div>
         <h2 className="font-display font-bold text-lg text-foreground mb-3">RWT03 — Rua Manoel Corrêa, 125</h2>
-        <KitnetGrid kitnets={rwt03} onManage={setSelected} entries={entries ?? []} prevEntries={prevEntries ?? []} monthStatuses={monthStatuses ?? {}} monthDataMap={monthDataMap ?? {}} isLocked={isLocked} />
+        <KitnetGrid kitnets={rwt03} onManage={setSelected} entries={entries ?? []} prevEntries={prevEntries ?? []} monthStatuses={monthStatuses ?? {}} monthDataMap={monthDataMap ?? {}} alertsMap={alertsMap} isLocked={isLocked} />
       </div>
 
       {selected && (
@@ -258,7 +264,7 @@ function OverviewTab({ month, setMonth, isLocked }: { month: string; setMonth: (
   );
 }
 
-function KitnetGrid({ kitnets, onManage, entries, prevEntries, monthStatuses, monthDataMap, isLocked }: { kitnets: Tables<"kitnets">[]; onManage: (k: Tables<"kitnets">) => void; entries: any[]; prevEntries: any[]; monthStatuses: Record<string, string>; monthDataMap: Record<string, any>; isLocked: boolean }) {
+function KitnetGrid({ kitnets, onManage, entries, prevEntries, monthStatuses, monthDataMap, alertsMap, isLocked }: { kitnets: Tables<"kitnets">[]; onManage: (k: Tables<"kitnets">) => void; entries: any[]; prevEntries: any[]; monthStatuses: Record<string, string>; monthDataMap: Record<string, any>; alertsMap: Record<string, number>; isLocked: boolean }) {
   if (!kitnets.length) {
     return <p className="text-muted-foreground text-sm">Nenhuma kitnet cadastrada.</p>;
   }
@@ -280,6 +286,10 @@ function KitnetGrid({ kitnets, onManage, entries, prevEntries, monthStatuses, mo
         const effectiveName  = md?.tenant_name  ?? k.tenant_name;
         const effectivePhone = md?.tenant_phone ?? k.tenant_phone;
         const effectiveRent  = md?.rent_value   ?? k.rent_value ?? 0;
+        // Saldo pendente: fechamento zerado neste mês OU alerta vindo do mês anterior
+        const isZeroEntry = hasEntry && (fechamento.total_liquid ?? 0) === 0;
+        const pendingAmount = alertsMap[k.id] ?? 0;
+        const hasPending = pendingAmount > 0;
         // Nome: só mostra se occupied/maintenance
         const tenantName = isOccupied ? (effectiveName || null) : null;
         // Valor: total_liquid se tem fechamento, senão rent_value efetivo
@@ -315,6 +325,20 @@ function KitnetGrid({ kitnets, onManage, entries, prevEntries, monthStatuses, mo
             ) : (
               <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg mt-1" style={{ background: 'rgba(244,63,94,0.08)', border: '1px solid rgba(244,63,94,0.2)' }}>
                 <span className="text-xs" style={{ color: '#F43F5E' }}>— Vaga</span>
+              </div>
+            )}
+
+            {/* Badge saldo zerado neste mês → avisa que há cobrança pendente no próximo */}
+            {isZeroEntry && isOccupied && (
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg mt-1" style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.35)' }}>
+                <span className="text-xs font-medium" style={{ color: '#F59E0B' }}>⚠ Saldo a cobrar no próx. mês</span>
+              </div>
+            )}
+
+            {/* Badge saldo pendente vindo de alerta (mês anterior zerado) */}
+            {hasPending && !isZeroEntry && (
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg mt-1" style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.35)' }}>
+                <span className="text-xs font-medium" style={{ color: '#F59E0B' }}>⚠ Pendente: {formatCurrency(pendingAmount)}</span>
               </div>
             )}
 

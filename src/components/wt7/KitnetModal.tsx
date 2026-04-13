@@ -359,11 +359,7 @@ function FechamentosTab({ kitnet, defaultMonth }: { kitnet: Tables<"kitnets">; d
             </>
           )}
         </div>
-        <GoldButton
-          onClick={isMonthLocked ? () => toast({ title: "🔒 Mês fechado", description: "Desbloqueie o mês para criar novos fechamentos." }) : handleNewFechamento}
-          disabled={false}
-          style={isMonthLocked ? { opacity: 0.45, cursor: 'not-allowed' } : undefined}
-        >
+        <GoldButton onClick={handleNewFechamento}>
           <Plus className="w-4 h-4 mr-1" />
           {showForm ? "Cancelar" : "Novo Fechamento"}
         </GoldButton>
@@ -689,13 +685,27 @@ function FechamentoForm({ kitnet, onSaved, onCancel, initialData, entryId, defau
           const [y, m] = form.reference_month.split("-").map(Number);
           const nextM = new Date(y, m, 1); // m é 1-based, JS usa 0-based → next month
           const nextMonthKey = `${nextM.getFullYear()}-${String(nextM.getMonth() + 1).padStart(2, "0")}`;
-          // Cria alerta só se não existe ainda para esse kitnet+nextMonth
-          await (supabase as any).from("kitnet_alerts")
-            .upsert(
-              { kitnet_id: kitnet.id, source_entry_id: newEntryId ?? null, alert_month: nextMonthKey, source_month: form.reference_month, pending_amount: effectiveRentValue, alert_type: "pending_balance", resolved: false },
-              { onConflict: "kitnet_id,alert_month,source_month", ignoreDuplicates: true }
-            );
-          toast({ title: "Fechamento salvo!", description: `Alerta de saldo criado para ${formatMonth(nextMonthKey)}.` });
+          // Verifica se já existe alerta não resolvido para evitar duplicata
+          const { data: existingAlert } = await (supabase as any)
+            .from("kitnet_alerts")
+            .select("id")
+            .eq("kitnet_id", kitnet.id)
+            .eq("alert_month", nextMonthKey)
+            .eq("source_month", form.reference_month)
+            .eq("resolved", false)
+            .maybeSingle();
+          if (!existingAlert) {
+            await (supabase as any).from("kitnet_alerts").insert({
+              kitnet_id: kitnet.id,
+              source_entry_id: newEntryId ?? null,
+              alert_month: nextMonthKey,
+              source_month: form.reference_month,
+              pending_amount: effectiveRentValue,
+              alert_type: "pending_balance",
+              resolved: false,
+            });
+          }
+          toast({ title: "Fechamento salvo!", description: `⚠ Saldo de ${formatCurrency(effectiveRentValue)} registrado para ${formatMonth(nextMonthKey)}.` });
         } else {
           toast({ title: "Fechamento salvo!" });
         }
