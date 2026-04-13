@@ -122,12 +122,17 @@ export function useCreateKitnetEntry() {
 export function useKitnetSummary(month: string) {
   const kitnets = useKitnets();
   const entries = useKitnetEntries(month);
+  const monthStatusesQuery = useKitnetMonthStatuses(month);
 
   const data = kitnets.data ?? [];
   const entryData = entries.data ?? [];
+  const statusMap = monthStatusesQuery.data ?? {};
 
-  // Ocupadas = occupied + maintenance (alinhado com o grid de cards)
-  const occupied = data.filter(k => k.status === "occupied" || k.status === "maintenance").length;
+  // Ocupadas = occupied + maintenance — respeita override por mês
+  const occupied = data.filter(k => {
+    const eff = statusMap[k.id] ?? k.status ?? "vacant";
+    return eff === "occupied" || eff === "maintenance";
+  }).length;
   // Vagas = tudo que NÃO é occupied/maintenance
   const vacant = data.length - occupied;
   // Total recebido = soma total_liquid apenas dos fechamentos JÁ conciliados
@@ -146,7 +151,7 @@ export function useKitnetSummary(month: string) {
     totalReceived,
     received,
     totalEntries,
-    isLoading: kitnets.isLoading || entries.isLoading,
+    isLoading: kitnets.isLoading || entries.isLoading || monthStatusesQuery.isLoading,
   };
 }
 
