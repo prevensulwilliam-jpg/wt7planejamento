@@ -16,6 +16,7 @@ import { useProperties, useConstructionExpenses, useCreateConstructionExpense, u
 import { formatCurrency, formatDate } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
 import { Building2, MapPin, Users, Plus, Pencil, Trash2 } from "lucide-react";
+import { DraggableGrid } from "@/components/wt7/DraggableGrid";
 
 const statusMap: Record<string, { label: string; variant: "gold" | "cyan" | "green" | "gray" | "red" }> = {
   aguardando_entrega: { label: "Aguardando", variant: "gold" },
@@ -123,13 +124,16 @@ export default function ConstructionsPage() {
           ) : (properties ?? []).length === 0 ? (
             <PremiumCard><p style={{ color: '#94A3B8' }} className="text-center py-8">Nenhum projeto cadastrado</p></PremiumCard>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {(properties ?? []).map(p => {
+            <DraggableGrid
+              storageKey="wt7_properties_order"
+              items={properties ?? []}
+              columns="grid-cols-1 md:grid-cols-2"
+              renderCard={p => {
                 const s = statusMap[p.status ?? ""] ?? { label: p.status, variant: "gray" as const };
                 const progress = p.total_units_planned ? ((p.total_units_built ?? 0) / p.total_units_planned) * 100 : 0;
                 const futureIncome = (p.total_units_planned ?? 0) * (p.estimated_rent_per_unit ?? 0) * ((p.ownership_pct ?? 100) / 100);
                 return (
-                  <PremiumCard key={p.id} className="space-y-3">
+                  <PremiumCard className="space-y-3 h-full">
                     <div className="flex items-start justify-between">
                       <div>
                         <p className="font-display font-bold text-lg" style={{ color: '#F0F4F8' }}>{p.code} — {p.name}</p>
@@ -153,7 +157,7 @@ export default function ConstructionsPage() {
                     )}
                     {p.estimated_completion && <p className="text-xs" style={{ color: '#94A3B8' }}>Previsão: {formatDate(p.estimated_completion)}</p>}
                     {futureIncome > 0 && <p className="text-xs font-mono" style={{ color: '#E8C97A' }}>Renda futura (sua parte): {formatCurrency(futureIncome)}/mês</p>}
-                    <div className="flex gap-2 pt-2">
+                    <div className="flex gap-2 pt-2 flex-wrap">
                       <GoldButton variant="outline" className="text-xs py-1.5 px-3" onClick={() => { setSelectedPropertyId(p.id); document.querySelector<HTMLButtonElement>('[data-value="despesas"]')?.click(); }}>
                         Ver Despesas
                       </GoldButton>
@@ -170,8 +174,8 @@ export default function ConstructionsPage() {
                     </div>
                   </PremiumCard>
                 );
-              })}
-            </div>
+              }}
+            />
           )}
         </TabsContent>
 

@@ -1,4 +1,5 @@
-import { useState, useRef, useCallback } from "react";
+import { useState } from "react";
+import { DraggableGrid } from "@/components/wt7/DraggableGrid";
 import { useSearchParams } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -21,86 +22,6 @@ import {
 import { formatCurrency, formatDate } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
 import { Landmark, Plus, TrendingUp, Pencil, Trash2, GripVertical } from "lucide-react";
-
-// ─── Drag helpers ───────────────────────────────────────────────────────────
-
-function useLocalOrder<T extends { id: string }>(key: string, items: T[]): [T[], (newOrder: T[]) => void] {
-  const load = (): string[] | null => {
-    try { return JSON.parse(localStorage.getItem(key) ?? "null"); } catch { return null; }
-  };
-  const savedOrder = load();
-  const sorted: T[] = savedOrder
-    ? [...items].sort((a, b) => {
-        const ai = savedOrder.indexOf(a.id);
-        const bi = savedOrder.indexOf(b.id);
-        return (ai === -1 ? 9999 : ai) - (bi === -1 ? 9999 : bi);
-      })
-    : items;
-  const save = (newOrder: T[]) => {
-    localStorage.setItem(key, JSON.stringify(newOrder.map(x => x.id)));
-  };
-  return [sorted, save];
-}
-
-function DraggableGrid<T extends { id: string }>({
-  storageKey,
-  items,
-  renderCard,
-  columns = "grid-cols-1 md:grid-cols-2 lg:grid-cols-3",
-}: {
-  storageKey: string;
-  items: T[];
-  renderCard: (item: T) => React.ReactNode;
-  columns?: string;
-}) {
-  const [orderedItems, saveOrder] = useLocalOrder(storageKey, items);
-  const [order, setOrder] = useState<T[]>(orderedItems);
-  const draggingId = useRef<string | null>(null);
-  const dragOverId = useRef<string | null>(null);
-
-  // Sync when items change (new item added / deleted / updated)
-  // Usa os objetos ATUAIS de items (não os do order) para refletir updates do banco
-  const synced = order
-    .map(o => items.find(i => i.id === o.id))
-    .filter((x): x is T => !!x);
-  const missing = items.filter(i => !order.find(o => o.id === i.id));
-  const display = [...synced, ...missing];
-
-  const onDragStart = useCallback((id: string) => { draggingId.current = id; }, []);
-  const onDragEnter = useCallback((id: string) => { dragOverId.current = id; }, []);
-  const onDragEnd = useCallback(() => {
-    if (!draggingId.current || !dragOverId.current || draggingId.current === dragOverId.current) {
-      draggingId.current = null; dragOverId.current = null; return;
-    }
-    const from = display.findIndex(i => i.id === draggingId.current);
-    const to   = display.findIndex(i => i.id === dragOverId.current);
-    const next = [...display];
-    const [moved] = next.splice(from, 1);
-    next.splice(to, 0, moved);
-    setOrder(next);
-    saveOrder(next);
-    draggingId.current = null; dragOverId.current = null;
-  }, [display, saveOrder]);
-
-  return (
-    <div className={`grid ${columns} gap-4`}>
-      {display.map(item => (
-        <div
-          key={item.id}
-          draggable
-          onDragStart={() => onDragStart(item.id)}
-          onDragEnter={() => onDragEnter(item.id)}
-          onDragEnd={onDragEnd}
-          onDragOver={e => e.preventDefault()}
-          className="cursor-grab active:cursor-grabbing"
-          style={{ transition: 'opacity 0.15s' }}
-        >
-          {renderCard(item)}
-        </div>
-      ))}
-    </div>
-  );
-}
 
 // ─── Confirm delete dialog ───────────────────────────────────────────────────
 function ConfirmDelete({ name, onConfirm, onCancel }: { name: string; onConfirm: () => void; onCancel: () => void }) {
