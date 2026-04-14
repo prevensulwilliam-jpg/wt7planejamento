@@ -22,6 +22,9 @@ import {
   useSaveEnergyReadings,
   useEnergyConfig,
   usePrevMonth,
+  useKitnetMonthStatuses,
+  useKitnetMonthDataMap,
+  useKitnetAlertsForMonth,
 } from "@/hooks/useKitnets";
 import { formatCurrency, formatMonth, getCurrentMonth } from "@/lib/formatters";
 import { DEFAULT_ENERGY_TARIFF } from "@/lib/constants";
@@ -168,33 +171,40 @@ function KitnetsTab({ month }: { month: string }) {
   const { data: entries } = useKitnetEntries(month);
   const prevMonth = usePrevMonth(month);
   const { data: prevEntries } = useKitnetEntries(prevMonth);
+  const { data: monthStatuses } = useKitnetMonthStatuses(month);
+  const { data: monthDataMap } = useKitnetMonthDataMap(month);
+  const { data: rawAlerts } = useKitnetAlertsForMonth(month);
   const [selected, setSelected] = useState<Tables<"kitnets"> | null>(null);
+
+  const alertsMap = (rawAlerts ?? []).reduce<Record<string, number>>((acc, a: any) => {
+    acc[a.kitnet_id] = (acc[a.kitnet_id] ?? 0) + a.pending_amount;
+    return acc;
+  }, {});
 
   const rwt02 = (kitnets ?? []).filter(k => k.residencial_code === "RWT02");
   const rwt03 = (kitnets ?? []).filter(k => k.residencial_code === "RWT03");
-
   const complexos = [
-    { code: "RWT02", label: "RWT02 — Rua Amauri de Souza, 08", units: rwt02 },
-    { code: "RWT03", label: "RWT03 — Rua Manoel Corrêa, 125", units: rwt03 },
+    { label: "RWT02 — Rua Amauri de Souza, 08", units: rwt02 },
+    { label: "RWT03 — Rua Manoel Corrêa, 125",  units: rwt03 },
   ].filter(c => c.units.length > 0);
 
   return (
     <div className="space-y-6 mt-4">
+      {/* KPIs — idênticos ao admin */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard label="Total Recebido" value={summary.totalReceived} color="gold" compact />
         <div className="rounded-2xl p-4 space-y-1" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
           <p className="text-xs uppercase font-mono tracking-widest" style={{ color: '#94A3B8' }}>Ocupadas</p>
-          <p className="font-mono text-2xl font-bold" style={{ color: '#22C55E' }}>
+          <p className="font-mono text-2xl font-bold" style={{ color: '#10B981' }}>
             {summary.occupied}<span className="text-sm font-normal" style={{ color: '#4A5568' }}>/{summary.total}</span>
           </p>
-          <p className="text-xs" style={{ color: '#4A5568' }}>unidades ocupadas</p>
         </div>
         <div className="rounded-2xl p-4 space-y-1" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
-          <p className="text-xs uppercase font-mono tracking-widest" style={{ color: '#94A3B8' }}>Recebidos</p>
+          <p className="text-xs uppercase font-mono tracking-widest" style={{ color: '#94A3B8' }}>Conciliados</p>
           <p className="font-mono text-2xl font-bold" style={{ color: '#2DD4BF' }}>
-            {summary.received}<span className="text-sm font-normal" style={{ color: '#4A5568' }}>/{summary.occupied}</span>
+            {summary.received}<span className="text-sm font-normal" style={{ color: '#4A5568' }}>/{summary.totalEntries}</span>
           </p>
-          <p className="text-xs" style={{ color: '#4A5568' }}>fechamentos no mês</p>
+          <p className="text-xs" style={{ color: '#4A5568' }}>conciliados / lançamentos</p>
         </div>
         <KpiCard label="Vacâncias" value={summary.vacant} color="red" compact formatAs="number" />
       </div>
@@ -210,40 +220,64 @@ function KitnetsTab({ month }: { month: string }) {
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
               {units.map(k => {
                 const fechamento = (entries as any[] ?? []).find(e => e.kitnet_id === k.id);
-                const isOccupied = k.status === "occupied" || k.status === "maintenance";
-                const isReceived = !!fechamento;
-                // Badge: status do BANCO é verdade — fechamento não muda status
+                const effectiveStatus = (monthStatuses ?? {})[k.id] ?? k.status ?? "vacant";
+                const isOccupied = effectiveStatus === "occupied" || effectiveStatus === "maintenance";
+                const hasEntry = !!fechamento;
+                const isReconciled = !!fechamento?.reconciled;
                 const s = isOccupied
-                  ? (isReceived ? statusLabels.occupied : { label: "Aguardando", variant: "gold" as const })
-                  : statusLabels[k.status ?? "vacant"] ?? statusLabels.vacant;
-                const tenantName = isOccupied ? (k.tenant_name || null) : null;
-                const displayValue = isOccupied
-                  ? (fechamento?.total_liquid ?? k.rent_value ?? 0)
-                  : (k.rent_value ?? 0);
+                  ? (hasEntry ? statusLabels.occupied : { label: "Aguardando", variant: "gold" as const })
+                  : statusLabels[effectiveStatus] ?? statusLabels.vacant;
+                const md = (monthDataMap ?? {})[k.id];
+                const effectiveName  = md?.tenant_name  ?? k.tenant_name;
+                const effectivePhone = md?.tenant_phone ?? k.tenant_phone;
+                const effectiveRent  = md?.rent_value   ?? k.rent_value ?? 0;
+                const displayValue = isOccupied ? (fechamento?.total_liquid ?? effectiveRent) : effectiveRent;
+                const isZeroEntry = hasEntry && isOccupied && (fechamento.total_liquid ?? 1) <= 0;
+                const prevFechamento = (prevEntries ?? []).find((e: any) => e.kitnet_id === k.id);
+                const prevWasZero = !hasEntry && isOccupied && !!prevFechamento && ((prevFechamento as any).total_liquid ?? 0) <= 0;
+                const pendingAmount = alertsMap[k.id] ?? 0;
+
                 return (
                   <PremiumCard key={k.id} className="relative p-4">
                     <div className="flex items-center justify-between mb-2">
                       <span className="font-mono text-sm font-medium text-foreground">{k.code}</span>
                       <WtBadge variant={s.variant}>{s.label}</WtBadge>
                     </div>
-                    <p className="text-sm text-muted-foreground truncate">{tenantName || "—"}</p>
-                    {k.tenant_phone && isOccupied && <p className="text-xs text-muted-foreground">{k.tenant_phone}</p>}
-                    <p className="font-mono text-lg text-foreground mt-1">{formatCurrency(displayValue)}</p>
+                    <p className="text-sm text-muted-foreground truncate">{isOccupied ? (effectiveName || "—") : "—"}</p>
+                    {effectivePhone && isOccupied && <p className="text-xs text-muted-foreground">{effectivePhone}</p>}
+                    <p className="font-mono text-lg mt-1" style={{ color: (!isOccupied || !hasEntry) ? '#4A5568' : '#E2E8F0' }}>{formatCurrency(displayValue)}</p>
 
-                    {isOccupied && isReceived ? (
+                    {/* Sub-badge: conciliado / lançado / aguardando / vaga */}
+                    {isOccupied && isReconciled ? (
                       <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg mt-1" style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)' }}>
                         <span style={{ color: '#10B981' }}>✓</span>
-                        <span className="text-xs font-medium" style={{ color: '#10B981' }}>
-                          Postado · {formatCurrency(fechamento.total_liquid ?? 0)}
-                        </span>
+                        <span className="text-xs font-medium" style={{ color: '#10B981' }}>Conciliado · {formatCurrency(fechamento.total_liquid ?? 0)}</span>
+                      </div>
+                    ) : isOccupied && hasEntry ? (
+                      <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg mt-1" style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.25)' }}>
+                        <span className="text-xs font-medium" style={{ color: '#FBB724' }}>⏳ Lançado · {formatCurrency(fechamento.total_liquid ?? 0)}</span>
                       </div>
                     ) : isOccupied ? (
-                      <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg mt-1" style={{ background: 'rgba(201,168,76,0.08)', border: '1px solid rgba(201,168,76,0.2)' }}>
+                      <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg mt-1" style={{ background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.3)' }}>
                         <span className="text-xs font-medium" style={{ color: '#C9A84C' }}>⏳ Aguardando fechamento</span>
                       </div>
                     ) : (
                       <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg mt-1" style={{ background: 'rgba(244,63,94,0.08)', border: '1px solid rgba(244,63,94,0.2)' }}>
                         <span className="text-xs" style={{ color: '#F43F5E' }}>— Vaga</span>
+                      </div>
+                    )}
+
+                    {/* Badge âmbar: saldo pendente */}
+                    {isZeroEntry && (
+                      <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg mt-1" style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.4)' }}>
+                        <span className="text-xs font-semibold" style={{ color: '#F59E0B' }}>⚠ Saldo a cobrar no próx. mês</span>
+                      </div>
+                    )}
+                    {(prevWasZero || pendingAmount > 0) && !isZeroEntry && (
+                      <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg mt-1" style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.4)' }}>
+                        <span className="text-xs font-semibold" style={{ color: '#F59E0B' }}>
+                          ⚠ {pendingAmount > 0 ? `Pendente: ${formatCurrency(pendingAmount)}` : "Saldo pendente do mês anterior"}
+                        </span>
                       </div>
                     )}
 
