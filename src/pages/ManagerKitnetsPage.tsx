@@ -134,7 +134,7 @@ function ManagerContent() {
           <div className="flex items-center justify-between gap-3">
             <TabsList className="bg-card border border-border">
               <TabsTrigger value="kitnets" className="gap-2">
-                <Home className="w-4 h-4" /> Kitnets
+                <Home className="w-4 h-4" /> Visão Geral
               </TabsTrigger>
               <TabsTrigger value="energia" className="gap-2">
                 <Zap className="w-4 h-4" /> Energia Solar
