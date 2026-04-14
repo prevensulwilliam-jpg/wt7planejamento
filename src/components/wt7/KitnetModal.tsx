@@ -1056,7 +1056,7 @@ function FechamentoForm({ kitnet, onSaved, onCancel, initialData, entryId, defau
             <p className="text-xs text-muted-foreground">Informe o valor recebido agora. O saldo restante será dividido em meses subsequentes com aviso automático.</p>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-xs text-muted-foreground uppercase tracking-wider">Valor Recebido (R$)</label>
+                <label className="text-xs text-muted-foreground uppercase tracking-wider">Lançar no Mês (R$)</label>
                 <Input
                   type="number"
                   value={valorPago}
@@ -1086,7 +1086,7 @@ function FechamentoForm({ kitnet, onSaved, onCancel, initialData, entryId, defau
                   <span className="font-mono text-foreground">{formatCurrency(totalLiquid)}</span>
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">Recebido agora</span>
+                  <span className="text-muted-foreground">Lançado no mês</span>
                   <span className="font-mono" style={{ color: '#4ADE80' }}>{formatCurrency(valorPagoNum)}</span>
                 </div>
                 <div className="flex justify-between text-xs border-t border-border pt-2">
@@ -1120,7 +1120,7 @@ function FechamentoForm({ kitnet, onSaved, onCancel, initialData, entryId, defau
                   <span className="font-mono">{formatCurrency(totalLiquid)}</span>
                 </div>
                 <div className="flex justify-between text-xs" style={{ color: '#4ADE80' }}>
-                  <span>✓ Recebido</span>
+                  <span>↓ Lançado no mês</span>
                   <span className="font-mono">{formatCurrency(valorPagoNum)}</span>
                 </div>
                 <div className="flex justify-between text-xs" style={{ color: '#F43F5E' }}>
