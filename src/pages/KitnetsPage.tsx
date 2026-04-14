@@ -440,7 +440,6 @@ function EntriesTab({ month, setMonth }: { month: string; setMonth: (m: string) 
                 <TableHead className="text-muted-foreground">Kitnet</TableHead>
                 <TableHead className="text-muted-foreground">Inquilino</TableHead>
                 <TableHead className="text-muted-foreground">Aluguel Bruto</TableHead>
-                <TableHead className="text-muted-foreground">Taxa ADM</TableHead>
                 <TableHead className="text-muted-foreground">Total Líquido</TableHead>
                 <TableHead className="text-muted-foreground">Período</TableHead>
                 <TableHead className="text-muted-foreground">Conciliação</TableHead>
@@ -453,7 +452,6 @@ function EntriesTab({ month, setMonth }: { month: string; setMonth: (m: string) 
                   <TableCell className="font-mono text-foreground">{e.kitnets?.code ?? "—"}</TableCell>
                   <TableCell className="text-muted-foreground">{e.kitnets?.tenant_name ?? "—"}</TableCell>
                   <TableCell className="font-mono text-foreground">{formatCurrency(e.rent_gross ?? 0)}</TableCell>
-                  <TableCell className="font-mono text-foreground">{formatCurrency(e.adm_fee ?? 0)}</TableCell>
                   <TableCell className="font-mono text-foreground">
                     <div>{formatCurrency(e.total_liquid ?? 0)}</div>
                     {(() => {
