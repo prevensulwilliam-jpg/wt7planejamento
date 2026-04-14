@@ -309,8 +309,8 @@ function EnergiaTab({ month }: { month: string }) {
   const calcRow = (kitnetId: string) => {
     const current = Number(readings[kitnetId]) || 0;
     const previous = getPrevReading(kitnetId);
-    const kwh = Math.max(0, current - previous);
-    return { current, previous, kwh, amount: kwh * tariff };
+    const kwh = Math.round(Math.max(0, current - previous) * 100) / 100;
+    return { current, previous, kwh, amount: Math.round(kwh * tariff * 100) / 100 };
   };
 
   const totals = useMemo(() => {

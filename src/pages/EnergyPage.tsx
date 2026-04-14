@@ -531,8 +531,8 @@ function ReadingsTab() {
   const calculateRow = (kitnetId: string) => {
     const current = Number(readings[kitnetId]) || 0;
     const previous = getPreviousReading(kitnetId);
-    const kwh = Math.max(0, current - previous);
-    return { current, previous, kwh, amount: kwh * tariff };
+    const kwh = Math.round(Math.max(0, current - previous) * 100) / 100;
+    return { current, previous, kwh, amount: Math.round(kwh * tariff * 100) / 100 };
   };
 
   const totals = useMemo(() => {
@@ -645,7 +645,7 @@ function ReadingsTab() {
                       className="w-24 bg-background border-border text-foreground font-mono"
                     />
                   </TableCell>
-                  <TableCell className="font-mono text-foreground">{kwh}</TableCell>
+                  <TableCell className="font-mono text-foreground">{kwh.toFixed(2)}</TableCell>
                   <TableCell className="font-mono text-foreground">{formatCurrency(amount)}</TableCell>
                 </TableRow>
               );
