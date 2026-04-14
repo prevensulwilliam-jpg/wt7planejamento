@@ -537,6 +537,13 @@ interface FechamentoFormProps {
   onAlertResolved?: (alertId: string) => Promise<void>;
 }
 
+// Helper: adiciona N meses a uma string YYYY-MM
+function addMonths(monthStr: string, n: number): string {
+  const [y, m] = monthStr.split("-").map(Number);
+  const d = new Date(y, m - 1 + n, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
 function FechamentoForm({ kitnet, onSaved, onCancel, initialData, entryId, defaultMonth, pendingSurcharge, onAlertResolved }: FechamentoFormProps) {
   const isEditMode = !!entryId;
   const { toast } = useToast();
@@ -571,6 +578,9 @@ function FechamentoForm({ kitnet, onSaved, onCancel, initialData, entryId, defau
   const [discountOpen, setDiscountOpen] = useState(!!(initialData?.discount_amount));
   const [surchargeOpen, setSurchargeOpen] = useState(!!(initialData?.surcharge_amount) || !!(pendingSurcharge));
   const [notesOpen, setNotesOpen] = useState(!!(initialData?.notes));
+  const [isParcial, setIsParcial] = useState(false);
+  const [valorPago, setValorPago] = useState("");
+  const [numParcelas, setNumParcelas] = useState("2");
   const [celescMode, setCelescMode] = useState<"idle" | "loading" | "found" | "manual">("idle");
   const [celescFoundInfo, setCelescFoundInfo] = useState<{ kwh: number; amount: number; tariff: number } | null>(null);
   const [readingCurrent, setReadingCurrent] = useState("");
@@ -622,6 +632,13 @@ function FechamentoForm({ kitnet, onSaved, onCancel, initialData, entryId, defau
   const surcharge = Number(form.surcharge_amount) || 0;
   const totalLiquid = rentGross + iptu + celesc + semasa - adm - discount + surcharge;
 
+  // Pagamento parcial
+  const valorPagoNum = isParcial ? (Number(valorPago) || 0) : totalLiquid;
+  const saldoRestante = isParcial ? Math.max(0, totalLiquid - valorPagoNum) : 0;
+  const numParcelasNum = Math.max(1, Number(numParcelas) || 1);
+  const parcelaValue = isParcial && saldoRestante > 0 ? Math.round((saldoRestante / numParcelasNum) * 100) / 100 : 0;
+  const actualTotalLiquid = isParcial ? valorPagoNum : totalLiquid;
+
   // Quando rent_value efetivo do mês carrega, pré-preenche rent_gross (só novo fechamento)
   useEffect(() => {
     if (!isEditMode && effectiveRentValue > 0) {
@@ -658,7 +675,7 @@ function FechamentoForm({ kitnet, onSaved, onCancel, initialData, entryId, defau
           celesc: celesc,
           semasa: semasa,
           adm_fee: adm,
-          total_liquid: totalLiquid,
+          total_liquid: actualTotalLiquid,
           ...extraFields,
         } as any);
         toast({ title: "Fechamento atualizado!" });
@@ -676,17 +693,40 @@ function FechamentoForm({ kitnet, onSaved, onCancel, initialData, entryId, defau
           celesc: celesc,
           semasa: semasa,
           adm_fee: adm,
-          total_liquid: totalLiquid,
+          total_liquid: actualTotalLiquid,
           created_by: user?.id,
           ...extraFields,
         } as any);
 
-        // Se total = 0 e há valor esperado → cria alerta para o mês seguinte
-        if (totalLiquid === 0 && effectiveRentValue > 0) {
-          const [y, m] = form.reference_month.split("-").map(Number);
-          const nextM = new Date(y, m, 1); // m é 1-based, JS usa 0-based → next month
-          const nextMonthKey = `${nextM.getFullYear()}-${String(nextM.getMonth() + 1).padStart(2, "0")}`;
-          // Verifica se já existe alerta não resolvido para evitar duplicata
+        // Pagamento parcial → cria N alertas mensais com a parcela
+        if (isParcial && saldoRestante > 0 && parcelaValue > 0) {
+          for (let i = 1; i <= numParcelasNum; i++) {
+            const alertMonth = addMonths(form.reference_month, i);
+            const { data: existingAlert } = await (supabase as any)
+              .from("kitnet_alerts")
+              .select("id")
+              .eq("kitnet_id", kitnet.id)
+              .eq("alert_month", alertMonth)
+              .eq("source_month", form.reference_month)
+              .eq("resolved", false)
+              .maybeSingle();
+            if (!existingAlert) {
+              await (supabase as any).from("kitnet_alerts").insert({
+                kitnet_id: kitnet.id,
+                source_entry_id: newEntryId ?? null,
+                alert_month: alertMonth,
+                source_month: form.reference_month,
+                pending_amount: parcelaValue,
+                alert_type: "pending_balance",
+                resolved: false,
+              });
+            }
+          }
+          const months = Array.from({ length: numParcelasNum }, (_, i) => formatMonth(addMonths(form.reference_month, i + 1))).join(", ");
+          toast({ title: "Fechamento salvo!", description: `📅 Saldo de ${formatCurrency(saldoRestante)} dividido em ${numParcelasNum}× de ${formatCurrency(parcelaValue)} → ${months}` });
+        } else if (actualTotalLiquid === 0 && effectiveRentValue > 0) {
+          // Se total = 0 e há valor esperado → cria alerta para o mês seguinte
+          const nextMonthKey = addMonths(form.reference_month, 1);
           const { data: existingAlert } = await (supabase as any)
             .from("kitnet_alerts")
             .select("id")
@@ -993,26 +1033,120 @@ function FechamentoForm({ kitnet, onSaved, onCancel, initialData, entryId, defau
         )}
       </div>
 
-      <PremiumCard glowColor="hsl(43 52% 54%)" className="py-3 px-4">
-        <p className="text-xs uppercase tracking-wider text-muted-foreground text-center">Total Líquido</p>
-        <p className="font-mono text-2xl font-bold mt-1 text-center" style={{ color: '#E8C97A' }}>{formatCurrency(totalLiquid)}</p>
-        {(discount > 0 || surcharge > 0) && (
-          <div className="mt-2 pt-2 border-t border-border space-y-1">
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>Bruto − encargos</span>
-              <span className="font-mono">{formatCurrency(rentGross + iptu + celesc + semasa - adm)}</span>
+      {/* ─── Pagamento Parcial ─── */}
+      <div className="rounded-lg overflow-hidden" style={{ border: '1px solid rgba(139,92,246,0.3)' }}>
+        <button
+          type="button"
+          onClick={() => { setIsParcial(v => !v); if (isParcial) { setValorPago(""); setNumParcelas("2"); } }}
+          className="w-full flex items-center justify-between px-3 py-2.5 text-xs font-medium transition-colors"
+          style={{ background: isParcial ? 'rgba(139,92,246,0.1)' : '#080C10', borderLeft: '3px solid rgba(139,92,246,0.6)' }}
+        >
+          <span style={{ color: '#A78BFA' }}>📅 Pagamento Parcial</span>
+          <div className="flex items-center gap-2">
+            {isParcial && saldoRestante > 0 && (
+              <span className="font-mono text-xs px-2 py-0.5 rounded" style={{ background: 'rgba(139,92,246,0.15)', color: '#A78BFA' }}>
+                {numParcelasNum}× {formatCurrency(parcelaValue)}
+              </span>
+            )}
+            {isParcial ? <ChevronUp className="w-3.5 h-3.5" style={{ color: '#4A5568' }} /> : <ChevronDown className="w-3.5 h-3.5" style={{ color: '#4A5568' }} />}
+          </div>
+        </button>
+        {isParcial && (
+          <div className="px-3 py-3 space-y-3" style={{ background: '#080C10', borderTop: '1px solid rgba(139,92,246,0.2)' }}>
+            <p className="text-xs text-muted-foreground">Informe o valor recebido agora. O saldo restante será dividido em meses subsequentes com aviso automático.</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-muted-foreground uppercase tracking-wider">Valor Recebido (R$)</label>
+                <Input
+                  type="number"
+                  value={valorPago}
+                  onChange={e => setValorPago(e.target.value)}
+                  placeholder={formatCurrency(totalLiquid)}
+                  className="mt-1 bg-background text-foreground"
+                  style={{ borderColor: 'rgba(139,92,246,0.4)' }}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground uppercase tracking-wider">Nº de Parcelas</label>
+                <Input
+                  type="number"
+                  min="1"
+                  max="12"
+                  value={numParcelas}
+                  onChange={e => setNumParcelas(e.target.value)}
+                  className="mt-1 bg-background text-foreground"
+                  style={{ borderColor: 'rgba(139,92,246,0.4)' }}
+                />
+              </div>
             </div>
-            {discount > 0 && (
-              <div className="flex justify-between text-xs" style={{ color: '#F59E0B' }}>
-                <span>− Desconto</span>
-                <span className="font-mono">− {formatCurrency(discount)}</span>
+            {saldoRestante > 0 && parcelaValue > 0 && (
+              <div className="rounded-md p-3 space-y-2" style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.25)' }}>
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">Devido total</span>
+                  <span className="font-mono text-foreground">{formatCurrency(totalLiquid)}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">Recebido agora</span>
+                  <span className="font-mono" style={{ color: '#4ADE80' }}>{formatCurrency(valorPagoNum)}</span>
+                </div>
+                <div className="flex justify-between text-xs border-t border-border pt-2">
+                  <span className="text-muted-foreground">Saldo restante</span>
+                  <span className="font-mono" style={{ color: '#F43F5E' }}>{formatCurrency(saldoRestante)}</span>
+                </div>
+                <div className="pt-1 space-y-1">
+                  <p className="text-xs text-muted-foreground font-medium">Parcelas agendadas:</p>
+                  {Array.from({ length: numParcelasNum }, (_, i) => (
+                    <div key={i} className="flex justify-between text-xs">
+                      <span style={{ color: '#A78BFA' }}>⚠ {formatMonth(addMonths(form.reference_month, i + 1))}</span>
+                      <span className="font-mono" style={{ color: '#A78BFA' }}>+ {formatCurrency(parcelaValue)}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
-            {surcharge > 0 && (
-              <div className="flex justify-between text-xs" style={{ color: '#F43F5E' }}>
-                <span>+ Acréscimo</span>
-                <span className="font-mono">+ {formatCurrency(surcharge)}</span>
-              </div>
+          </div>
+        )}
+      </div>
+
+      <PremiumCard glowColor="hsl(43 52% 54%)" className="py-3 px-4">
+        <p className="text-xs uppercase tracking-wider text-muted-foreground text-center">Total Líquido</p>
+        <p className="font-mono text-2xl font-bold mt-1 text-center" style={{ color: '#E8C97A' }}>{formatCurrency(actualTotalLiquid)}</p>
+        {(isParcial ? (saldoRestante > 0) : (discount > 0 || surcharge > 0)) && (
+          <div className="mt-2 pt-2 border-t border-border space-y-1">
+            {isParcial ? (
+              <>
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Devido total</span>
+                  <span className="font-mono">{formatCurrency(totalLiquid)}</span>
+                </div>
+                <div className="flex justify-between text-xs" style={{ color: '#4ADE80' }}>
+                  <span>✓ Recebido</span>
+                  <span className="font-mono">{formatCurrency(valorPagoNum)}</span>
+                </div>
+                <div className="flex justify-between text-xs" style={{ color: '#F43F5E' }}>
+                  <span>⚠ Saldo a cobrar</span>
+                  <span className="font-mono">{formatCurrency(saldoRestante)}</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Bruto − encargos</span>
+                  <span className="font-mono">{formatCurrency(rentGross + iptu + celesc + semasa - adm)}</span>
+                </div>
+                {discount > 0 && (
+                  <div className="flex justify-between text-xs" style={{ color: '#F59E0B' }}>
+                    <span>− Desconto</span>
+                    <span className="font-mono">− {formatCurrency(discount)}</span>
+                  </div>
+                )}
+                {surcharge > 0 && (
+                  <div className="flex justify-between text-xs" style={{ color: '#F43F5E' }}>
+                    <span>+ Acréscimo</span>
+                    <span className="font-mono">+ {formatCurrency(surcharge)}</span>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
