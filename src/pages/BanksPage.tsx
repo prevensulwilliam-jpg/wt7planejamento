@@ -28,30 +28,26 @@ const typeBadgeVariant: Record<string, 'gold' | 'green' | 'cyan' | 'gray'> = {
 };
 
 // ─── Copy button ──────────────────────────────────────────────────────────────
-function CopyField({ label, value }: { label: string; value: string }) {
+function CopyBtn({ text, label }: { text: string; label: string }) {
   const [copied, setCopied] = useState(false);
   const copy = () => {
-    navigator.clipboard.writeText(value);
+    navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
   return (
-    <div className="flex items-center justify-between py-1">
-      <span className="text-xs" style={{ color: '#94A3B8' }}>
-        <span style={{ color: '#64748B' }}>{label}: </span>{value}
-      </span>
-      <button
-        onClick={copy}
-        className="ml-2 flex items-center gap-1 px-2 py-0.5 rounded text-xs transition-all"
-        style={{
-          background: copied ? 'rgba(16,185,129,0.12)' : 'rgba(201,168,76,0.08)',
-          border: `1px solid ${copied ? 'rgba(16,185,129,0.3)' : 'rgba(201,168,76,0.2)'}`,
-          color: copied ? '#10B981' : '#C9A84C',
-        }}
-      >
-        {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-      </button>
-    </div>
+    <button
+      onClick={copy}
+      className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all"
+      style={{
+        background: copied ? 'rgba(16,185,129,0.12)' : 'rgba(201,168,76,0.08)',
+        border: `1px solid ${copied ? 'rgba(16,185,129,0.3)' : 'rgba(201,168,76,0.2)'}`,
+        color: copied ? '#10B981' : '#C9A84C',
+      }}
+    >
+      {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+      {copied ? 'Copiado!' : label}
+    </button>
   );
 }
 
@@ -67,7 +63,7 @@ export default function BanksPage() {
   const [editId, setEditId]         = useState<string | null>(null);
   const [form, setForm]             = useState({
     bank_name: "", account_type: "corrente", balance: "", last_updated: "", notes: "",
-    agency: "", account_number: "", pix_key: "",
+    bank_code: "", agency: "", account_number: "", pix_key: "",
   });
 
   const totalBalance = data.reduce((s, a) => s + (a.balance ?? 0), 0);
@@ -75,7 +71,7 @@ export default function BanksPage() {
   const closeDialog = () => {
     setDialogOpen(false);
     setEditId(null);
-    setForm({ bank_name: "", account_type: "corrente", balance: "", last_updated: "", notes: "", agency: "", account_number: "", pix_key: "" });
+    setForm({ bank_name: "", account_type: "corrente", balance: "", last_updated: "", notes: "", bank_code: "", agency: "", account_number: "", pix_key: "" });
   };
 
   const handleSubmit = async () => {
@@ -86,6 +82,7 @@ export default function BanksPage() {
       balance:        parseFloat(form.balance) || 0,
       last_updated:   form.last_updated || null,
       notes:          form.notes || null,
+      bank_code:      form.bank_code || null,
       agency:         form.agency || null,
       account_number: form.account_number || null,
       pix_key:        form.pix_key || null,
@@ -112,6 +109,7 @@ export default function BanksPage() {
       balance:        String(acc.balance ?? 0),
       last_updated:   acc.last_updated ?? "",
       notes:          acc.notes ?? "",
+      bank_code:      acc.bank_code ?? "",
       agency:         acc.agency ?? "",
       account_number: acc.account_number ?? "",
       pix_key:        acc.pix_key ?? "",
@@ -166,7 +164,11 @@ export default function BanksPage() {
               {/* Dados bancários opcionais */}
               <div className="pt-1" style={{ borderTop: '1px solid #1A2535' }}>
                 <p className="text-xs mb-2" style={{ color: '#64748B' }}>Dados bancários (opcional)</p>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <Label style={{ color: '#94A3B8' }}>Banco (cód.)</Label>
+                    <Input value={form.bank_code} onChange={e => setForm(f => ({ ...f, bank_code: e.target.value }))} placeholder="ex: 085" style={{ background: '#080C10', borderColor: '#1A2535', color: '#F0F4F8' }} />
+                  </div>
                   <div>
                     <Label style={{ color: '#94A3B8' }}>Agência</Label>
                     <Input value={form.agency} onChange={e => setForm(f => ({ ...f, agency: e.target.value }))} placeholder="ex: 2982-3" style={{ background: '#080C10', borderColor: '#1A2535', color: '#F0F4F8' }} />
@@ -228,12 +230,30 @@ export default function BanksPage() {
                 Atualizado: {acc.last_updated ? formatDate(acc.last_updated) : '—'}
               </p>
 
-              {/* Dados bancários com botão copiar */}
+              {/* Dados bancários com botões copiar */}
               {(acc.agency || acc.account_number || acc.pix_key) && (
-                <div className="mb-3 rounded-lg px-3 py-1" style={{ background: '#080C10', border: '1px solid #1A2535' }}>
-                  {acc.agency        && <CopyField label="Agência" value={acc.agency} />}
-                  {acc.account_number && <CopyField label="C/c"     value={acc.account_number} />}
-                  {acc.pix_key       && <CopyField label="Pix"      value={acc.pix_key} />}
+                <div className="mb-3 rounded-lg px-3 py-2 space-y-2" style={{ background: '#080C10', border: '1px solid #1A2535' }}>
+                  {/* Linha de informações */}
+                  <div className="space-y-0.5">
+                    {acc.bank_code     && <p className="text-xs" style={{ color: '#94A3B8' }}><span style={{ color: '#64748B' }}>Banco: </span>{acc.bank_code}</p>}
+                    {acc.agency        && <p className="text-xs" style={{ color: '#94A3B8' }}><span style={{ color: '#64748B' }}>Agência: </span>{acc.agency}</p>}
+                    {acc.account_number && <p className="text-xs" style={{ color: '#94A3B8' }}><span style={{ color: '#64748B' }}>C/c: </span>{acc.account_number}</p>}
+                    {acc.pix_key       && <p className="text-xs" style={{ color: '#94A3B8' }}><span style={{ color: '#64748B' }}>Pix: </span>{acc.pix_key}</p>}
+                  </div>
+                  {/* Botões de cópia */}
+                  <div className="flex gap-2 flex-wrap">
+                    {(acc.bank_code || acc.agency || acc.account_number) && (
+                      <CopyBtn
+                        label="Copiar dados"
+                        text={[
+                          acc.bank_code      ? `Banco: ${acc.bank_code}`       : '',
+                          acc.agency         ? `Agência: ${acc.agency}`        : '',
+                          acc.account_number ? `C/c: ${acc.account_number}`    : '',
+                        ].filter(Boolean).join(' | ')}
+                      />
+                    )}
+                    {acc.pix_key && <CopyBtn label="Copiar Pix" text={acc.pix_key} />}
+                  </div>
                 </div>
               )}
 
