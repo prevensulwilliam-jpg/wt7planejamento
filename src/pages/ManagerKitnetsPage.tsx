@@ -9,10 +9,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { GoldButton } from "@/components/wt7/GoldButton";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
 import { KpiCard } from "@/components/wt7/KpiCard";
-import { WtBadge } from "@/components/wt7/WtBadge";
 import { WT7Logo } from "@/components/wt7/WT7Logo";
 import { Skeleton } from "@/components/ui/skeleton";
 import { KitnetModal } from "@/components/wt7/KitnetModal";
+import { KitnetGrid } from "@/components/wt7/KitnetGrid";
 import {
   useKitnets,
   useKitnetSummary,
@@ -190,7 +190,7 @@ function KitnetsTab({ month }: { month: string }) {
 
   return (
     <div className="space-y-6 mt-4">
-      {/* KPIs — idênticos ao admin */}
+      {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard label="Total Recebido" value={summary.totalReceived} color="gold" compact />
         <div className="rounded-2xl p-4 space-y-1" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
@@ -217,77 +217,16 @@ function KitnetsTab({ month }: { month: string }) {
         complexos.map(({ label, units }) => (
           <div key={label}>
             <h2 className="font-display font-bold text-lg text-foreground mb-3">{label}</h2>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              {units.map(k => {
-                const fechamento = (entries as any[] ?? []).find(e => e.kitnet_id === k.id);
-                const effectiveStatus = (monthStatuses ?? {})[k.id] ?? k.status ?? "vacant";
-                const isOccupied = effectiveStatus === "occupied" || effectiveStatus === "maintenance";
-                const hasEntry = !!fechamento;
-                const isReconciled = !!fechamento?.reconciled;
-                const s = isOccupied
-                  ? (hasEntry ? statusLabels.occupied : { label: "Aguardando", variant: "gold" as const })
-                  : statusLabels[effectiveStatus] ?? statusLabels.vacant;
-                const md = (monthDataMap ?? {})[k.id];
-                const effectiveName  = md?.tenant_name  ?? k.tenant_name;
-                const effectivePhone = md?.tenant_phone ?? k.tenant_phone;
-                const effectiveRent  = md?.rent_value   ?? k.rent_value ?? 0;
-                const displayValue = isOccupied ? (fechamento?.total_liquid ?? effectiveRent) : effectiveRent;
-                const isZeroEntry = hasEntry && isOccupied && (fechamento.total_liquid ?? 1) <= 0;
-                const prevFechamento = (prevEntries ?? []).find((e: any) => e.kitnet_id === k.id);
-                const prevWasZero = !hasEntry && isOccupied && !!prevFechamento && ((prevFechamento as any).total_liquid ?? 0) <= 0;
-                const pendingAmount = alertsMap[k.id] ?? 0;
-
-                return (
-                  <PremiumCard key={k.id} className="relative p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="font-mono text-sm font-medium text-foreground">{k.code}</span>
-                      <WtBadge variant={s.variant}>{s.label}</WtBadge>
-                    </div>
-                    <p className="text-sm text-muted-foreground truncate">{isOccupied ? (effectiveName || "—") : "—"}</p>
-                    {effectivePhone && isOccupied && <p className="text-xs text-muted-foreground">{effectivePhone}</p>}
-                    <p className="font-mono text-lg mt-1" style={{ color: (!isOccupied || !hasEntry) ? '#4A5568' : '#E2E8F0' }}>{formatCurrency(displayValue)}</p>
-
-                    {/* Sub-badge: conciliado / lançado / aguardando / vaga */}
-                    {isOccupied && isReconciled ? (
-                      <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg mt-1" style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)' }}>
-                        <span style={{ color: '#10B981' }}>✓</span>
-                        <span className="text-xs font-medium" style={{ color: '#10B981' }}>Conciliado · {formatCurrency(fechamento.total_liquid ?? 0)}</span>
-                      </div>
-                    ) : isOccupied && hasEntry ? (
-                      <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg mt-1" style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.25)' }}>
-                        <span className="text-xs font-medium" style={{ color: '#FBB724' }}>⏳ Lançado · {formatCurrency(fechamento.total_liquid ?? 0)}</span>
-                      </div>
-                    ) : isOccupied ? (
-                      <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg mt-1" style={{ background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.3)' }}>
-                        <span className="text-xs font-medium" style={{ color: '#C9A84C' }}>⏳ Aguardando fechamento</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg mt-1" style={{ background: 'rgba(244,63,94,0.08)', border: '1px solid rgba(244,63,94,0.2)' }}>
-                        <span className="text-xs" style={{ color: '#F43F5E' }}>— Vaga</span>
-                      </div>
-                    )}
-
-                    {/* Badge âmbar: saldo pendente */}
-                    {isZeroEntry && (
-                      <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg mt-1" style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.4)' }}>
-                        <span className="text-xs font-semibold" style={{ color: '#F59E0B' }}>⚠ Saldo a cobrar no próx. mês</span>
-                      </div>
-                    )}
-                    {(prevWasZero || pendingAmount > 0) && !isZeroEntry && (
-                      <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg mt-1" style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.4)' }}>
-                        <span className="text-xs font-semibold" style={{ color: '#F59E0B' }}>
-                          ⚠ {pendingAmount > 0 ? `Pendente: ${formatCurrency(pendingAmount)}` : "Saldo pendente do mês anterior"}
-                        </span>
-                      </div>
-                    )}
-
-                    <GoldButton className="w-full text-xs justify-center mt-2" onClick={() => setSelected(k)}>
-                      Gerenciar
-                    </GoldButton>
-                  </PremiumCard>
-                );
-              })}
-            </div>
+            <KitnetGrid
+              kitnets={units}
+              onManage={setSelected}
+              entries={entries as any[] ?? []}
+              prevEntries={prevEntries ?? []}
+              monthStatuses={monthStatuses ?? {}}
+              monthDataMap={monthDataMap ?? {}}
+              alertsMap={alertsMap}
+              isLocked={false}
+            />
           </div>
         ))
       )}
