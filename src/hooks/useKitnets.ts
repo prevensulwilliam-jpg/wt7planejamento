@@ -59,6 +59,7 @@ export function useKitnetEntries(month: string) {
       return data;
     },
     enabled: !!month,
+    staleTime: 30 * 1000,
   });
 }
 
@@ -592,7 +593,11 @@ export function useKitnetMonthStatuses(month: string) {
         .from("kitnet_month_status")
         .select("kitnet_id, status")
         .eq("reference_month", month);
-      if (error) throw error;
+      // Graceful: se a tabela não existir ainda, retorna mapa vazio em vez de explodir
+      if (error) {
+        console.warn("[useKitnetMonthStatuses] query error:", error.message);
+        return {} as Record<string, string>;
+      }
       const map: Record<string, string> = {};
       (data ?? []).forEach((r: any) => { map[r.kitnet_id] = r.status; });
       return map;

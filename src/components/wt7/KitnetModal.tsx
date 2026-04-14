@@ -323,7 +323,7 @@ function FechamentosTab({ kitnet, defaultMonth }: { kitnet: Tables<"kitnets">; d
 
   const handleNewFechamento = () => {
     setEditingEntry(null);
-    if (!showForm) setSelectedMonth(getCurrentMonth());
+    if (!showForm) setSelectedMonth(defaultMonth ?? getCurrentMonth());
     setShowForm(v => !v);
   };
 

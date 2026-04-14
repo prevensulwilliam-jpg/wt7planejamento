@@ -286,10 +286,14 @@ function KitnetGrid({ kitnets, onManage, entries, prevEntries, monthStatuses, mo
         const effectiveName  = md?.tenant_name  ?? k.tenant_name;
         const effectivePhone = md?.tenant_phone ?? k.tenant_phone;
         const effectiveRent  = md?.rent_value   ?? k.rent_value ?? 0;
-        // Saldo pendente: fechamento zerado neste mês OU alerta vindo do mês anterior
-        const isZeroEntry = hasEntry && (fechamento.total_liquid ?? 0) === 0;
+        // Badge saldo pendente — dois casos:
+        // 1. Este mês tem fechamento zerado (ocupada mas pagou R$0)
+        const isZeroEntry = hasEntry && isOccupied && (fechamento.total_liquid ?? 1) <= 0;
+        // 2. Próximo mês: mês anterior tinha fechamento zerado (kitnet ainda aguardando fechamento)
+        const prevFechamento = prevEntries.find(e => e.kitnet_id === k.id);
+        const prevWasZero = !hasEntry && isOccupied && !!prevFechamento && (prevFechamento.total_liquid ?? 0) <= 0;
+        // Também usa alertsMap como fonte complementar
         const pendingAmount = alertsMap[k.id] ?? 0;
-        const hasPending = pendingAmount > 0;
         // Nome: só mostra se occupied/maintenance
         const tenantName = isOccupied ? (effectiveName || null) : null;
         // Valor: total_liquid se tem fechamento, senão rent_value efetivo
@@ -328,17 +332,19 @@ function KitnetGrid({ kitnets, onManage, entries, prevEntries, monthStatuses, mo
               </div>
             )}
 
-            {/* Badge saldo zerado neste mês → avisa que há cobrança pendente no próximo */}
-            {isZeroEntry && isOccupied && (
-              <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg mt-1" style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.35)' }}>
-                <span className="text-xs font-medium" style={{ color: '#F59E0B' }}>⚠ Saldo a cobrar no próx. mês</span>
+            {/* Badge: fechamento zerado neste mês → cobrança pendente no próximo */}
+            {isZeroEntry && (
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg mt-1" style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.4)' }}>
+                <span className="text-xs font-semibold" style={{ color: '#F59E0B' }}>⚠ Saldo a cobrar no próx. mês</span>
               </div>
             )}
 
-            {/* Badge saldo pendente vindo de alerta (mês anterior zerado) */}
-            {hasPending && !isZeroEntry && (
-              <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg mt-1" style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.35)' }}>
-                <span className="text-xs font-medium" style={{ color: '#F59E0B' }}>⚠ Pendente: {formatCurrency(pendingAmount)}</span>
+            {/* Badge: mês anterior zerado → cobrar agora */}
+            {(prevWasZero || pendingAmount > 0) && !isZeroEntry && (
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg mt-1" style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.4)' }}>
+                <span className="text-xs font-semibold" style={{ color: '#F59E0B' }}>
+                  ⚠ {pendingAmount > 0 ? `Pendente: ${formatCurrency(pendingAmount)}` : "Saldo pendente do mês anterior"}
+                </span>
               </div>
             )}
 
