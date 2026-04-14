@@ -2,6 +2,127 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 
+// ─── CONSTRUCTIONS (nova tabela, vinculada a assets) ─────────────────────────
+
+export function useConstructions() {
+  return useQuery({
+    queryKey: ["constructions"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("constructions")
+        .select("*, assets(id, name, type, cep, logradouro, numero, bairro, cidade, estado)")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data as any[];
+    },
+  });
+}
+
+export function useCreateConstruction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (entry: any) => {
+      const { error } = await (supabase as any).from("constructions").insert(entry);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["constructions"] }),
+  });
+}
+
+export function useUpdateConstruction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...updates }: any) => {
+      const { error } = await (supabase as any).from("constructions").update(updates).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["constructions"] }),
+  });
+}
+
+export function useDeleteConstruction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await (supabase as any).from("constructions").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["constructions"] }),
+  });
+}
+
+// ─── CONSTRUCTION STAGES ─────────────────────────────────────────────────────
+
+export function useConstructionStages(constructionId?: string) {
+  return useQuery({
+    queryKey: ["construction_stages", constructionId],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("construction_stages")
+        .select("*")
+        .eq("construction_id", constructionId)
+        .order("order_index");
+      if (error) throw error;
+      return data as any[];
+    },
+    enabled: !!constructionId,
+  });
+}
+
+export function useCreateStage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (entry: any) => {
+      const { error } = await (supabase as any).from("construction_stages").insert(entry);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["construction_stages"] }),
+  });
+}
+
+export function useUpdateStage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...updates }: any) => {
+      const { error } = await (supabase as any).from("construction_stages").update(updates).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["construction_stages"] }),
+  });
+}
+
+export function useDeleteStage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await (supabase as any).from("construction_stages").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["construction_stages"] }),
+  });
+}
+
+// ─── CONSTRUCTION EXPENSES (atualizado para usar construction_id) ─────────────
+
+export function useConstructionExpenses(constructionId?: string) {
+  return useQuery({
+    queryKey: ["construction_expenses", constructionId],
+    queryFn: async () => {
+      let q = (supabase as any)
+        .from("construction_expenses")
+        .select("*")
+        .order("expense_date", { ascending: false });
+      if (constructionId) q = q.eq("construction_id", constructionId);
+      const { data, error } = await q;
+      if (error) throw error;
+      return data as any[];
+    },
+    enabled: !!constructionId,
+  });
+}
+
+// ─── LEGACY: real_estate_properties (mantido para compatibilidade) ────────────
+
 export function useProperties() {
   return useQuery({
     queryKey: ["real_estate_properties"],
@@ -10,20 +131,6 @@ export function useProperties() {
       if (error) throw error;
       return data;
     },
-  });
-}
-
-export function useConstructionExpenses(propertyId?: string) {
-  return useQuery({
-    queryKey: ["construction_expenses", propertyId],
-    queryFn: async () => {
-      let q = supabase.from("construction_expenses").select("*").order("expense_date", { ascending: false });
-      if (propertyId) q = q.eq("property_id", propertyId);
-      const { data, error } = await q;
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!propertyId,
   });
 }
 
