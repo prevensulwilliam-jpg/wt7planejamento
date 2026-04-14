@@ -58,8 +58,11 @@ function DraggableGrid<T extends { id: string }>({
   const draggingId = useRef<string | null>(null);
   const dragOverId = useRef<string | null>(null);
 
-  // Sync when items change (new item added / deleted)
-  const synced = order.filter(o => items.find(i => i.id === o.id));
+  // Sync when items change (new item added / deleted / updated)
+  // Usa os objetos ATUAIS de items (não os do order) para refletir updates do banco
+  const synced = order
+    .map(o => items.find(i => i.id === o.id))
+    .filter((x): x is T => !!x);
   const missing = items.filter(i => !order.find(o => o.id === i.id));
   const display = [...synced, ...missing];
 
