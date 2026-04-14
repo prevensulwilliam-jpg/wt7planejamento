@@ -209,12 +209,13 @@ export default function BanksPage() {
                       <p className="text-xs mt-1" style={{ color: '#4A5568' }}>Atualizado automaticamente via OFX</p>
                     </div>
 
-                    {/* BB Rende Fácil */}
+                    {/* BB Rende Fácil — só exibe se conta existir no banco */}
+                    {bbRendeFacil && (
                     <div className="rounded-xl p-4" style={{ background: '#080C10', border: '1px solid #1A2535' }}>
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-sm font-medium" style={{ color: '#94A3B8' }}>📈 Rende Fácil</span>
                         <span className="text-xs font-mono" style={{ color: '#4A5568' }}>
-                          {bbRendeFacil?.last_updated ? formatDate(bbRendeFacil.last_updated) : '—'}
+                          {bbRendeFacil.last_updated ? formatDate(bbRendeFacil.last_updated) : '—'}
                         </span>
                       </div>
 
@@ -233,10 +234,10 @@ export default function BanksPage() {
                       ) : (
                         <div className="flex items-center justify-between">
                           <p className="font-mono text-xl font-bold" style={{ color: '#E8C97A' }}>
-                            {formatCurrency(bbRendeFacil?.balance ?? 0)}
+                            {formatCurrency(bbRendeFacil.balance ?? 0)}
                           </p>
                           <button
-                            onClick={() => { setEditRFValue(String(bbRendeFacil?.balance ?? 0)); setEditingRF(true); }}
+                            onClick={() => { setEditRFValue(String(bbRendeFacil.balance ?? 0)); setEditingRF(true); }}
                             className="text-wt-text-muted hover:text-wt-text-primary"
                           >
                             <Pencil className="w-4 h-4" />
@@ -245,6 +246,7 @@ export default function BanksPage() {
                       )}
                       <p className="text-xs mt-1" style={{ color: '#4A5568' }}>Atualizado automaticamente via OFX · editável manualmente</p>
                     </div>
+                    )}
 
                     {/* Linha total */}
                     <div
