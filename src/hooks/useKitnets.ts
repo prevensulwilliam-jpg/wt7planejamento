@@ -73,6 +73,8 @@ export function useUpdateKitnetEntry() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["kitnet_entries"] });
       qc.invalidateQueries({ queryKey: ["kitnet_fechamentos"] });
+      qc.invalidateQueries({ queryKey: ["kitnet_alerts"] });
+      qc.invalidateQueries({ queryKey: ["kitnet_alerts_month"] });
     },
   });
 }
@@ -117,6 +119,9 @@ export function useCreateKitnetEntry() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["kitnet_entries"] });
+      qc.invalidateQueries({ queryKey: ["kitnet_fechamentos"] });
+      qc.invalidateQueries({ queryKey: ["kitnet_alerts"] });
+      qc.invalidateQueries({ queryKey: ["kitnet_alerts_month"] });
       qc.invalidateQueries({ queryKey: ["revenues"] });
     },
   });
