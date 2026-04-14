@@ -137,7 +137,7 @@ function ManagerContent() {
                 <Home className="w-4 h-4" /> Visão Geral
               </TabsTrigger>
               <TabsTrigger value="energia" className="gap-2">
-                <Zap className="w-4 h-4" /> Energia Solar
+                <Zap className="w-4 h-4" /> Leituras & Cobrança
               </TabsTrigger>
             </TabsList>
             <button
