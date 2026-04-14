@@ -2,25 +2,15 @@
  * DraggableGrid — componente genérico de grid com drag-and-drop
  * Persiste ordem no localStorage via storageKey.
  * Usado em AssetsPage (Bens/Investimentos/Consórcios) e ConstructionsPage (Projetos).
+ *
+ * Estado interno: apenas IDs (strings) — nunca objetos completos.
+ * display sempre usa os objetos ATUAIS de items → sem dados sumindo.
+ * Target rastreado via onDragOver (contínuo) → mais confiável que onDragEnter.
  */
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useMemo } from "react";
 
-function useLocalOrder<T extends { id: string }>(key: string, items: T[]): [T[], (newOrder: T[]) => void] {
-  const load = (): string[] | null => {
-    try { return JSON.parse(localStorage.getItem(key) ?? "null"); } catch { return null; }
-  };
-  const savedOrder = load();
-  const sorted: T[] = savedOrder
-    ? [...items].sort((a, b) => {
-        const ai = savedOrder.indexOf(a.id);
-        const bi = savedOrder.indexOf(b.id);
-        return (ai === -1 ? 9999 : ai) - (bi === -1 ? 9999 : bi);
-      })
-    : items;
-  const save = (newOrder: T[]) => {
-    localStorage.setItem(key, JSON.stringify(newOrder.map(x => x.id)));
-  };
-  return [sorted, save];
+function loadSavedOrder(key: string): string[] | null {
+  try { return JSON.parse(localStorage.getItem(key) ?? "null"); } catch { return null; }
 }
 
 interface DraggableGridProps<T extends { id: string }> {
@@ -36,45 +26,83 @@ export function DraggableGrid<T extends { id: string }>({
   renderCard,
   columns = "grid-cols-1 md:grid-cols-2 lg:grid-cols-3",
 }: DraggableGridProps<T>) {
-  const [orderedItems, saveOrder] = useLocalOrder(storageKey, items);
-  const [order, setOrder] = useState<T[]>(orderedItems);
-  const draggingId  = useRef<string | null>(null);
-  const dragOverId  = useRef<string | null>(null);
+  // Guarda apenas IDs — nunca objetos
+  const [orderIds, setOrderIds] = useState<string[]>(() => {
+    const saved = loadSavedOrder(storageKey);
+    return saved ?? items.map(i => i.id);
+  });
+
   const [dragging, setDragging] = useState<string | null>(null);
+  const draggingId = useRef<string | null>(null);
+  const dragOverId = useRef<string | null>(null);
 
-  // Sync: preserva ordem salva mas usa objetos ATUAIS de items
-  const synced  = order.map(o => items.find(i => i.id === o.id)).filter((x): x is T => !!x);
-  const missing = items.filter(i => !order.find(o => o.id === i.id));
-  const display = [...synced, ...missing];
+  // display: reconstruído SEMPRE a partir dos items atuais, só a sequência vem dos IDs
+  const display = useMemo(() => {
+    const result: T[] = [];
+    for (const id of orderIds) {
+      const item = items.find(i => i.id === id);
+      if (item) result.push(item);
+    }
+    // itens novos ainda não na ordem salva
+    for (const item of items) {
+      if (!orderIds.includes(item.id)) result.push(item);
+    }
+    return result;
+  }, [items, orderIds]);
 
-  const onDragStart = useCallback((id: string) => {
+  const onDragStart = useCallback((e: React.DragEvent, id: string) => {
     draggingId.current = id;
+    dragOverId.current = id;
     setDragging(id);
+    e.dataTransfer.effectAllowed = "move";
   }, []);
 
-  const onDragEnter = useCallback((id: string) => {
-    dragOverId.current = id;
+  // onDragOver rastreia o card alvo continuamente (mais confiável que onDragEnter)
+  const onDragOver = useCallback((e: React.DragEvent, id: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (id !== draggingId.current) {
+      dragOverId.current = id;
+    }
+  }, []);
+
+  const onDrop = useCallback((e: React.DragEvent, toId: string) => {
+    e.preventDefault();
+    dragOverId.current = toId;
   }, []);
 
   const onDragEnd = useCallback(() => {
-    if (draggingId.current && dragOverId.current && draggingId.current !== dragOverId.current) {
-      setOrder(prev => {
-        const synced2  = prev.map(o => items.find(i => i.id === o.id)).filter((x): x is T => !!x);
-        const missing2 = items.filter(i => !prev.find(o => o.id === i.id));
-        const cur = [...synced2, ...missing2];
-        const from = cur.findIndex(i => i.id === draggingId.current);
-        const to   = cur.findIndex(i => i.id === dragOverId.current);
-        const next = [...cur];
-        const [moved] = next.splice(from, 1);
-        next.splice(to, 0, moved);
-        saveOrder(next);
+    const from = draggingId.current;
+    const to = dragOverId.current;
+
+    if (from && to && from !== to) {
+      setOrderIds(prev => {
+        // Constrói lista completa de IDs (inclui novos itens sem ordem salva)
+        const allIds: string[] = [];
+        for (const id of prev) {
+          if (items.find(i => i.id === id)) allIds.push(id);
+        }
+        for (const item of items) {
+          if (!allIds.includes(item.id)) allIds.push(item.id);
+        }
+
+        const fromIdx = allIds.indexOf(from);
+        const toIdx = allIds.indexOf(to);
+        if (fromIdx === -1 || toIdx === -1) return prev;
+
+        const next = [...allIds];
+        const [moved] = next.splice(fromIdx, 1);
+        next.splice(toIdx, 0, moved);
+
+        localStorage.setItem(storageKey, JSON.stringify(next));
         return next;
       });
     }
+
     draggingId.current = null;
     dragOverId.current = null;
     setDragging(null);
-  }, [items, saveOrder]);
+  }, [items, storageKey]);
 
   return (
     <div className={`grid ${columns} gap-4`}>
@@ -82,10 +110,10 @@ export function DraggableGrid<T extends { id: string }>({
         <div
           key={item.id}
           draggable
-          onDragStart={() => onDragStart(item.id)}
-          onDragEnter={() => onDragEnter(item.id)}
+          onDragStart={e => onDragStart(e, item.id)}
+          onDragOver={e => onDragOver(e, item.id)}
+          onDrop={e => onDrop(e, item.id)}
           onDragEnd={onDragEnd}
-          onDragOver={e => e.preventDefault()}
           style={{
             opacity: dragging === item.id ? 0.4 : 1,
             transition: 'opacity 0.15s',
