@@ -12,10 +12,10 @@ import { KpiCard } from "@/components/wt7/KpiCard";
 import { GoldButton } from "@/components/wt7/GoldButton";
 import { WtBadge } from "@/components/wt7/WtBadge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useProperties, useConstructionExpenses, useCreateConstructionExpense, useUpdateProperty } from "@/hooks/useConstructions";
+import { useProperties, useConstructionExpenses, useCreateConstructionExpense, useUpdateProperty, useDeleteProperty } from "@/hooks/useConstructions";
 import { formatCurrency, formatDate } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
-import { Building2, MapPin, Users, Plus, Pencil } from "lucide-react";
+import { Building2, MapPin, Users, Plus, Pencil, Trash2 } from "lucide-react";
 
 const statusMap: Record<string, { label: string; variant: "gold" | "cyan" | "green" | "gray" | "red" }> = {
   aguardando_entrega: { label: "Aguardando", variant: "gold" },
@@ -33,10 +33,12 @@ export default function ConstructionsPage() {
   const { data: expenses } = useConstructionExpenses(selectedPropertyId);
   const createExpense = useCreateConstructionExpense();
   const updateProperty = useUpdateProperty();
+  const deleteProperty = useDeleteProperty();
   const { toast } = useToast();
   const [expenseOpen, setExpenseOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editProp, setEditProp] = useState<any>(null);
+  const [delProp, setDelProp] = useState<any>(null);
   const [form, setForm] = useState({ description: "", category: "", total_amount: "", paid_by: "william", payment_type: "avista", installments_total: "", installments_paid: "", next_due_date: "", expense_date: "" });
 
   const totalUnitsInDev = (properties ?? []).filter(p => p.status === "em_obra" || p.status === "aguardando_entrega").reduce((s, p) => s + (p.total_units_planned ?? 0), 0);
@@ -77,6 +79,15 @@ export default function ConstructionsPage() {
       toast({ title: "Projeto atualizado!" });
       setEditOpen(false);
     } catch { toast({ title: "Erro ao atualizar", variant: "destructive" }); }
+  };
+
+  const handleDeleteProperty = async () => {
+    if (!delProp) return;
+    try {
+      await deleteProperty.mutateAsync(delProp.id);
+      toast({ title: "Projeto excluído" });
+      setDelProp(null);
+    } catch { toast({ title: "Erro ao excluir", variant: "destructive" }); }
   };
 
   const expenseKPIs = {
@@ -149,6 +160,13 @@ export default function ConstructionsPage() {
                       <GoldButton variant="outline" className="text-xs py-1.5 px-3" onClick={() => { setEditProp({ ...p }); setEditOpen(true); }}>
                         <Pencil className="w-3 h-3" />Editar
                       </GoldButton>
+                      <button
+                        onClick={() => setDelProp(p)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                        style={{ background: 'rgba(239,68,68,0.1)', color: '#F87171', border: '1px solid rgba(239,68,68,0.3)' }}
+                      >
+                        <Trash2 className="w-3 h-3" />Excluir
+                      </button>
                     </div>
                   </PremiumCard>
                 );
@@ -278,6 +296,33 @@ export default function ConstructionsPage() {
           <DialogFooter><GoldButton onClick={handleCreateExpense}>Registrar</GoldButton></DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Confirmar exclusão de projeto */}
+      {delProp && (
+        <Dialog open onOpenChange={o => !o && setDelProp(null)}>
+          <DialogContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+            <DialogHeader>
+              <DialogTitle style={{ color: '#F0F4F8' }}>Excluir "{delProp.code} — {delProp.name}"?</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm" style={{ color: '#94A3B8' }}>
+              Esta ação é irreversível. Todas as despesas vinculadas ao projeto também serão excluídas.
+            </p>
+            <DialogFooter className="gap-2">
+              <button
+                onClick={() => setDelProp(null)}
+                className="px-4 py-2 rounded-lg text-sm"
+                style={{ border: '1px solid #1A2535', color: '#94A3B8' }}
+              >Cancelar</button>
+              <button
+                onClick={handleDeleteProperty}
+                disabled={deleteProperty.isPending}
+                className="px-4 py-2 rounded-lg text-sm font-semibold"
+                style={{ background: 'rgba(244,63,94,0.15)', border: '1px solid rgba(244,63,94,0.4)', color: '#F43F5E' }}
+              >{deleteProperty.isPending ? "Excluindo..." : "Excluir Projeto"}</button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

@@ -49,6 +49,17 @@ export function useUpdateProperty() {
   });
 }
 
+export function useDeleteProperty() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("real_estate_properties").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["real_estate_properties"] }),
+  });
+}
+
 // Investments
 export function useInvestments() {
   return useQuery({
