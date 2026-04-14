@@ -410,7 +410,7 @@ function FechamentosTab({ kitnet, defaultMonth, disableLock = false }: { kitnet:
       {editingEntry && (
         <FechamentoForm
           kitnet={kitnet}
-          onSaved={() => setEditingEntry(null)}
+          onSaved={(savedMonth) => { setEditingEntry(null); if (savedMonth) setSelectedMonth(savedMonth); }}
           onCancel={handleCancelEdit}
           initialData={editingEntry}
           entryId={editingEntry.id}
@@ -654,6 +654,60 @@ function FechamentoForm({ kitnet, onSaved, onCancel, initialData, entryId, defau
     setForm(f => ({ ...f, adm_fee: (rentGross * 0.1).toFixed(2) }));
   }, [rentGross]);
 
+  // Helper: cria alertas de parcelas no banco (usado em create e edit)
+  const createParcelAlerts = async (sourceEntryId: string | null | undefined) => {
+    if (isParcial && saldoRestante > 0 && parcelaValue > 0) {
+      for (let i = 1; i <= numParcelasNum; i++) {
+        const alertMonth = addMonths(form.reference_month, i);
+        const { data: existingAlert } = await (supabase as any)
+          .from("kitnet_alerts")
+          .select("id")
+          .eq("kitnet_id", kitnet.id)
+          .eq("alert_month", alertMonth)
+          .eq("source_month", form.reference_month)
+          .eq("resolved", false)
+          .maybeSingle();
+        if (!existingAlert) {
+          const { error: alertErr } = await (supabase as any).from("kitnet_alerts").insert({
+            kitnet_id: kitnet.id,
+            source_entry_id: sourceEntryId ?? null,
+            alert_month: alertMonth,
+            source_month: form.reference_month,
+            pending_amount: parcelaValue,
+            alert_type: "pending_balance",
+            resolved: false,
+          });
+          if (alertErr) throw new Error(`Alerta ${i}: ${alertErr.message}`);
+        }
+      }
+      return "parcial";
+    } else if (actualTotalLiquid === 0 && effectiveRentValue > 0) {
+      const nextMonthKey = addMonths(form.reference_month, 1);
+      const { data: existingAlert } = await (supabase as any)
+        .from("kitnet_alerts")
+        .select("id")
+        .eq("kitnet_id", kitnet.id)
+        .eq("alert_month", nextMonthKey)
+        .eq("source_month", form.reference_month)
+        .eq("resolved", false)
+        .maybeSingle();
+      if (!existingAlert) {
+        const { error: alertErr } = await (supabase as any).from("kitnet_alerts").insert({
+          kitnet_id: kitnet.id,
+          source_entry_id: sourceEntryId ?? null,
+          alert_month: nextMonthKey,
+          source_month: form.reference_month,
+          pending_amount: effectiveRentValue,
+          alert_type: "pending_balance",
+          resolved: false,
+        });
+        if (alertErr) throw new Error(`Alerta zero: ${alertErr.message}`);
+      }
+      return "zero";
+    }
+    return "normal";
+  };
+
   const handleSave = async () => {
     try {
       const extraFields = {
@@ -678,7 +732,17 @@ function FechamentoForm({ kitnet, onSaved, onCancel, initialData, entryId, defau
           total_liquid: actualTotalLiquid,
           ...extraFields,
         } as any);
-        toast({ title: "Fechamento atualizado!" });
+
+        // Cria alertas de parcelas também no edit mode
+        const alertType = await createParcelAlerts(entryId);
+        if (alertType === "parcial") {
+          const months = Array.from({ length: numParcelasNum }, (_, i) => formatMonth(addMonths(form.reference_month, i + 1))).join(", ");
+          toast({ title: "Fechamento atualizado!", description: `📅 ${numParcelasNum}× de ${formatCurrency(parcelaValue)} → ${months}` });
+        } else if (alertType === "zero") {
+          toast({ title: "Fechamento atualizado!", description: `⚠ Saldo de ${formatCurrency(effectiveRentValue)} registrado para ${formatMonth(addMonths(form.reference_month, 1))}.` });
+        } else {
+          toast({ title: "Fechamento atualizado!" });
+        }
       } else {
         const { data: { user } } = await supabase.auth.getUser();
         const newEntryId = await createMut.mutateAsync({
@@ -698,55 +762,12 @@ function FechamentoForm({ kitnet, onSaved, onCancel, initialData, entryId, defau
           ...extraFields,
         } as any);
 
-        // Pagamento parcial → cria N alertas mensais com a parcela
-        if (isParcial && saldoRestante > 0 && parcelaValue > 0) {
-          for (let i = 1; i <= numParcelasNum; i++) {
-            const alertMonth = addMonths(form.reference_month, i);
-            const { data: existingAlert } = await (supabase as any)
-              .from("kitnet_alerts")
-              .select("id")
-              .eq("kitnet_id", kitnet.id)
-              .eq("alert_month", alertMonth)
-              .eq("source_month", form.reference_month)
-              .eq("resolved", false)
-              .maybeSingle();
-            if (!existingAlert) {
-              await (supabase as any).from("kitnet_alerts").insert({
-                kitnet_id: kitnet.id,
-                source_entry_id: newEntryId ?? null,
-                alert_month: alertMonth,
-                source_month: form.reference_month,
-                pending_amount: parcelaValue,
-                alert_type: "pending_balance",
-                resolved: false,
-              });
-            }
-          }
+        const alertType = await createParcelAlerts(newEntryId);
+        if (alertType === "parcial") {
           const months = Array.from({ length: numParcelasNum }, (_, i) => formatMonth(addMonths(form.reference_month, i + 1))).join(", ");
           toast({ title: "Fechamento salvo!", description: `📅 Saldo de ${formatCurrency(saldoRestante)} dividido em ${numParcelasNum}× de ${formatCurrency(parcelaValue)} → ${months}` });
-        } else if (actualTotalLiquid === 0 && effectiveRentValue > 0) {
-          // Se total = 0 e há valor esperado → cria alerta para o mês seguinte
-          const nextMonthKey = addMonths(form.reference_month, 1);
-          const { data: existingAlert } = await (supabase as any)
-            .from("kitnet_alerts")
-            .select("id")
-            .eq("kitnet_id", kitnet.id)
-            .eq("alert_month", nextMonthKey)
-            .eq("source_month", form.reference_month)
-            .eq("resolved", false)
-            .maybeSingle();
-          if (!existingAlert) {
-            await (supabase as any).from("kitnet_alerts").insert({
-              kitnet_id: kitnet.id,
-              source_entry_id: newEntryId ?? null,
-              alert_month: nextMonthKey,
-              source_month: form.reference_month,
-              pending_amount: effectiveRentValue,
-              alert_type: "pending_balance",
-              resolved: false,
-            });
-          }
-          toast({ title: "Fechamento salvo!", description: `⚠ Saldo de ${formatCurrency(effectiveRentValue)} registrado para ${formatMonth(nextMonthKey)}.` });
+        } else if (alertType === "zero") {
+          toast({ title: "Fechamento salvo!", description: `⚠ Saldo de ${formatCurrency(effectiveRentValue)} registrado para ${formatMonth(addMonths(form.reference_month, 1))}.` });
         } else {
           toast({ title: "Fechamento salvo!" });
         }
@@ -758,7 +779,7 @@ function FechamentoForm({ kitnet, onSaved, onCancel, initialData, entryId, defau
       }
       onSaved(form.reference_month);
     } catch (e: any) {
-      toast({ title: "Erro", description: e.message, variant: "destructive" });
+      toast({ title: "Erro ao salvar", description: e.message, variant: "destructive" });
     }
   };
 
