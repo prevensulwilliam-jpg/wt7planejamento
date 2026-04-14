@@ -46,9 +46,10 @@ interface Props {
   onClose: () => void;
   onUpdated: () => void;
   defaultMonth?: string;
+  disableLock?: boolean;
 }
 
-export function KitnetModal({ kitnet, onClose, onUpdated, defaultMonth }: Props) {
+export function KitnetModal({ kitnet, onClose, onUpdated, defaultMonth, disableLock = false }: Props) {
   return (
     <Dialog open onOpenChange={o => !o && onClose()}>
       <DialogContent className="bg-card border-border max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -68,7 +69,7 @@ export function KitnetModal({ kitnet, onClose, onUpdated, defaultMonth }: Props)
           </TabsList>
           <TabsContent value="dados"><DadosTab kitnet={kitnet} onUpdated={onUpdated} defaultMonth={defaultMonth} /></TabsContent>
           <TabsContent value="contrato"><ContratoTab kitnet={kitnet} onUpdated={onUpdated} /></TabsContent>
-          <TabsContent value="fechamentos"><FechamentosTab kitnet={kitnet} defaultMonth={defaultMonth} /></TabsContent>
+          <TabsContent value="fechamentos"><FechamentosTab kitnet={kitnet} defaultMonth={defaultMonth} disableLock={disableLock} /></TabsContent>
         </Tabs>
       </DialogContent>
     </Dialog>
@@ -283,7 +284,7 @@ function ContratoTab({ kitnet, onUpdated }: { kitnet: Tables<"kitnets">; onUpdat
 }
 
 // ─── ABA FECHAMENTOS ───
-function FechamentosTab({ kitnet, defaultMonth }: { kitnet: Tables<"kitnets">; defaultMonth?: string }) {
+function FechamentosTab({ kitnet, defaultMonth, disableLock = false }: { kitnet: Tables<"kitnets">; defaultMonth?: string; disableLock?: boolean }) {
   const { toast } = useToast();
   const { data: fechamentos, isLoading } = useKitnetFechamentos(kitnet.id);
   const deleteEntry = useDeleteKitnetEntry();
@@ -303,9 +304,9 @@ function FechamentosTab({ kitnet, defaultMonth }: { kitnet: Tables<"kitnets">; d
 
   const displayed = fechamentos?.find((f: any) => f.reference_month === displayMonth) ?? null;
 
-  // ── Verificação do cadeado para o mês exibido ──
-  const { data: lockData } = useLockedMonth(displayMonth ?? "");
-  const isMonthLocked = !!(lockData as any)?.is_locked;
+  // ── Verificação do cadeado para o mês exibido (ignorado no Portal Manager) ──
+  const { data: lockData } = useLockedMonth(disableLock ? "" : (displayMonth ?? ""));
+  const isMonthLocked = !disableLock && !!(lockData as any)?.is_locked;
 
   // ── Alertas de saldo pendente no mês exibido ──
   const { data: pendingAlerts } = useKitnetAlerts(kitnet.id, displayMonth ?? "");

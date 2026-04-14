@@ -298,6 +298,7 @@ function KitnetsTab({ month }: { month: string }) {
           onClose={() => setSelected(null)}
           onUpdated={() => refetch()}
           defaultMonth={month}
+          disableLock
         />
       )}
     </div>
