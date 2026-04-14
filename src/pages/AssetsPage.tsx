@@ -142,11 +142,38 @@ export default function AssetsPage() {
   const deleteConsortium = useDeleteConsortium();
 
   // ─── Bens state ───────────────────────────────────────────────────────────
-  const emptyAsset = { name: "", type: "imovel", estimated_value: "", acquisition_date: "", notes: "" };
+  const emptyAsset = { name: "", type: "imovel", estimated_value: "", acquisition_date: "", notes: "", cep: "", logradouro: "", numero: "", complemento: "", bairro: "", cidade: "", estado: "" };
   const [assetOpen, setAssetOpen]   = useState(false);
   const [editAsset, setEditAsset]   = useState<any | null>(null);
   const [delAsset,  setDelAsset]    = useState<any | null>(null);
   const [assetForm, setAssetForm]   = useState(emptyAsset);
+  const [cepLoading, setCepLoading] = useState(false);
+
+  const handleCepLookup = async (cep: string) => {
+    const digits = cep.replace(/\D/g, "");
+    if (digits.length !== 8) return;
+    setCepLoading(true);
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
+      const data = await res.json();
+      if (!data.erro) {
+        setAssetForm(f => ({
+          ...f,
+          cep: digits,
+          logradouro: data.logradouro ?? "",
+          bairro: data.bairro ?? "",
+          cidade: data.localidade ?? "",
+          estado: data.uf ?? "",
+        }));
+      } else {
+        toast({ title: "CEP não encontrado", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Erro ao buscar CEP", variant: "destructive" });
+    } finally {
+      setCepLoading(false);
+    }
+  };
 
   // ─── Investimentos state ──────────────────────────────────────────────────
   const emptyInv = { name: "", bank: "", type: "CDB", initial_amount: "", current_amount: "", rate_percent: "", maturity_date: "" };
@@ -169,17 +196,32 @@ export default function AssetsPage() {
   const rendimento       = totalAtualInv - totalInvestido;
 
   // ─── Bens handlers ────────────────────────────────────────────────────────
+  const assetPayload = () => ({
+    name: assetForm.name,
+    type: assetForm.type,
+    estimated_value: parseFloat(assetForm.estimated_value) || null,
+    acquisition_date: assetForm.acquisition_date || null,
+    notes: assetForm.notes || null,
+    cep: assetForm.cep || null,
+    logradouro: assetForm.logradouro || null,
+    numero: assetForm.numero || null,
+    complemento: assetForm.complemento || null,
+    bairro: assetForm.bairro || null,
+    cidade: assetForm.cidade || null,
+    estado: assetForm.estado || null,
+  });
+
   const handleCreateAsset = async () => {
     if (!assetForm.name) return;
     try {
-      await createAsset.mutateAsync({ name: assetForm.name, type: assetForm.type, estimated_value: parseFloat(assetForm.estimated_value) || null, acquisition_date: assetForm.acquisition_date || null, notes: assetForm.notes || null });
+      await createAsset.mutateAsync(assetPayload() as any);
       toast({ title: "Bem registrado!" }); setAssetOpen(false); setAssetForm(emptyAsset);
     } catch { toast({ title: "Erro", variant: "destructive" }); }
   };
   const handleUpdateAsset = async () => {
     if (!editAsset) return;
     try {
-      await updateAsset.mutateAsync({ id: editAsset.id, name: assetForm.name, type: assetForm.type, estimated_value: parseFloat(assetForm.estimated_value) || null, acquisition_date: assetForm.acquisition_date || null, notes: assetForm.notes || null });
+      await updateAsset.mutateAsync({ id: editAsset.id, ...assetPayload() } as any);
       toast({ title: "Bem atualizado!" }); setEditAsset(null);
     } catch { toast({ title: "Erro", variant: "destructive" }); }
   };
@@ -281,13 +323,19 @@ export default function AssetsPage() {
                   <div className="flex items-start gap-2">
                     <p className="font-display font-bold flex-1" style={{ color: '#F0F4F8' }}>{a.name}</p>
                     <CardActions
-                      onEdit={() => { setAssetForm({ name: a.name ?? "", type: a.type ?? "imovel", estimated_value: String(a.estimated_value ?? ""), acquisition_date: a.acquisition_date ?? "", notes: a.notes ?? "" }); setEditAsset(a); }}
+                      onEdit={() => { setAssetForm({ name: a.name ?? "", type: a.type ?? "imovel", estimated_value: String(a.estimated_value ?? ""), acquisition_date: a.acquisition_date ?? "", notes: a.notes ?? "", cep: (a as any).cep ?? "", logradouro: (a as any).logradouro ?? "", numero: (a as any).numero ?? "", complemento: (a as any).complemento ?? "", bairro: (a as any).bairro ?? "", cidade: (a as any).cidade ?? "", estado: (a as any).estado ?? "" }); setEditAsset(a); }}
                       onDelete={() => setDelAsset(a)}
                     />
                   </div>
                   <WtBadge variant="gold">{a.type}</WtBadge>
                   <p className="font-mono text-xl" style={{ color: '#E8C97A' }}>{formatCurrency(a.estimated_value ?? 0)}</p>
                   {a.acquisition_date && <p className="text-xs" style={{ color: '#94A3B8' }}>Adquirido: {formatDate(a.acquisition_date)}</p>}
+                  {(a as any).logradouro && (
+                    <p className="text-xs" style={{ color: '#94A3B8' }}>
+                      {(a as any).logradouro}{(a as any).numero ? `, ${(a as any).numero}` : ""}{(a as any).complemento ? ` — ${(a as any).complemento}` : ""}
+                      {(a as any).bairro ? ` · ${(a as any).bairro}` : ""}{(a as any).cidade ? ` · ${(a as any).cidade}/${(a as any).estado}` : ""}
+                    </p>
+                  )}
                   {a.notes && <p className="text-xs" style={{ color: '#4A5568' }}>{a.notes}</p>}
                 </PremiumCard>
               )}
@@ -381,7 +429,7 @@ export default function AssetsPage() {
       {/* ─── DIALOGS CRIAR/EDITAR BENS ─── */}
       {(assetOpen || !!editAsset) && (
         <Dialog open onOpenChange={o => { if (!o) { setAssetOpen(false); setEditAsset(null); } }}>
-          <DialogContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+          <DialogContent style={{ background: '#0D1318', border: '1px solid #1A2535', maxHeight: '90vh', overflowY: 'auto' }}>
             <DialogHeader><DialogTitle style={{ color: '#F0F4F8' }}>{editAsset ? "Editar Bem" : "Novo Bem"}</DialogTitle></DialogHeader>
             <div className="space-y-3">
               <div><Label style={{ color: '#94A3B8' }}>Nome</Label><Input value={assetForm.name} onChange={e => setAssetForm({ ...assetForm, name: e.target.value })} style={inputStyle} /></div>
@@ -395,6 +443,62 @@ export default function AssetsPage() {
               </div>
               <div><Label style={{ color: '#94A3B8' }}>Valor Estimado</Label><Input type="number" value={assetForm.estimated_value} onChange={e => setAssetForm({ ...assetForm, estimated_value: e.target.value })} style={inputStyle} /></div>
               <div><Label style={{ color: '#94A3B8' }}>Data Aquisição</Label><DatePicker value={assetForm.acquisition_date} onChange={v => setAssetForm({ ...assetForm, acquisition_date: v })} /></div>
+
+              {/* ─── Endereço ─── */}
+              <div className="pt-1">
+                <p className="text-xs uppercase tracking-widest mb-2" style={{ color: '#4A5568' }}>Endereço</p>
+                <div className="flex gap-2 items-end">
+                  <div className="flex-1">
+                    <Label style={{ color: '#94A3B8' }}>CEP</Label>
+                    <Input
+                      value={assetForm.cep}
+                      onChange={e => {
+                        const v = e.target.value.replace(/\D/g, "").slice(0, 8);
+                        setAssetForm(f => ({ ...f, cep: v }));
+                        if (v.length === 8) handleCepLookup(v);
+                      }}
+                      placeholder="00000000"
+                      maxLength={8}
+                      style={inputStyle}
+                    />
+                  </div>
+                  {cepLoading && <span className="text-xs pb-2 animate-pulse" style={{ color: '#94A3B8' }}>Buscando...</span>}
+                </div>
+              </div>
+              {assetForm.logradouro && (
+                <div className="rounded-lg p-3 space-y-2" style={{ background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.2)' }}>
+                  <p className="text-xs" style={{ color: '#4ADE80' }}>✓ Endereço encontrado</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="col-span-2">
+                      <Label style={{ color: '#94A3B8' }}>Logradouro</Label>
+                      <Input value={assetForm.logradouro} readOnly style={{ ...inputStyle, opacity: 0.7 }} />
+                    </div>
+                    <div>
+                      <Label style={{ color: '#94A3B8' }}>Número</Label>
+                      <Input value={assetForm.numero} onChange={e => setAssetForm(f => ({ ...f, numero: e.target.value }))} placeholder="Nº" style={inputStyle} autoFocus />
+                    </div>
+                  </div>
+                  <div>
+                    <Label style={{ color: '#94A3B8' }}>Complemento</Label>
+                    <Input value={assetForm.complemento} onChange={e => setAssetForm(f => ({ ...f, complemento: e.target.value }))} placeholder="Apto, Bloco, Casa..." style={inputStyle} />
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <Label style={{ color: '#94A3B8' }}>Bairro</Label>
+                      <Input value={assetForm.bairro} readOnly style={{ ...inputStyle, opacity: 0.7 }} />
+                    </div>
+                    <div>
+                      <Label style={{ color: '#94A3B8' }}>Cidade</Label>
+                      <Input value={assetForm.cidade} readOnly style={{ ...inputStyle, opacity: 0.7 }} />
+                    </div>
+                    <div>
+                      <Label style={{ color: '#94A3B8' }}>UF</Label>
+                      <Input value={assetForm.estado} readOnly style={{ ...inputStyle, opacity: 0.7 }} />
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div><Label style={{ color: '#94A3B8' }}>Observações</Label><Input value={assetForm.notes} onChange={e => setAssetForm({ ...assetForm, notes: e.target.value })} style={inputStyle} /></div>
             </div>
             <DialogFooter>
