@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Pencil, Trash2, Landmark } from "lucide-react";
+import { Plus, Pencil, Trash2, Landmark, Copy, Check } from "lucide-react";
 import { KpiCard } from "@/components/wt7/KpiCard";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
 import { GoldButton } from "@/components/wt7/GoldButton";
@@ -17,16 +17,45 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 
 const accountTypes = [
-  { value: "corrente",    label: "Conta Corrente"   },
-  { value: "poupanca",    label: "Poupança"          },
-  { value: "investimento",label: "Investimento"      },
-  { value: "digital",     label: "Carteira Digital"  },
+  { value: "corrente",     label: "Conta Corrente"  },
+  { value: "poupanca",     label: "Poupança"         },
+  { value: "investimento", label: "Investimento"     },
+  { value: "digital",      label: "Carteira Digital" },
 ];
 
 const typeBadgeVariant: Record<string, 'gold' | 'green' | 'cyan' | 'gray'> = {
   corrente: 'cyan', poupanca: 'green', investimento: 'gold', digital: 'gray',
 };
 
+// ─── Copy button ──────────────────────────────────────────────────────────────
+function CopyField({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    navigator.clipboard.writeText(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+  return (
+    <div className="flex items-center justify-between py-1">
+      <span className="text-xs" style={{ color: '#94A3B8' }}>
+        <span style={{ color: '#64748B' }}>{label}: </span>{value}
+      </span>
+      <button
+        onClick={copy}
+        className="ml-2 flex items-center gap-1 px-2 py-0.5 rounded text-xs transition-all"
+        style={{
+          background: copied ? 'rgba(16,185,129,0.12)' : 'rgba(201,168,76,0.08)',
+          border: `1px solid ${copied ? 'rgba(16,185,129,0.3)' : 'rgba(201,168,76,0.2)'}`,
+          color: copied ? '#10B981' : '#C9A84C',
+        }}
+      >
+        {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+      </button>
+    </div>
+  );
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
 export default function BanksPage() {
   const { data = [], isLoading } = useBankAccounts();
   const createAccount = useCreateBankAccount();
@@ -38,36 +67,38 @@ export default function BanksPage() {
   const [editId, setEditId]         = useState<string | null>(null);
   const [form, setForm]             = useState({
     bank_name: "", account_type: "corrente", balance: "", last_updated: "", notes: "",
+    agency: "", account_number: "", pix_key: "",
   });
 
   const totalBalance = data.reduce((s, a) => s + (a.balance ?? 0), 0);
 
+  const closeDialog = () => {
+    setDialogOpen(false);
+    setEditId(null);
+    setForm({ bank_name: "", account_type: "corrente", balance: "", last_updated: "", notes: "", agency: "", account_number: "", pix_key: "" });
+  };
+
   const handleSubmit = async () => {
     if (!form.bank_name) return;
+    const payload: any = {
+      bank_name:      form.bank_name,
+      account_type:   form.account_type,
+      balance:        parseFloat(form.balance) || 0,
+      last_updated:   form.last_updated || null,
+      notes:          form.notes || null,
+      agency:         form.agency || null,
+      account_number: form.account_number || null,
+      pix_key:        form.pix_key || null,
+    };
     try {
       if (editId) {
-        await updateAccount.mutateAsync({
-          id: editId,
-          bank_name:    form.bank_name,
-          account_type: form.account_type,
-          balance:      parseFloat(form.balance) || 0,
-          last_updated: form.last_updated || null,
-          notes:        form.notes || null,
-        });
+        await updateAccount.mutateAsync({ id: editId, ...payload });
         toast({ title: "Conta atualizada" });
       } else {
-        await createAccount.mutateAsync({
-          bank_name:    form.bank_name,
-          account_type: form.account_type,
-          balance:      parseFloat(form.balance) || 0,
-          last_updated: form.last_updated || null,
-          notes:        form.notes || null,
-        });
+        await createAccount.mutateAsync(payload);
         toast({ title: "Conta adicionada" });
       }
-      setDialogOpen(false);
-      setEditId(null);
-      setForm({ bank_name: "", account_type: "corrente", balance: "", last_updated: "", notes: "" });
+      closeDialog();
     } catch {
       toast({ title: "Erro ao salvar", variant: "destructive" });
     }
@@ -76,11 +107,14 @@ export default function BanksPage() {
   const openEdit = (acc: any) => {
     setEditId(acc.id);
     setForm({
-      bank_name:    acc.bank_name,
-      account_type: acc.account_type ?? "corrente",
-      balance:      String(acc.balance ?? 0),
-      last_updated: acc.last_updated ?? "",
-      notes:        acc.notes ?? "",
+      bank_name:      acc.bank_name,
+      account_type:   acc.account_type ?? "corrente",
+      balance:        String(acc.balance ?? 0),
+      last_updated:   acc.last_updated ?? "",
+      notes:          acc.notes ?? "",
+      agency:         acc.agency ?? "",
+      account_number: acc.account_number ?? "",
+      pix_key:        acc.pix_key ?? "",
     });
     setDialogOpen(true);
   };
@@ -99,7 +133,7 @@ export default function BanksPage() {
       <div className="flex items-center justify-between">
         <h1 className="font-display font-bold text-xl text-wt-text-primary">Bancos & Caixas</h1>
 
-        <Dialog open={dialogOpen} onOpenChange={o => { setDialogOpen(o); if (!o) { setEditId(null); setForm({ bank_name: "", account_type: "corrente", balance: "", last_updated: "", notes: "" }); } }}>
+        <Dialog open={dialogOpen} onOpenChange={o => { if (!o) closeDialog(); else setDialogOpen(true); }}>
           <DialogTrigger asChild>
             <GoldButton><Plus className="w-4 h-4" />Adicionar Conta</GoldButton>
           </DialogTrigger>
@@ -107,15 +141,10 @@ export default function BanksPage() {
             <DialogHeader>
               <DialogTitle style={{ color: '#F0F4F8' }}>{editId ? "Editar Conta" : "Nova Conta"}</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4">
+            <div className="space-y-3">
               <div>
                 <Label style={{ color: '#94A3B8' }}>Banco</Label>
-                <Input
-                  value={form.bank_name}
-                  onChange={e => setForm(f => ({ ...f, bank_name: e.target.value }))}
-                  placeholder="Ex: Nubank, Bradesco, BB Saldo Dia"
-                  style={{ background: '#080C10', borderColor: '#1A2535', color: '#F0F4F8' }}
-                />
+                <Input value={form.bank_name} onChange={e => setForm(f => ({ ...f, bank_name: e.target.value }))} placeholder="Ex: Nubank, Bradesco" style={{ background: '#080C10', borderColor: '#1A2535', color: '#F0F4F8' }} />
               </div>
               <div>
                 <Label style={{ color: '#94A3B8' }}>Tipo</Label>
@@ -128,30 +157,35 @@ export default function BanksPage() {
               </div>
               <div>
                 <Label style={{ color: '#94A3B8' }}>Saldo Atual (R$)</Label>
-                <Input
-                  type="number"
-                  value={form.balance}
-                  onChange={e => setForm(f => ({ ...f, balance: e.target.value }))}
-                  style={{ background: '#080C10', borderColor: '#1A2535', color: '#F0F4F8' }}
-                />
+                <Input type="number" value={form.balance} onChange={e => setForm(f => ({ ...f, balance: e.target.value }))} style={{ background: '#080C10', borderColor: '#1A2535', color: '#F0F4F8' }} />
               </div>
               <div>
                 <Label style={{ color: '#94A3B8' }}>Última Atualização</Label>
                 <DatePicker value={form.last_updated} onChange={v => setForm(f => ({ ...f, last_updated: v }))} />
               </div>
+              {/* Dados bancários opcionais */}
+              <div className="pt-1" style={{ borderTop: '1px solid #1A2535' }}>
+                <p className="text-xs mb-2" style={{ color: '#64748B' }}>Dados bancários (opcional)</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Label style={{ color: '#94A3B8' }}>Agência</Label>
+                    <Input value={form.agency} onChange={e => setForm(f => ({ ...f, agency: e.target.value }))} placeholder="ex: 2982-3" style={{ background: '#080C10', borderColor: '#1A2535', color: '#F0F4F8' }} />
+                  </div>
+                  <div>
+                    <Label style={{ color: '#94A3B8' }}>C/c</Label>
+                    <Input value={form.account_number} onChange={e => setForm(f => ({ ...f, account_number: e.target.value }))} placeholder="ex: 57179-2" style={{ background: '#080C10', borderColor: '#1A2535', color: '#F0F4F8' }} />
+                  </div>
+                </div>
+                <div className="mt-2">
+                  <Label style={{ color: '#94A3B8' }}>Chave Pix</Label>
+                  <Input value={form.pix_key} onChange={e => setForm(f => ({ ...f, pix_key: e.target.value }))} placeholder="CPF, e-mail, telefone ou chave aleatória" style={{ background: '#080C10', borderColor: '#1A2535', color: '#F0F4F8' }} />
+                </div>
+              </div>
               <div>
                 <Label style={{ color: '#94A3B8' }}>Observações</Label>
-                <Textarea
-                  value={form.notes}
-                  onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-                  style={{ background: '#080C10', borderColor: '#1A2535', color: '#F0F4F8' }}
-                />
+                <Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} style={{ background: '#080C10', borderColor: '#1A2535', color: '#F0F4F8' }} />
               </div>
-              <GoldButton
-                onClick={handleSubmit}
-                disabled={createAccount.isPending || updateAccount.isPending}
-                className="w-full justify-center"
-              >
+              <GoldButton onClick={handleSubmit} disabled={createAccount.isPending || updateAccount.isPending} className="w-full justify-center">
                 {editId ? "Atualizar" : "Adicionar"}
               </GoldButton>
             </div>
@@ -163,9 +197,7 @@ export default function BanksPage() {
 
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-[180px] rounded-2xl" style={{ background: '#0D1318' }} />
-          ))}
+          {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-[180px] rounded-2xl" style={{ background: '#0D1318' }} />)}
         </div>
       ) : data.length === 0 ? (
         <PremiumCard>
@@ -192,11 +224,20 @@ export default function BanksPage() {
                 {formatCurrency(acc.balance ?? 0)}
               </p>
 
-              <p className="text-xs font-mono mb-4" style={{ color: '#4A5568' }}>
+              <p className="text-xs font-mono mb-3" style={{ color: '#4A5568' }}>
                 Atualizado: {acc.last_updated ? formatDate(acc.last_updated) : '—'}
               </p>
 
-              {acc.notes && <p className="text-xs mb-4" style={{ color: '#94A3B8' }}>{acc.notes}</p>}
+              {/* Dados bancários com botão copiar */}
+              {(acc.agency || acc.account_number || acc.pix_key) && (
+                <div className="mb-3 rounded-lg px-3 py-1" style={{ background: '#080C10', border: '1px solid #1A2535' }}>
+                  {acc.agency        && <CopyField label="Agência" value={acc.agency} />}
+                  {acc.account_number && <CopyField label="C/c"     value={acc.account_number} />}
+                  {acc.pix_key       && <CopyField label="Pix"      value={acc.pix_key} />}
+                </div>
+              )}
+
+              {acc.notes && <p className="text-xs mb-3" style={{ color: '#94A3B8' }}>{acc.notes}</p>}
 
               <div className="flex gap-2">
                 <button onClick={() => openEdit(acc)} className="text-wt-text-muted hover:text-wt-text-primary">
@@ -213,9 +254,7 @@ export default function BanksPage() {
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => handleDelete(acc.id)} className="bg-red-600 hover:bg-red-700">
-                        Excluir
-                      </AlertDialogAction>
+                      <AlertDialogAction onClick={() => handleDelete(acc.id)} className="bg-red-600 hover:bg-red-700">Excluir</AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
