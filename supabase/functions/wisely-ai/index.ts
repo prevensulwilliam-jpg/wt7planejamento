@@ -398,8 +398,11 @@ TOTAIS:
     // ── Modo chat Naval (padrão) ──
     const { messages, stream } = body_req;
     if (!Array.isArray(messages)) {
-      return new Response(JSON.stringify({ error: "messages deve ser um array" }), {
-        status: 400,
+      return new Response(JSON.stringify({
+        error: "messages deve ser um array",
+        invalidRequest: true,
+      }), {
+        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
