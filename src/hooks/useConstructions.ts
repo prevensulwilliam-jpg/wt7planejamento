@@ -61,7 +61,8 @@ export function useConstructionStages(constructionId?: string) {
         .from("construction_stages")
         .select("*")
         .eq("construction_id", constructionId)
-        .order("order_index");
+        .order("start_date", { ascending: true, nullsFirst: false })
+        .order("order_index", { ascending: true });
       if (error) throw error;
       return data as any[];
     },
