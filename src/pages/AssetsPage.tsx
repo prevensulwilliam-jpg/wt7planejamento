@@ -41,7 +41,8 @@ function ConfirmDelete({ name, onConfirm, onCancel }: { name: string; onConfirm:
 
 const inputStyle = { background: '#080C10', border: '1px solid #1A2535', color: '#F0F4F8' };
 const ASSET_TYPES = ["imovel","terreno","veiculo","aplicacao","consorcio","outros"];
-const INV_TYPES   = ["CDB","LCI","LCA","Tesouro Direto","FII","Ações","Poupança","Outros"];
+const INV_TYPES   = ["RDC","CDB","LCI","LCA","Tesouro Direto","FII","Ações","Poupança","Outros"];
+const CDI_ATUAL   = 12.50; // % a.a. projeção 2026
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 export default function AssetsPage() {
@@ -97,7 +98,18 @@ export default function AssetsPage() {
   };
 
   // ─── Investimentos state ──────────────────────────────────────────────────
-  const emptyInv = { name: "", bank: "", type: "CDB", initial_amount: "", current_amount: "", rate_percent: "", maturity_date: "" };
+  const emptyInv = {
+    name: "", bank: "", type: "RDC",
+    initial_amount: "", current_amount: "",
+    rescue_amount: "",        // saldo para resgate
+    rate_percent: "",         // taxa % a.a.
+    cdi_percent: "100",       // % do CDI (ex: 100 = 100% CDI)
+    is_cdi_linked: "true",    // true = indexado ao CDI
+    inclusion_date: "",       // data de inclusão/aplicação
+    maturity_date: "",
+    product_code: "",         // ex: RDC0030
+    notes: "",
+  };
   const [invOpen, setInvOpen]     = useState(false);
   const [editInv, setEditInv]     = useState<any | null>(null);
   const [delInv,  setDelInv]      = useState<any | null>(null);
@@ -156,14 +168,14 @@ export default function AssetsPage() {
   const handleCreateInv = async () => {
     if (!invForm.name) return;
     try {
-      await createInvestment.mutateAsync({ name: invForm.name, bank: invForm.bank, type: invForm.type, initial_amount: parseFloat(invForm.initial_amount) || null, current_amount: parseFloat(invForm.current_amount) || null, rate_percent: parseFloat(invForm.rate_percent) || null, maturity_date: invForm.maturity_date || null });
+      await createInvestment.mutateAsync({ name: invForm.name, bank: invForm.bank, type: invForm.type, initial_amount: parseFloat(invForm.initial_amount) || null, current_amount: parseFloat(invForm.current_amount) || null, rescue_amount: parseFloat(invForm.rescue_amount) || null, rate_percent: parseFloat(invForm.rate_percent) || null, cdi_percent: parseFloat(invForm.cdi_percent) || null, is_cdi_linked: invForm.is_cdi_linked === "true", inclusion_date: invForm.inclusion_date || null, maturity_date: invForm.maturity_date || null, product_code: invForm.product_code || null, notes: invForm.notes || null } as any);
       toast({ title: "Investimento registrado!" }); setInvOpen(false); setInvForm(emptyInv);
     } catch { toast({ title: "Erro", variant: "destructive" }); }
   };
   const handleUpdateInv = async () => {
     if (!editInv) return;
     try {
-      await updateInvestment.mutateAsync({ id: editInv.id, name: invForm.name, bank: invForm.bank, type: invForm.type, initial_amount: parseFloat(invForm.initial_amount) || null, current_amount: parseFloat(invForm.current_amount) || null, rate_percent: parseFloat(invForm.rate_percent) || null, maturity_date: invForm.maturity_date || null });
+      await updateInvestment.mutateAsync({ id: editInv.id, name: invForm.name, bank: invForm.bank, type: invForm.type, initial_amount: parseFloat(invForm.initial_amount) || null, current_amount: parseFloat(invForm.current_amount) || null, rescue_amount: parseFloat(invForm.rescue_amount) || null, rate_percent: parseFloat(invForm.rate_percent) || null, cdi_percent: parseFloat(invForm.cdi_percent) || null, is_cdi_linked: invForm.is_cdi_linked === "true", inclusion_date: invForm.inclusion_date || null, maturity_date: invForm.maturity_date || null, product_code: invForm.product_code || null, notes: invForm.notes || null } as any);
       toast({ title: "Investimento atualizado!" }); setEditInv(null);
     } catch { toast({ title: "Erro", variant: "destructive" }); }
   };
@@ -288,19 +300,55 @@ export default function AssetsPage() {
                     </div>
                     <WtBadge variant="cyan">{inv.rate_percent ? `${inv.rate_percent}% a.a.` : "—"}</WtBadge>
                     <CardActions
-                      onEdit={() => { setInvForm({ name: inv.name ?? "", bank: inv.bank ?? "", type: inv.type ?? "CDB", initial_amount: String(inv.initial_amount ?? ""), current_amount: String(inv.current_amount ?? ""), rate_percent: String(inv.rate_percent ?? ""), maturity_date: inv.maturity_date ?? "" }); setEditInv(inv); }}
+                      onEdit={() => { setInvForm({ name: inv.name ?? "", bank: inv.bank ?? "", type: inv.type ?? "RDC", initial_amount: String(inv.initial_amount ?? ""), current_amount: String(inv.current_amount ?? ""), rescue_amount: String((inv as any).rescue_amount ?? ""), rate_percent: String(inv.rate_percent ?? ""), cdi_percent: String((inv as any).cdi_percent ?? "100"), is_cdi_linked: String((inv as any).is_cdi_linked ?? "true"), inclusion_date: (inv as any).inclusion_date ?? "", maturity_date: inv.maturity_date ?? "", product_code: (inv as any).product_code ?? "", notes: (inv as any).notes ?? "" }); setEditInv(inv); }}
                       onDelete={() => setDelInv(inv)}
                     />
                   </div>
+                  {/* Badge produto */}
+                  {(inv as any).product_code && (
+                    <span className="inline-block text-xs px-1.5 py-0.5 rounded font-mono" style={{ background: 'rgba(45,212,191,0.1)', color: '#2DD4BF', border: '1px solid rgba(45,212,191,0.2)' }}>{(inv as any).product_code}</span>
+                  )}
+
+                  {/* Saldos */}
                   <div className="grid grid-cols-2 gap-2">
-                    <div><p className="text-xs" style={{ color: '#94A3B8' }}>Aplicado</p><p className="font-mono" style={{ color: '#F0F4F8' }}>{formatCurrency(inv.initial_amount ?? 0)}</p></div>
-                    <div><p className="text-xs" style={{ color: '#94A3B8' }}>Atual</p><p className="font-mono" style={{ color: '#E8C97A' }}>{formatCurrency(inv.current_amount ?? 0)}</p></div>
+                    <div>
+                      <p className="text-xs" style={{ color: '#64748B' }}>Saldo Total</p>
+                      <p className="font-mono font-bold" style={{ color: '#F0F4F8' }}>{formatCurrency(inv.current_amount ?? 0)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs" style={{ color: '#64748B' }}>Saldo p/ Resgate</p>
+                      <p className="font-mono font-bold" style={{ color: '#10B981' }}>{formatCurrency((inv as any).rescue_amount ?? inv.current_amount ?? 0)}</p>
+                    </div>
                   </div>
+
+                  {/* Rendimento acumulado */}
                   <p className="text-xs font-mono" style={{ color: (inv.current_amount ?? 0) >= (inv.initial_amount ?? 0) ? '#10B981' : '#F43F5E' }}>
                     <TrendingUp className="inline w-3 h-3 mr-1" />
-                    Rendimento: {formatCurrency((inv.current_amount ?? 0) - (inv.initial_amount ?? 0))}
+                    +{formatCurrency((inv.current_amount ?? 0) - (inv.initial_amount ?? 0))}
+                    <span style={{ color: '#4A5568' }}> · Aplicado: {formatCurrency(inv.initial_amount ?? 0)}</span>
                   </p>
-                  {inv.maturity_date && <p className="text-xs" style={{ color: '#94A3B8' }}>Vencimento: {formatDate(inv.maturity_date)}</p>}
+
+                  {/* Estimativa mensal CDI */}
+                  {(inv as any).is_cdi_linked && (() => {
+                    const pctCDI = parseFloat((inv as any).cdi_percent ?? 100);
+                    const taxaEfetiva = CDI_ATUAL * pctCDI / 100;
+                    const saldo = inv.current_amount ?? 0;
+                    const rendMensal = saldo * (Math.pow(1 + taxaEfetiva / 100, 1/12) - 1);
+                    return (
+                      <div className="rounded-lg px-2 py-1.5" style={{ background: 'rgba(45,212,191,0.04)', border: '1px solid rgba(45,212,191,0.15)' }}>
+                        <p className="text-xs" style={{ color: '#64748B' }}>
+                          {pctCDI}% do CDI · {CDI_ATUAL}% a.a. estimado
+                          <span className="font-mono font-bold ml-2" style={{ color: '#2DD4BF' }}>≈ {formatCurrency(rendMensal)}/mês</span>
+                        </p>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Datas */}
+                  <div className="flex gap-3 text-xs flex-wrap" style={{ color: '#64748B' }}>
+                    {(inv as any).inclusion_date && <span>📅 {formatDate((inv as any).inclusion_date)}</span>}
+                    {inv.maturity_date && <span>🏁 Venc. {formatDate(inv.maturity_date)}</span>}
+                  </div>
                 </PremiumCard>
               )}
             />
@@ -437,9 +485,15 @@ export default function AssetsPage() {
           <DialogContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
             <DialogHeader><DialogTitle style={{ color: '#F0F4F8' }}>{editInv ? "Editar Aplicação" : "Nova Aplicação"}</DialogTitle></DialogHeader>
             <div className="space-y-3">
-              <div><Label style={{ color: '#94A3B8' }}>Nome</Label><Input value={invForm.name} onChange={e => setInvForm({ ...invForm, name: e.target.value })} style={inputStyle} /></div>
+              {/* Nome + Código produto */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="col-span-2"><Label style={{ color: '#94A3B8' }}>Nome</Label><Input value={invForm.name} onChange={e => setInvForm({ ...invForm, name: e.target.value })} style={inputStyle} placeholder="ex: CDI - CREDCREA" /></div>
+                <div><Label style={{ color: '#2DD4BF' }}>Produto</Label><Input value={invForm.product_code} onChange={e => setInvForm({ ...invForm, product_code: e.target.value })} style={{ ...inputStyle, borderColor: 'rgba(45,212,191,0.3)' }} placeholder="ex: RDC0030" /></div>
+              </div>
+
+              {/* Banco + Tipo */}
               <div className="grid grid-cols-2 gap-2">
-                <div><Label style={{ color: '#94A3B8' }}>Banco</Label><Input value={invForm.bank} onChange={e => setInvForm({ ...invForm, bank: e.target.value })} style={inputStyle} /></div>
+                <div><Label style={{ color: '#94A3B8' }}>Banco</Label><Input value={invForm.bank} onChange={e => setInvForm({ ...invForm, bank: e.target.value })} style={inputStyle} placeholder="ex: 085" /></div>
                 <div><Label style={{ color: '#94A3B8' }}>Tipo</Label>
                   <Select value={invForm.type} onValueChange={v => setInvForm({ ...invForm, type: v })}>
                     <SelectTrigger style={inputStyle}><SelectValue /></SelectTrigger>
@@ -449,13 +503,35 @@ export default function AssetsPage() {
                   </Select>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+
+              {/* Saldos */}
+              <div className="grid grid-cols-3 gap-2">
                 <div><Label style={{ color: '#94A3B8' }}>Valor Aplicado</Label><Input type="number" value={invForm.initial_amount} onChange={e => setInvForm({ ...invForm, initial_amount: e.target.value })} style={inputStyle} /></div>
-                <div><Label style={{ color: '#94A3B8' }}>Valor Atual</Label><Input type="number" value={invForm.current_amount} onChange={e => setInvForm({ ...invForm, current_amount: e.target.value })} style={inputStyle} /></div>
+                <div><Label style={{ color: '#94A3B8' }}>Saldo Total</Label><Input type="number" value={invForm.current_amount} onChange={e => setInvForm({ ...invForm, current_amount: e.target.value })} style={inputStyle} /></div>
+                <div><Label style={{ color: '#10B981' }}>Saldo p/ Resgate</Label><Input type="number" value={invForm.rescue_amount} onChange={e => setInvForm({ ...invForm, rescue_amount: e.target.value })} style={{ ...inputStyle, borderColor: 'rgba(16,185,129,0.3)' }} /></div>
               </div>
+
+              {/* CDI / Taxa */}
+              <div className="rounded-lg p-3 space-y-2" style={{ background: 'rgba(45,212,191,0.04)', border: '1px solid rgba(45,212,191,0.15)' }}>
+                <div className="flex items-center gap-2">
+                  <input type="checkbox" id="cdi-linked" checked={invForm.is_cdi_linked === "true"} onChange={e => setInvForm({ ...invForm, is_cdi_linked: String(e.target.checked) })} />
+                  <label htmlFor="cdi-linked" className="text-xs font-semibold cursor-pointer" style={{ color: '#2DD4BF' }}>Indexado ao CDI</label>
+                </div>
+                {invForm.is_cdi_linked === "true" ? (
+                  <div>
+                    <Label style={{ color: '#94A3B8' }}>% do CDI</Label>
+                    <Input type="number" value={invForm.cdi_percent} onChange={e => setInvForm({ ...invForm, cdi_percent: e.target.value })} style={{ ...inputStyle, borderColor: 'rgba(45,212,191,0.3)' }} placeholder="ex: 100" />
+                    <p className="text-xs mt-1" style={{ color: '#64748B' }}>CDI referência: {CDI_ATUAL}% a.a. · Taxa efetiva: {(CDI_ATUAL * parseFloat(invForm.cdi_percent || "100") / 100).toFixed(2)}% a.a.</p>
+                  </div>
+                ) : (
+                  <div><Label style={{ color: '#94A3B8' }}>Taxa % a.a.</Label><Input type="number" value={invForm.rate_percent} onChange={e => setInvForm({ ...invForm, rate_percent: e.target.value })} style={inputStyle} /></div>
+                )}
+              </div>
+
+              {/* Datas */}
               <div className="grid grid-cols-2 gap-2">
-                <div><Label style={{ color: '#94A3B8' }}>Taxa % a.a.</Label><Input type="number" value={invForm.rate_percent} onChange={e => setInvForm({ ...invForm, rate_percent: e.target.value })} style={inputStyle} /></div>
-                <div><Label style={{ color: '#94A3B8' }}>Vencimento</Label><DatePicker value={invForm.maturity_date} onChange={v => setInvForm({ ...invForm, maturity_date: v })} /></div>
+                <div><Label style={{ color: '#94A3B8' }}>Data de Inclusão</Label><DatePicker value={invForm.inclusion_date} onChange={v => setInvForm({ ...invForm, inclusion_date: v })} placeholder="Data da aplicação" /></div>
+                <div><Label style={{ color: '#94A3B8' }}>Vencimento</Label><DatePicker value={invForm.maturity_date} onChange={v => setInvForm({ ...invForm, maturity_date: v })} placeholder="Vencimento" /></div>
               </div>
             </div>
             <DialogFooter>
