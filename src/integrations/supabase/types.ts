@@ -967,34 +967,52 @@ export type Database = {
       investments: {
         Row: {
           bank: string | null
+          cdi_percent: number | null
           current_amount: number | null
           id: string
+          inclusion_date: string | null
           initial_amount: number | null
+          is_cdi_linked: boolean | null
           maturity_date: string | null
           name: string | null
+          notes: string | null
+          product_code: string | null
           rate_percent: number | null
+          rescue_amount: number | null
           type: string | null
           updated_at: string | null
         }
         Insert: {
           bank?: string | null
+          cdi_percent?: number | null
           current_amount?: number | null
           id?: string
+          inclusion_date?: string | null
           initial_amount?: number | null
+          is_cdi_linked?: boolean | null
           maturity_date?: string | null
           name?: string | null
+          notes?: string | null
+          product_code?: string | null
           rate_percent?: number | null
+          rescue_amount?: number | null
           type?: string | null
           updated_at?: string | null
         }
         Update: {
           bank?: string | null
+          cdi_percent?: number | null
           current_amount?: number | null
           id?: string
+          inclusion_date?: string | null
           initial_amount?: number | null
+          is_cdi_linked?: boolean | null
           maturity_date?: string | null
           name?: string | null
+          notes?: string | null
+          product_code?: string | null
           rate_percent?: number | null
+          rescue_amount?: number | null
           type?: string | null
           updated_at?: string | null
         }
