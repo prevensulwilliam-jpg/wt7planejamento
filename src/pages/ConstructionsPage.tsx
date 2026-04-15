@@ -457,7 +457,7 @@ const emptyExpForm = {
   next_due_date: "", expense_date: "", stage_id: "",
 };
 
-function DespesasModal({ construction, onClose }: { construction: any; onClose: () => void }) {
+function DespesasView({ construction, onClose }: { construction: any; onClose: () => void }) {
   const { data: expenses = [] } = useConstructionExpenses(construction.id);
   const { data: stages   = [] } = useConstructionStages(construction.id);
   const createExpense = useCreateConstructionExpense();
@@ -562,14 +562,25 @@ function DespesasModal({ construction, onClose }: { construction: any; onClose: 
   };
 
   return (
-    <Dialog open onOpenChange={o => !o && onClose()}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
-        <DialogHeader>
-          <DialogTitle style={{ color: '#F0F4F8' }}>Despesas — {construction.name}</DialogTitle>
-        </DialogHeader>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={onClose}
+          className="flex items-center gap-1.5 text-sm transition-colors"
+          style={{ color: '#94A3B8' }}
+        >
+          <ChevronUp className="w-4 h-4 rotate-[-90deg]" />
+          Obras
+        </button>
+        <span style={{ color: '#1A2535' }}>/</span>
+        <h1 className="font-display font-bold text-xl" style={{ color: '#F0F4F8' }}>
+          Despesas — {construction.name}
+        </h1>
+      </div>
 
-        {/* KPIs */}
-        <div className={`grid gap-3 mb-2 ${budgetPct !== null ? 'grid-cols-4' : 'grid-cols-3'}`}>
+      {/* KPIs */}
+      <div className={`grid gap-3 ${budgetPct !== null ? 'grid-cols-4' : 'grid-cols-3'}`}>
           <KpiCard label="Total Investido" value={expKPIs.total} color="gold" />
           <KpiCard label="Parte William"   value={expKPIs.william} color="cyan" />
           <KpiCard label="Parte Sócio"     value={expKPIs.partner} color="green" />
@@ -669,12 +680,11 @@ function DespesasModal({ construction, onClose }: { construction: any; onClose: 
             </div>
           </PremiumCard>
         ) : !editExp && (
-          <GoldButton className="mt-2" onClick={() => setAddOpen(true)}>
+          <GoldButton onClick={() => setAddOpen(true)}>
             <Plus className="w-4 h-4" />Nova Despesa
           </GoldButton>
         )}
-      </DialogContent>
-    </Dialog>
+    </div>
   );
 }
 
@@ -893,6 +903,12 @@ export default function ConstructionsPage() {
   };
 
   // ─── Render ──────────────────────────────────────────────────────────────────
+
+  // Full-page DespesasView
+  if (despesasFor) {
+    return <DespesasView construction={despesasFor} onClose={() => setDespesasFor(null)} />;
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -937,8 +953,7 @@ export default function ConstructionsPage() {
       {/* ── Modals ── */}
       {newOpen && <ConstructionFormModal title="Nova Obra" form={form} setF={setF} assets={assets as any[]} onSave={handleSaveConstruction} onClose={() => { setNewOpen(false); setForm({ ...emptyForm }); }} isPending={createConstruction.isPending || updateConstruction.isPending} />}
       {editItem && <ConstructionFormModal title="Editar Obra" form={form} setF={setF} assets={assets as any[]} onSave={handleSaveConstruction} onClose={() => { setEditItem(null); setForm({ ...emptyForm }); }} isPending={createConstruction.isPending || updateConstruction.isPending} />}
-      {stagesFor    && <StagesModal   construction={stagesFor}    onClose={() => setStagesFor(null)} />}
-      {despesasFor  && <DespesasModal construction={despesasFor}  onClose={() => setDespesasFor(null)} />}
+      {stagesFor && <StagesModal construction={stagesFor} onClose={() => setStagesFor(null)} />}
 
       {/* Delete confirm */}
       {delItem && (
