@@ -189,14 +189,22 @@ export function useDeleteProperty() {
   });
 }
 
-// Investments
+// Investments — usa RPC para bypassar PostgREST schema cache
 export function useInvestments() {
   return useQuery({
     queryKey: ["investments"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("investments").select("*").order("name");
-      if (error) throw error;
-      return data;
+      const { data, error } = await supabase.rpc("get_investments" as any);
+      if (error) {
+        // fallback: select direto se a função não existir ainda
+        const { data: d2, error: e2 } = await supabase
+          .from("investments")
+          .select("id,name,type,bank,initial_amount,current_amount,rescue_amount,rate_percent,cdi_percent,is_cdi_linked,inclusion_date,maturity_date,product_code,notes,updated_at")
+          .order("name");
+        if (e2) throw e2;
+        return d2;
+      }
+      return data as any[];
     },
   });
 }
