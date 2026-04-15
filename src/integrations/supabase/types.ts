@@ -17,28 +17,49 @@ export type Database = {
       assets: {
         Row: {
           acquisition_date: string | null
+          bairro: string | null
+          cep: string | null
+          cidade: string | null
+          complemento: string | null
+          estado: string | null
           estimated_value: number | null
           id: string
+          logradouro: string | null
           name: string | null
           notes: string | null
+          numero: string | null
           type: string | null
           updated_at: string | null
         }
         Insert: {
           acquisition_date?: string | null
+          bairro?: string | null
+          cep?: string | null
+          cidade?: string | null
+          complemento?: string | null
+          estado?: string | null
           estimated_value?: number | null
           id?: string
+          logradouro?: string | null
           name?: string | null
           notes?: string | null
+          numero?: string | null
           type?: string | null
           updated_at?: string | null
         }
         Update: {
           acquisition_date?: string | null
+          bairro?: string | null
+          cep?: string | null
+          cidade?: string | null
+          complemento?: string | null
+          estado?: string | null
           estimated_value?: number | null
           id?: string
+          logradouro?: string | null
           name?: string | null
           notes?: string | null
+          numero?: string | null
           type?: string | null
           updated_at?: string | null
         }
@@ -76,31 +97,43 @@ export type Database = {
       }
       bank_accounts: {
         Row: {
+          account_number: string | null
           account_type: string | null
+          agency: string | null
           balance: number | null
+          bank_code: string | null
           bank_name: string
           created_at: string | null
           id: string
           last_updated: string | null
           notes: string | null
+          pix_key: string | null
         }
         Insert: {
+          account_number?: string | null
           account_type?: string | null
+          agency?: string | null
           balance?: number | null
+          bank_code?: string | null
           bank_name: string
           created_at?: string | null
           id?: string
           last_updated?: string | null
           notes?: string | null
+          pix_key?: string | null
         }
         Update: {
+          account_number?: string | null
           account_type?: string | null
+          agency?: string | null
           balance?: number | null
+          bank_code?: string | null
           bank_name?: string
           created_at?: string | null
           id?: string
           last_updated?: string | null
           notes?: string | null
+          pix_key?: string | null
         }
         Relationships: []
       }
@@ -470,6 +503,7 @@ export type Database = {
       construction_expenses: {
         Row: {
           category: string | null
+          construction_id: string | null
           created_at: string | null
           created_by: string | null
           description: string | null
@@ -484,11 +518,13 @@ export type Database = {
           property_code: string | null
           property_id: string | null
           receipt_url: string | null
+          stage_id: string | null
           total_amount: number | null
           william_amount: number | null
         }
         Insert: {
           category?: string | null
+          construction_id?: string | null
           created_at?: string | null
           created_by?: string | null
           description?: string | null
@@ -503,11 +539,13 @@ export type Database = {
           property_code?: string | null
           property_id?: string | null
           receipt_url?: string | null
+          stage_id?: string | null
           total_amount?: number | null
           william_amount?: number | null
         }
         Update: {
           category?: string | null
+          construction_id?: string | null
           created_at?: string | null
           created_by?: string | null
           description?: string | null
@@ -522,15 +560,151 @@ export type Database = {
           property_code?: string | null
           property_id?: string | null
           receipt_url?: string | null
+          stage_id?: string | null
           total_amount?: number | null
           william_amount?: number | null
         }
         Relationships: [
           {
+            foreignKeyName: "construction_expenses_construction_id_fkey"
+            columns: ["construction_id"]
+            isOneToOne: false
+            referencedRelation: "constructions"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "construction_expenses_property_id_fkey"
             columns: ["property_id"]
             isOneToOne: false
             referencedRelation: "real_estate_properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "construction_expenses_stage_id_fkey"
+            columns: ["stage_id"]
+            isOneToOne: false
+            referencedRelation: "construction_stages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      construction_stages: {
+        Row: {
+          budget_estimated: number | null
+          construction_id: string
+          created_at: string | null
+          end_date: string | null
+          id: string
+          name: string
+          notes: string | null
+          order_index: number | null
+          pct_complete: number | null
+          start_date: string | null
+          status: string
+        }
+        Insert: {
+          budget_estimated?: number | null
+          construction_id: string
+          created_at?: string | null
+          end_date?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+          order_index?: number | null
+          pct_complete?: number | null
+          start_date?: string | null
+          status?: string
+        }
+        Update: {
+          budget_estimated?: number | null
+          construction_id?: string
+          created_at?: string | null
+          end_date?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          order_index?: number | null
+          pct_complete?: number | null
+          start_date?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "construction_stages_construction_id_fkey"
+            columns: ["construction_id"]
+            isOneToOne: false
+            referencedRelation: "constructions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      constructions: {
+        Row: {
+          asset_id: string | null
+          created_at: string | null
+          end_date: string | null
+          estimated_completion: string | null
+          estimated_rent_per_unit: number | null
+          estimated_value_ready: number | null
+          id: string
+          name: string
+          notes: string | null
+          ownership_pct: number | null
+          partner_name: string | null
+          partner_pct: number | null
+          start_date: string | null
+          status: string
+          total_budget: number | null
+          total_units_built: number | null
+          total_units_planned: number | null
+          total_units_rented: number | null
+        }
+        Insert: {
+          asset_id?: string | null
+          created_at?: string | null
+          end_date?: string | null
+          estimated_completion?: string | null
+          estimated_rent_per_unit?: number | null
+          estimated_value_ready?: number | null
+          id?: string
+          name: string
+          notes?: string | null
+          ownership_pct?: number | null
+          partner_name?: string | null
+          partner_pct?: number | null
+          start_date?: string | null
+          status?: string
+          total_budget?: number | null
+          total_units_built?: number | null
+          total_units_planned?: number | null
+          total_units_rented?: number | null
+        }
+        Update: {
+          asset_id?: string | null
+          created_at?: string | null
+          end_date?: string | null
+          estimated_completion?: string | null
+          estimated_rent_per_unit?: number | null
+          estimated_value_ready?: number | null
+          id?: string
+          name?: string
+          notes?: string | null
+          ownership_pct?: number | null
+          partner_name?: string | null
+          partner_pct?: number | null
+          start_date?: string | null
+          status?: string
+          total_budget?: number | null
+          total_units_built?: number | null
+          total_units_planned?: number | null
+          total_units_rented?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "constructions_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
             referencedColumns: ["id"]
           },
         ]
@@ -817,6 +991,63 @@ export type Database = {
         }
         Relationships: []
       }
+      kitnet_alerts: {
+        Row: {
+          alert_month: string
+          alert_type: string
+          confirmed: boolean | null
+          created_at: string | null
+          id: string
+          kitnet_id: string
+          pending_amount: number
+          resolved: boolean
+          resolved_at: string | null
+          source_entry_id: string | null
+          source_month: string
+        }
+        Insert: {
+          alert_month: string
+          alert_type?: string
+          confirmed?: boolean | null
+          created_at?: string | null
+          id?: string
+          kitnet_id: string
+          pending_amount: number
+          resolved?: boolean
+          resolved_at?: string | null
+          source_entry_id?: string | null
+          source_month: string
+        }
+        Update: {
+          alert_month?: string
+          alert_type?: string
+          confirmed?: boolean | null
+          created_at?: string | null
+          id?: string
+          kitnet_id?: string
+          pending_amount?: number
+          resolved?: boolean
+          resolved_at?: string | null
+          source_entry_id?: string | null
+          source_month?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kitnet_alerts_kitnet_id_fkey"
+            columns: ["kitnet_id"]
+            isOneToOne: false
+            referencedRelation: "kitnets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kitnet_alerts_source_entry_id_fkey"
+            columns: ["source_entry_id"]
+            isOneToOne: false
+            referencedRelation: "kitnet_entries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       kitnet_entries: {
         Row: {
           adm_fee: number | null
@@ -826,9 +1057,12 @@ export type Database = {
           celesc: number | null
           created_at: string | null
           created_by: string | null
+          discount_amount: number | null
+          discount_reason: string | null
           id: string
           iptu_taxa: number | null
           kitnet_id: string | null
+          notes: string | null
           period_end: string | null
           period_start: string | null
           reconciled: boolean | null
@@ -836,6 +1070,8 @@ export type Database = {
           reference_month: string | null
           rent_gross: number | null
           semasa: number | null
+          surcharge_amount: number | null
+          surcharge_reason: string | null
           tenant_name: string | null
           total_liquid: number | null
         }
@@ -847,9 +1083,12 @@ export type Database = {
           celesc?: number | null
           created_at?: string | null
           created_by?: string | null
+          discount_amount?: number | null
+          discount_reason?: string | null
           id?: string
           iptu_taxa?: number | null
           kitnet_id?: string | null
+          notes?: string | null
           period_end?: string | null
           period_start?: string | null
           reconciled?: boolean | null
@@ -857,6 +1096,8 @@ export type Database = {
           reference_month?: string | null
           rent_gross?: number | null
           semasa?: number | null
+          surcharge_amount?: number | null
+          surcharge_reason?: string | null
           tenant_name?: string | null
           total_liquid?: number | null
         }
@@ -868,9 +1109,12 @@ export type Database = {
           celesc?: number | null
           created_at?: string | null
           created_by?: string | null
+          discount_amount?: number | null
+          discount_reason?: string | null
           id?: string
           iptu_taxa?: number | null
           kitnet_id?: string | null
+          notes?: string | null
           period_end?: string | null
           period_start?: string | null
           reconciled?: boolean | null
@@ -878,6 +1122,8 @@ export type Database = {
           reference_month?: string | null
           rent_gross?: number | null
           semasa?: number | null
+          surcharge_amount?: number | null
+          surcharge_reason?: string | null
           tenant_name?: string | null
           total_liquid?: number | null
         }
@@ -891,6 +1137,109 @@ export type Database = {
           },
           {
             foreignKeyName: "kitnet_entries_kitnet_id_fkey"
+            columns: ["kitnet_id"]
+            isOneToOne: false
+            referencedRelation: "kitnets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kitnet_entry_transactions: {
+        Row: {
+          amount: number
+          bank_transaction_id: string
+          created_at: string | null
+          id: string
+          kitnet_entry_id: string
+        }
+        Insert: {
+          amount: number
+          bank_transaction_id: string
+          created_at?: string | null
+          id?: string
+          kitnet_entry_id: string
+        }
+        Update: {
+          amount?: number
+          bank_transaction_id?: string
+          created_at?: string | null
+          id?: string
+          kitnet_entry_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kitnet_entry_transactions_bank_transaction_id_fkey"
+            columns: ["bank_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "bank_transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kitnet_entry_transactions_kitnet_entry_id_fkey"
+            columns: ["kitnet_entry_id"]
+            isOneToOne: false
+            referencedRelation: "kitnet_entries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kitnet_month_data: {
+        Row: {
+          kitnet_id: string
+          reference_month: string
+          rent_value: number | null
+          tenant_name: string | null
+          tenant_phone: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          kitnet_id: string
+          reference_month: string
+          rent_value?: number | null
+          tenant_name?: string | null
+          tenant_phone?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          kitnet_id?: string
+          reference_month?: string
+          rent_value?: number | null
+          tenant_name?: string | null
+          tenant_phone?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kitnet_month_data_kitnet_id_fkey"
+            columns: ["kitnet_id"]
+            isOneToOne: false
+            referencedRelation: "kitnets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kitnet_month_status: {
+        Row: {
+          kitnet_id: string
+          reference_month: string
+          status: string
+          updated_at: string | null
+        }
+        Insert: {
+          kitnet_id: string
+          reference_month: string
+          status?: string
+          updated_at?: string | null
+        }
+        Update: {
+          kitnet_id?: string
+          reference_month?: string
+          status?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kitnet_month_status_kitnet_id_fkey"
             columns: ["kitnet_id"]
             isOneToOne: false
             referencedRelation: "kitnets"
@@ -943,6 +1292,30 @@ export type Database = {
         }
         Relationships: []
       }
+      locked_months: {
+        Row: {
+          id: string
+          is_locked: boolean
+          locked_at: string | null
+          locked_by: string | null
+          reference_month: string
+        }
+        Insert: {
+          id?: string
+          is_locked?: boolean
+          locked_at?: string | null
+          locked_by?: string | null
+          reference_month: string
+        }
+        Update: {
+          id?: string
+          is_locked?: boolean
+          locked_at?: string | null
+          locked_by?: string | null
+          reference_month?: string
+        }
+        Relationships: []
+      }
       login_history: {
         Row: {
           id: string
@@ -961,6 +1334,30 @@ export type Database = {
           logged_at?: string | null
           user_agent?: string | null
           user_id?: string
+        }
+        Relationships: []
+      }
+      month_lock_log: {
+        Row: {
+          action: string
+          id: string
+          performed_at: string | null
+          performed_by: string | null
+          reference_month: string
+        }
+        Insert: {
+          action: string
+          id?: string
+          performed_at?: string | null
+          performed_by?: string | null
+          reference_month: string
+        }
+        Update: {
+          action?: string
+          id?: string
+          performed_at?: string | null
+          performed_by?: string | null
+          reference_month?: string
         }
         Relationships: []
       }
