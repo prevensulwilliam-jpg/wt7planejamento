@@ -71,7 +71,7 @@ function assetAddress(asset: any) {
 
 // ─── Stage Form (nível de módulo — evita remount) ────────────────────────────
 
-type StageFormData = { name: string; status: string; pct_complete: number; start_date: string; end_date: string; notes: string };
+type StageFormData = { name: string; status: string; pct_complete: number; budget_estimated: number; start_date: string; end_date: string; notes: string };
 
 function StageForm({ form, setForm, onSave, onCancel, isPending }: {
   form: StageFormData;
@@ -111,6 +111,16 @@ function StageForm({ form, setForm, onSave, onCancel, isPending }: {
           </div>
         </div>
       </div>
+      <div>
+        <Label style={{ color: '#A78BFA' }}>Orçamento previsto (R$)</Label>
+        <Input
+          type="number"
+          value={form.budget_estimated || ""}
+          onChange={e => setForm({ ...form, budget_estimated: parseFloat(e.target.value) || 0 })}
+          style={{ ...inputStyle, borderColor: 'rgba(167,139,250,0.4)' }}
+          placeholder="ex: 20.000,00"
+        />
+      </div>
       <div className="grid grid-cols-2 gap-3">
         <div><Label style={{ color: '#94A3B8' }}>Início</Label><DatePicker value={form.start_date} onChange={v => setForm({ ...form, start_date: v })} placeholder="Data início" /></div>
         <div><Label style={{ color: '#94A3B8' }}>Fim</Label><DatePicker value={form.end_date} onChange={v => setForm({ ...form, end_date: v })} placeholder="Data fim" /></div>
@@ -131,6 +141,7 @@ function StageForm({ form, setForm, onSave, onCancel, isPending }: {
 
 function StagesModal({ construction, onClose }: { construction: any; onClose: () => void }) {
   const { data: stages = [], isLoading } = useConstructionStages(construction.id);
+  const { data: expenses = [] }          = useConstructionExpenses(construction.id);
   const createStage = useCreateStage();
   const updateStage = useUpdateStage();
   const deleteStage = useDeleteStage();
@@ -138,9 +149,9 @@ function StagesModal({ construction, onClose }: { construction: any; onClose: ()
 
   const [addOpen, setAddOpen] = useState(false);
   const [editStage, setEditStage] = useState<any>(null);
-  const [form, setForm] = useState({ name: "", status: "pendente", pct_complete: 0, start_date: "", end_date: "", notes: "" });
+  const [form, setForm] = useState({ name: "", status: "pendente", pct_complete: 0, budget_estimated: 0, start_date: "", end_date: "", notes: "" });
 
-  const resetForm = () => setForm({ name: "", status: "pendente", pct_complete: 0, start_date: "", end_date: "", notes: "" });
+  const resetForm = () => setForm({ name: "", status: "pendente", pct_complete: 0, budget_estimated: 0, start_date: "", end_date: "", notes: "" });
 
   const handleAdd = async () => {
     if (!form.name) return;
@@ -174,7 +185,7 @@ function StagesModal({ construction, onClose }: { construction: any; onClose: ()
   };
 
   const openEdit = (s: any) => {
-    setForm({ name: s.name, status: s.status, pct_complete: s.pct_complete ?? 0, start_date: s.start_date ?? "", end_date: s.end_date ?? "", notes: s.notes ?? "" });
+    setForm({ name: s.name, status: s.status, pct_complete: s.pct_complete ?? 0, budget_estimated: s.budget_estimated ?? 0, start_date: s.start_date ?? "", end_date: s.end_date ?? "", notes: s.notes ?? "" });
     setEditStage(s);
   };
 
@@ -218,6 +229,27 @@ function StagesModal({ construction, onClose }: { construction: any; onClose: ()
                         <span className="text-xs font-mono ml-auto" style={{ color: '#C9A84C' }}>{s.pct_complete ?? 0}%</span>
                       </div>
                       <Progress value={s.pct_complete ?? 0} className="h-1 mt-1.5" />
+                      {(s.budget_estimated ?? 0) > 0 && (() => {
+                        const est = s.budget_estimated ?? 0;
+                        const spent = (expenses ?? []).filter((e: any) => e.stage_id === s.id).reduce((acc: number, e: any) => acc + (e.total_amount ?? 0), 0);
+                        const pct = Math.min((spent / est) * 100, 100);
+                        const isOver = spent > est;
+                        const color = isOver ? '#F59E0B' : '#10B981';
+                        return (
+                          <div className="mt-1.5 space-y-1">
+                            <div className="flex justify-between text-xs">
+                              <span style={{ color: '#64748B' }}>Orçamento</span>
+                              <span style={{ color, fontFamily: 'monospace' }}>
+                                {formatCurrency(spent)} / {formatCurrency(est)} previsto
+                                {isOver ? ' ⚠ acima' : spent > 0 ? ' ✓' : ''}
+                              </span>
+                            </div>
+                            <div style={{ height: 3, background: '#1A2535', borderRadius: 99, overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 99 }} />
+                            </div>
+                          </div>
+                        );
+                      })()}
                       {(s.start_date || s.end_date) && (
                         <p className="text-xs mt-1" style={{ color: '#94A3B8' }}>
                           {s.start_date ? formatDate(s.start_date) : "—"} → {s.end_date ? formatDate(s.end_date) : "—"}
@@ -263,6 +295,7 @@ const emptyForm = {
   asset_id: "", name: "", status: "planejada",
   start_date: "", estimated_completion: "", end_date: "",
   total_units_planned: "", estimated_rent_per_unit: "",
+  total_budget: "",
   estimated_value_ready: "", ownership_pct: "100",
   partner_name: "", partner_pct: "", notes: "",
 };
@@ -327,6 +360,11 @@ function ConstructionFormModal({ title, form, setF, assets, onSave, onClose, isP
           </div>
 
           <div>
+            <Label style={{ color: '#A78BFA' }}>Orçamento total da obra (R$)</Label>
+            <Input type="number" value={form.total_budget} onChange={e => setF("total_budget", e.target.value)} style={{ ...inputStyle, borderColor: 'rgba(167,139,250,0.4)', background: 'rgba(167,139,250,0.03)' }} placeholder="ex: 180.000,00" />
+          </div>
+
+          <div>
             <Label style={{ color: '#94A3B8' }}>Valor projetado do bem pronto (R$)</Label>
             <Input type="number" value={form.estimated_value_ready} onChange={e => setF("estimated_value_ready", e.target.value)} style={inputStyle} placeholder="0,00" />
           </div>
@@ -356,21 +394,24 @@ function ConstructionFormModal({ title, form, setF, assets, onSave, onClose, isP
 const emptyExpForm = {
   description: "", category: "", total_amount: "", paid_by: "william",
   payment_type: "avista", installments_total: "", installments_paid: "",
-  next_due_date: "", expense_date: "",
+  next_due_date: "", expense_date: "", stage_id: "",
 };
 
 function DespesasModal({ construction, onClose }: { construction: any; onClose: () => void }) {
   const { data: expenses = [] } = useConstructionExpenses(construction.id);
+  const { data: stages   = [] } = useConstructionStages(construction.id);
   const createExpense = useCreateConstructionExpense();
   const { toast }     = useToast();
   const [addOpen, setAddOpen] = useState(false);
   const [expForm, setExpForm] = useState({ ...emptyExpForm });
 
+  const totalBudget = construction.total_budget ?? 0;
   const expKPIs = {
     total:   expenses.reduce((s: number, e: any) => s + (e.total_amount   ?? 0), 0),
     william: expenses.reduce((s: number, e: any) => s + (e.william_amount ?? 0), 0),
     partner: expenses.reduce((s: number, e: any) => s + (e.partner_amount ?? 0), 0),
   };
+  const budgetPct = totalBudget > 0 ? (expKPIs.total / totalBudget) * 100 : null;
 
   const handleCreate = async () => {
     if (!expForm.description || !expForm.total_amount) return;
@@ -389,6 +430,7 @@ function DespesasModal({ construction, onClose }: { construction: any; onClose: 
         paid_by:            expForm.paid_by,
         payment_type:       expForm.payment_type,
         expense_date:       expForm.expense_date || null,
+        stage_id:           expForm.stage_id || null,
         installments_total: expForm.payment_type === "parcelado" ? parseInt(expForm.installments_total) || null : null,
         installments_paid:  expForm.payment_type === "parcelado" ? parseInt(expForm.installments_paid) || 0  : null,
         next_due_date:      expForm.next_due_date || null,
@@ -407,10 +449,17 @@ function DespesasModal({ construction, onClose }: { construction: any; onClose: 
         </DialogHeader>
 
         {/* KPIs */}
-        <div className="grid grid-cols-3 gap-3 mb-2">
+        <div className={`grid gap-3 mb-2 ${budgetPct !== null ? 'grid-cols-4' : 'grid-cols-3'}`}>
           <KpiCard label="Total Investido" value={expKPIs.total} color="gold" />
           <KpiCard label="Parte William"   value={expKPIs.william} color="cyan" />
           <KpiCard label="Parte Sócio"     value={expKPIs.partner} color="green" />
+          {budgetPct !== null && (
+            <div className="rounded-xl p-3" style={{ background: '#080C10', border: '1px solid rgba(167,139,250,0.25)' }}>
+              <p className="text-xs uppercase tracking-widest mb-1" style={{ color: '#94A3B8', fontSize: 9, letterSpacing: 2 }}>% Orçamento</p>
+              <p className="text-lg font-mono font-bold" style={{ color: '#A78BFA' }}>{budgetPct.toFixed(1)}%</p>
+              <p className="text-xs mt-0.5" style={{ color: '#64748B' }}>de {formatCurrency(totalBudget)}</p>
+            </div>
+          )}
         </div>
 
         {/* Tabela */}
@@ -422,26 +471,35 @@ function DespesasModal({ construction, onClose }: { construction: any; onClose: 
                 {["Data","Descrição","Cat.","Total","William","Sócio","Tipo"].map(h => (
                   <TableHead key={h} className="whitespace-nowrap px-2" style={{ color: '#94A3B8' }}>{h}</TableHead>
                 ))}
+                <TableHead className="whitespace-nowrap px-2" style={{ color: '#A78BFA' }}>Etapa</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {expenses.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="text-center py-8" style={{ color: '#94A3B8' }}>Nenhuma despesa registrada</TableCell></TableRow>
-              ) : (expenses as any[]).map((e: any) => (
-                <TableRow key={e.id} style={{ borderColor: '#1A2535' }}>
-                  <TableCell className="whitespace-nowrap px-2" style={{ color: '#CBD5E1' }}>{e.expense_date ? formatDate(e.expense_date) : "—"}</TableCell>
-                  <TableCell className="px-2 max-w-[140px] truncate" style={{ color: '#F0F4F8' }}>{e.description}</TableCell>
-                  <TableCell className="px-2"><WtBadge variant="cyan">{e.category}</WtBadge></TableCell>
-                  <TableCell className="font-mono whitespace-nowrap px-2" style={{ color: '#E8C97A' }}>{formatCurrency(e.total_amount ?? 0)}</TableCell>
-                  <TableCell className="font-mono whitespace-nowrap px-2" style={{ color: '#2DD4BF' }}>{formatCurrency(e.william_amount ?? 0)}</TableCell>
-                  <TableCell className="font-mono whitespace-nowrap px-2" style={{ color: '#10B981' }}>{formatCurrency(e.partner_amount ?? 0)}</TableCell>
-                  <TableCell className="px-2">
-                    <WtBadge variant={e.payment_type === "parcelado" ? "gold" : "gray"}>
-                      {e.payment_type === "parcelado" ? `${e.installments_paid}/${e.installments_total}x` : "À vista"}
-                    </WtBadge>
-                  </TableCell>
-                </TableRow>
-              ))}
+                <TableRow><TableCell colSpan={8} className="text-center py-8" style={{ color: '#94A3B8' }}>Nenhuma despesa registrada</TableCell></TableRow>
+              ) : (expenses as any[]).map((e: any) => {
+                const stageName = e.stage_id ? (stages.find((s: any) => s.id === e.stage_id)?.name ?? "—") : null;
+                return (
+                  <TableRow key={e.id} style={{ borderColor: '#1A2535' }}>
+                    <TableCell className="whitespace-nowrap px-2" style={{ color: '#CBD5E1' }}>{e.expense_date ? formatDate(e.expense_date) : "—"}</TableCell>
+                    <TableCell className="px-2 max-w-[140px] truncate" style={{ color: '#F0F4F8' }}>{e.description}</TableCell>
+                    <TableCell className="px-2"><WtBadge variant="cyan">{e.category}</WtBadge></TableCell>
+                    <TableCell className="font-mono whitespace-nowrap px-2" style={{ color: '#E8C97A' }}>{formatCurrency(e.total_amount ?? 0)}</TableCell>
+                    <TableCell className="font-mono whitespace-nowrap px-2" style={{ color: '#2DD4BF' }}>{formatCurrency(e.william_amount ?? 0)}</TableCell>
+                    <TableCell className="font-mono whitespace-nowrap px-2" style={{ color: '#10B981' }}>{formatCurrency(e.partner_amount ?? 0)}</TableCell>
+                    <TableCell className="px-2">
+                      <WtBadge variant={e.payment_type === "parcelado" ? "gold" : "gray"}>
+                        {e.payment_type === "parcelado" ? `${e.installments_paid}/${e.installments_total}x` : "À vista"}
+                      </WtBadge>
+                    </TableCell>
+                    <TableCell className="px-2">
+                      {stageName
+                        ? <span className="inline-block px-2 py-0.5 rounded text-xs font-medium" style={{ background: 'rgba(167,139,250,0.1)', color: '#A78BFA', border: '1px solid rgba(167,139,250,0.3)' }}>{stageName}</span>
+                        : <span style={{ color: '#4A5568', fontSize: 11 }}>—</span>}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
           </div>
@@ -454,14 +512,26 @@ function DespesasModal({ construction, onClose }: { construction: any; onClose: 
             <div className="space-y-3">
               <div><Label style={{ color: '#94A3B8' }}>Data</Label><DatePicker value={expForm.expense_date} onChange={v => setExpForm(f => ({ ...f, expense_date: v }))} /></div>
               <div><Label style={{ color: '#94A3B8' }}>Descrição</Label><Input value={expForm.description} onChange={e => setExpForm(f => ({ ...f, description: e.target.value }))} style={inputStyle} /></div>
-              <div>
-                <Label style={{ color: '#94A3B8' }}>Categoria</Label>
-                <Select value={expForm.category} onValueChange={v => setExpForm(f => ({ ...f, category: v }))}>
-                  <SelectTrigger style={inputStyle}><SelectValue /></SelectTrigger>
-                  <SelectContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
-                    {EXPENSE_CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label style={{ color: '#94A3B8' }}>Categoria</Label>
+                  <Select value={expForm.category} onValueChange={v => setExpForm(f => ({ ...f, category: v }))}>
+                    <SelectTrigger style={inputStyle}><SelectValue /></SelectTrigger>
+                    <SelectContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+                      {EXPENSE_CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label style={{ color: '#A78BFA' }}>Etapa (opcional)</Label>
+                  <Select value={expForm.stage_id} onValueChange={v => setExpForm(f => ({ ...f, stage_id: v }))}>
+                    <SelectTrigger style={{ ...inputStyle, borderColor: 'rgba(167,139,250,0.4)' }}><SelectValue placeholder="— Sem etapa —" /></SelectTrigger>
+                    <SelectContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+                      <SelectItem value="">— Sem etapa —</SelectItem>
+                      {(stages as any[]).map((s: any) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <div><Label style={{ color: '#94A3B8' }}>Valor Total (R$)</Label><Input type="number" value={expForm.total_amount} onChange={e => setExpForm(f => ({ ...f, total_amount: e.target.value }))} style={inputStyle} /></div>
               <div>
@@ -512,6 +582,7 @@ function DespesasModal({ construction, onClose }: { construction: any; onClose: 
 export default function ConstructionsPage() {
   const { data: constructions = [], isLoading } = useConstructions();
   const { data: assets = [] }                   = useAssets();
+  const { data: allExpenses = [] }              = useConstructionExpenses(undefined, true);
   const createConstruction = useCreateConstruction();
   const updateConstruction = useUpdateConstruction();
   const deleteConstruction = useDeleteConstruction();
@@ -546,6 +617,7 @@ export default function ConstructionsPage() {
       end_date:               form.end_date || null,
       total_units_planned:    parseInt(form.total_units_planned) || 0,
       estimated_rent_per_unit: parseFloat(form.estimated_rent_per_unit) || 0,
+      total_budget:           form.total_budget ? parseFloat(form.total_budget) : null,
       estimated_value_ready:  form.estimated_value_ready ? parseFloat(form.estimated_value_ready) : null,
       ownership_pct:          parseFloat(form.ownership_pct) || 100,
       partner_name:           form.partner_name || null,
@@ -576,6 +648,7 @@ export default function ConstructionsPage() {
       end_date:               c.end_date ?? "",
       total_units_planned:    String(c.total_units_planned ?? ""),
       estimated_rent_per_unit: String(c.estimated_rent_per_unit ?? ""),
+      total_budget:           String(c.total_budget ?? ""),
       estimated_value_ready:  String(c.estimated_value_ready ?? ""),
       ownership_pct:          String(c.ownership_pct ?? 100),
       partner_name:           c.partner_name ?? "",
@@ -600,6 +673,7 @@ export default function ConstructionsPage() {
     const progress = c.total_units_planned ? ((c.total_units_built ?? 0) / c.total_units_planned) * 100 : 0;
     const rentProj = (c.total_units_planned ?? 0) * (c.estimated_rent_per_unit ?? 0) * ((c.ownership_pct ?? 100) / 100);
     const addr     = assetAddress(c.assets);
+    const spentOnCard = (allExpenses as any[]).filter((e: any) => e.construction_id === c.id).reduce((s: number, e: any) => s + (e.total_amount ?? 0), 0);
 
     return (
       <PremiumCard className="space-y-3 h-full">
@@ -664,6 +738,34 @@ export default function ConstructionsPage() {
             <Users className="inline w-3 h-3 mr-1" />{c.partner_pct}% {c.partner_name}
           </p>
         )}
+
+        {/* Budget bar */}
+        {(c.total_budget ?? 0) > 0 && (() => {
+          const budget = c.total_budget as number;
+          const spent  = spentOnCard;
+          const pct    = budget > 0 ? Math.min((spent / budget) * 100, 100) : 0;
+          const remaining = budget - spent;
+          return (
+            <div className="rounded-lg px-3 py-2" style={{ background: 'rgba(201,168,76,0.05)', border: '1px solid rgba(201,168,76,0.15)' }}>
+              <div className="flex justify-between text-xs mb-1">
+                <span style={{ color: '#64748B' }}>Orçamento total da obra</span>
+                <span className="font-mono" style={{ color: '#E8C97A' }}>{formatCurrency(budget)}</span>
+              </div>
+              {spent > 0 && (
+                <div className="flex justify-between text-xs mb-1.5">
+                  <span style={{ color: '#64748B' }}>Gasto até agora</span>
+                  <span className="font-mono" style={{ color: '#F87171' }}>{formatCurrency(spent)}</span>
+                </div>
+              )}
+              <div style={{ height: 4, background: '#1A2535', borderRadius: 99, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${pct}%`, background: '#E8C97A', borderRadius: 99 }} />
+              </div>
+              <p className="text-right mt-1" style={{ fontSize: 10, color: '#94A3B8' }}>
+                {pct.toFixed(1)}% consumido{remaining > 0 ? ` · ${formatCurrency(remaining)} restante` : ''}
+              </p>
+            </div>
+          );
+        })()}
 
         {/* Actions */}
         <div className="flex gap-2 pt-1 flex-wrap">

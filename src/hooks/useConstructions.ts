@@ -104,9 +104,9 @@ export function useDeleteStage() {
 
 // ─── CONSTRUCTION EXPENSES (atualizado para usar construction_id) ─────────────
 
-export function useConstructionExpenses(constructionId?: string) {
+export function useConstructionExpenses(constructionId?: string, fetchAll?: boolean) {
   return useQuery({
-    queryKey: ["construction_expenses", constructionId],
+    queryKey: ["construction_expenses", constructionId ?? "all"],
     queryFn: async () => {
       let q = (supabase as any)
         .from("construction_expenses")
@@ -117,7 +117,7 @@ export function useConstructionExpenses(constructionId?: string) {
       if (error) throw error;
       return data as any[];
     },
-    enabled: !!constructionId,
+    enabled: !!constructionId || !!fetchAll,
   });
 }
 
