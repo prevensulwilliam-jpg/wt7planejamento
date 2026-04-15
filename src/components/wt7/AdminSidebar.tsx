@@ -29,7 +29,7 @@ const navGroups = [
     items: [
       { label: "Kitnets", icon: Home, href: "/kitnets" },
       { label: "Energia Solar", icon: Zap, href: "/energy" },
-      { label: "Portal Manager", icon: KeyRound, href: "/manager/kitnets" },
+      { label: "Portal Administrador", icon: KeyRound, href: "/manager/kitnets" },
       { label: "Obras & Terrenos", icon: HardHat, href: "/constructions" },
       { label: "Patrimônio", icon: Building2, href: "/assets" },
     ],

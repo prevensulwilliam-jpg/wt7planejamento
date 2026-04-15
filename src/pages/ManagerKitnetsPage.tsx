@@ -120,7 +120,7 @@ function ManagerContent() {
             </button>
           )}
           <WT7Logo size="sm" />
-          <span className="text-sm text-muted-foreground hidden sm:inline">Portal Administração</span>
+          <span className="text-sm text-muted-foreground hidden sm:inline">Portal Administrador</span>
         </div>
         <button onClick={handleLogout} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
           <LogOut className="w-4 h-4" /> Sair
