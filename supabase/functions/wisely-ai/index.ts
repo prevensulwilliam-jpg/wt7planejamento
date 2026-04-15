@@ -190,13 +190,7 @@ serve(async (req) => {
 
       const data = await res.json();
       const rawText = data.choices?.[0]?.message?.content ?? "";
-      let extracted: Record<string, unknown> = {};
-      try {
-        extracted = JSON.parse(rawText.trim());
-      } catch {
-        const m = rawText.match(/\{[\s\S]*\}/);
-        if (m) extracted = JSON.parse(m[0]);
-      }
+      const extracted = safeParseJson(rawText);
 
       return new Response(JSON.stringify({ ok: true, expenses: extracted.expenses ?? [], stages: extracted.stages ?? [] }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
