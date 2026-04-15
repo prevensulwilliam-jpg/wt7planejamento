@@ -138,8 +138,8 @@ export function useCreateConstructionExpense() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (entry: TablesInsert<"construction_expenses">) => {
-      const { error } = await supabase.from("construction_expenses").insert(entry);
-      if (error) throw error;
+      const { error } = await (supabase as any).from("construction_expenses").insert(entry);
+      if (error) { console.error("construction_expenses insert error:", error); throw error; }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["construction_expenses"] }),
   });
