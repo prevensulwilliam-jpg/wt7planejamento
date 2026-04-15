@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -147,9 +147,56 @@ function StagesModal({ construction, onClose }: { construction: any; onClose: ()
   const deleteStage = useDeleteStage();
   const { toast } = useToast();
 
-  const [addOpen, setAddOpen] = useState(false);
+  const [addOpen, setAddOpen]   = useState(false);
   const [editStage, setEditStage] = useState<any>(null);
   const [form, setForm] = useState({ name: "", status: "pendente", pct_complete: 0, budget_estimated: 0, start_date: "", end_date: "", notes: "" });
+  const [localOrder, setLocalOrder] = useState<string[]>([]);
+  const dragId   = useRef<string | null>(null);
+  const overIdRef= useRef<string | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+
+  // sync localOrder quando stages chega do servidor
+  const prevStageIds = useRef<string>("");
+  const stageIds = stages.map((s: any) => s.id).join(",");
+  if (stageIds !== prevStageIds.current) {
+    prevStageIds.current = stageIds;
+    setLocalOrder(stages.map((s: any) => s.id));
+  }
+
+  const orderedStages = localOrder
+    .map(id => stages.find((s: any) => s.id === id))
+    .filter(Boolean) as any[];
+
+  // persist nova ordem no banco
+  const persistOrder = async (ids: string[]) => {
+    await Promise.all(ids.map((id, idx) => updateStage.mutateAsync({ id, order_index: idx })));
+  };
+
+  const onDragStart = (id: string) => { dragId.current = id; overIdRef.current = id; setDraggingId(id); };
+  const onDragOver  = (e: React.DragEvent, id: string) => { e.preventDefault(); overIdRef.current = id; };
+  const onDragEnd   = async () => {
+    const from = dragId.current; const to = overIdRef.current;
+    if (from && to && from !== to) {
+      const next = [...localOrder];
+      const fi = next.indexOf(from); const ti = next.indexOf(to);
+      if (fi !== -1 && ti !== -1) { next.splice(fi, 1); next.splice(ti, 0, from); }
+      setLocalOrder(next);
+      try { await persistOrder(next); }
+      catch { toast({ title: "Erro ao reordenar", variant: "destructive" }); }
+    }
+    dragId.current = null; overIdRef.current = null; setDraggingId(null);
+  };
+
+  const handleReorganizar = async () => {
+    const sorted = [...stages].sort((a: any, b: any) => {
+      const da = a.start_date ?? "9999"; const db = b.start_date ?? "9999";
+      return da.localeCompare(db);
+    });
+    const ids = sorted.map((s: any) => s.id);
+    setLocalOrder(ids);
+    try { await persistOrder(ids); toast({ title: "Etapas reorganizadas por data de início" }); }
+    catch { toast({ title: "Erro ao reorganizar", variant: "destructive" }); }
+  };
 
   const resetForm = () => setForm({ name: "", status: "pendente", pct_complete: 0, budget_estimated: 0, start_date: "", end_date: "", notes: "" });
 
@@ -189,7 +236,7 @@ function StagesModal({ construction, onClose }: { construction: any; onClose: ()
     setEditStage(s);
   };
 
-  const overallPct = stages.length > 0 ? stages.reduce((acc, s) => acc + (s.pct_complete ?? 0), 0) / stages.length : 0;
+  const overallPct = stages.length > 0 ? stages.reduce((acc: number, s: any) => acc + (s.pct_complete ?? 0), 0) / stages.length : 0;
 
   return (
     <Dialog open onOpenChange={o => !o && onClose()}>
@@ -203,9 +250,20 @@ function StagesModal({ construction, onClose }: { construction: any; onClose: ()
 
         {/* Overall progress */}
         <div className="space-y-1">
-          <div className="flex justify-between text-xs" style={{ color: '#94A3B8' }}>
+          <div className="flex justify-between items-center text-xs" style={{ color: '#94A3B8' }}>
             <span>{stages.length} etapa{stages.length !== 1 ? "s" : ""}</span>
-            <span style={{ color: '#C9A84C' }}>{overallPct.toFixed(0)}% concluído</span>
+            <div className="flex items-center gap-3">
+              {stages.length > 1 && (
+                <button
+                  onClick={handleReorganizar}
+                  className="text-xs px-2 py-0.5 rounded"
+                  style={{ background: 'rgba(45,212,191,0.08)', color: '#2DD4BF', border: '1px solid rgba(45,212,191,0.2)', fontSize: 10 }}
+                >
+                  ↕ reorganizar
+                </button>
+              )}
+              <span style={{ color: '#C9A84C' }}>{overallPct.toFixed(0)}% concluído</span>
+            </div>
           </div>
           <Progress value={overallPct} className="h-2" />
         </div>
@@ -213,17 +271,26 @@ function StagesModal({ construction, onClose }: { construction: any; onClose: ()
         {/* Stage list */}
         {isLoading ? (
           <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-16 rounded-xl" />)}</div>
-        ) : stages.length === 0 ? (
+        ) : orderedStages.length === 0 ? (
           <p className="text-center py-4 text-sm" style={{ color: '#94A3B8' }}>Nenhuma etapa cadastrada</p>
         ) : (
           <div className="space-y-2">
-            {stages.map(s => {
+            {orderedStages.map((s: any) => {
               const st = STAGE_STATUS_MAP[s.status] ?? STAGE_STATUS_MAP.pendente;
               return (
-                <PremiumCard key={s.id} className="p-3">
+                <div
+                  key={s.id}
+                  draggable
+                  onDragStart={() => onDragStart(s.id)}
+                  onDragOver={e => onDragOver(e, s.id)}
+                  onDragEnd={onDragEnd}
+                  style={{ opacity: draggingId === s.id ? 0.4 : 1, transition: 'opacity 0.15s', cursor: 'grab' }}
+                >
+                <PremiumCard className="p-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
+                        <span style={{ color: '#1A2535', fontSize: 12, userSelect: 'none' }}>⠿</span>
                         <span style={{ color: st.color }}>{st.icon}</span>
                         <span className="font-medium text-sm" style={{ color: '#F0F4F8' }}>{s.name}</span>
                         <span className="text-xs font-mono ml-auto" style={{ color: '#C9A84C' }}>{s.pct_complete ?? 0}%</span>
@@ -268,6 +335,7 @@ function StagesModal({ construction, onClose }: { construction: any; onClose: ()
                     </div>
                   )}
                 </PremiumCard>
+                </div>
               );
             })}
           </div>
