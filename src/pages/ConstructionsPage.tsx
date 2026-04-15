@@ -20,6 +20,7 @@ import {
   useConstructionStages, useCreateStage, useUpdateStage, useDeleteStage,
 } from "@/hooks/useConstructions";
 import { useAssets } from "@/hooks/useFinances";
+import { supabase } from "@/integrations/supabase/client";
 import { formatCurrency, formatDate } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -847,6 +848,292 @@ function DespesasView({ construction, onClose }: { construction: any; onClose: (
   );
 }
 
+// ─── Import PDF Modal ────────────────────────────────────────────────────────
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      resolve(result.split(",")[1]); // remove data:...;base64, prefix
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function isoFromBR(date: string): string | null {
+  if (!date) return null;
+  const [d, m, y] = date.split("/");
+  if (!d || !m || !y) return null;
+  return `${y}-${m.padStart(2,"0")}-${d.padStart(2,"0")}`;
+}
+
+const IMPORT_CATEGORIES = [
+  "Terreno","Terraplenagem","Materiais","Mão de Obra",
+  "Instalações","Acabamento","Taxas/Cartório","Amortização","Outros",
+];
+
+function ImportPdfModal({ construction, onClose }: { construction: any; onClose: () => void }) {
+  const [step, setStep]         = useState<"upload"|"parsing"|"preview"|"importing"|"done">("upload");
+  const [activeTab, setActiveTab] = useState<"expenses"|"stages">("expenses");
+  const [expenses, setExpenses] = useState<any[]>([]);
+  const [stages, setStages]     = useState<any[]>([]);
+  const [fileName, setFileName] = useState("");
+  const { toast }               = useToast();
+  const createExpense           = useCreateConstructionExpense();
+  const createStage             = useCreateStage();
+
+  const wPct = (construction.ownership_pct ?? 100) / 100;
+
+  const handleFile = async (file: File) => {
+    if (!file.name.toLowerCase().endsWith(".pdf")) {
+      toast({ title: "Selecione um arquivo PDF", variant: "destructive" }); return;
+    }
+    setFileName(file.name);
+    setStep("parsing");
+    try {
+      const pdfBase64 = await fileToBase64(file);
+      const { data, error } = await supabase.functions.invoke("wisely-ai", {
+        body: { action: "extract-construction-pdf", pdfBase64 },
+      });
+      if (error || !data?.ok) throw new Error(error?.message ?? "Erro na extração");
+      setExpenses((data.expenses as any[]).map((e: any) => ({ ...e, checked: !e.is_future })));
+      setStages((data.stages as any[]).map((s: any) => ({ ...s, checked: true })));
+      setStep("preview");
+    } catch (e: any) {
+      toast({ title: "Erro ao processar PDF", description: e.message, variant: "destructive" });
+      setStep("upload");
+    }
+  };
+
+  const handleImport = async () => {
+    setStep("importing");
+    const selExp = expenses.filter(e => e.checked);
+    const selStg = stages.filter(s => s.checked);
+    try {
+      await Promise.all([
+        ...selExp.map((e: any) => createExpense.mutateAsync({
+          construction_id:    construction.id,
+          property_id:        null,
+          property_code:      construction.name ?? null,
+          description:        e.description,
+          category:           e.category,
+          total_amount:       e.value,
+          william_amount:     e.value * wPct,
+          partner_amount:     e.value * (1 - wPct),
+          paid_by:            "ambos",
+          payment_type:       "avista",
+          expense_date:       isoFromBR(e.date),
+          stage_id:           null,
+          installments_total: null,
+          installments_paid:  null,
+          next_due_date:      null,
+        } as any)),
+        ...selStg.map((s: any, idx: number) => createStage.mutateAsync({
+          construction_id: construction.id,
+          name:            s.name,
+          start_date:      s.start_date || null,
+          end_date:        s.end_date || null,
+          status:          s.status ?? "pendente",
+          pct_complete:    s.pct_complete ?? 0,
+          budget_estimated:null,
+          order_index:     idx,
+          notes:           null,
+        })),
+      ]);
+      setStep("done");
+    } catch (e: any) {
+      toast({ title: "Erro ao importar", description: e.message, variant: "destructive" });
+      setStep("preview");
+    }
+  };
+
+  const selExpCount = expenses.filter(e => e.checked).length;
+  const selStgCount = stages.filter(s => s.checked).length;
+  const selExpTotal = expenses.filter(e => e.checked).reduce((s, e) => s + (e.value ?? 0), 0);
+
+  const tabStyle = (tab: string) => ({
+    padding: "8px 18px", fontSize: 12, fontWeight: 600, borderRadius: "8px 8px 0 0",
+    cursor: "pointer", border: "none",
+    background: activeTab === tab ? "rgba(232,201,122,0.12)" : "transparent",
+    color: activeTab === tab ? "#E8C97A" : "#64748B",
+    borderBottom: activeTab === tab ? "2px solid #E8C97A" : "2px solid transparent",
+  } as React.CSSProperties);
+
+  return (
+    <Dialog open onOpenChange={o => !o && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" style={{ background: "#0D1318", border: "1px solid #1A2535" }}>
+        <DialogHeader>
+          <DialogTitle style={{ color: "#F0F4F8" }}>
+            📄 Importar PDF — {construction.name}
+          </DialogTitle>
+        </DialogHeader>
+
+        {/* ── Upload ── */}
+        {step === "upload" && (
+          <div
+            className="rounded-xl text-center py-12 cursor-pointer transition-all"
+            style={{ border: "2px dashed #1A2535", background: "#080C10" }}
+            onClick={() => document.getElementById("pdf-upload-input")?.click()}
+            onDragOver={e => { e.preventDefault(); (e.currentTarget as HTMLElement).style.borderColor = "#E8C97A"; }}
+            onDragLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "#1A2535"; }}
+            onDrop={e => { e.preventDefault(); (e.currentTarget as HTMLElement).style.borderColor = "#1A2535"; const f = e.dataTransfer.files[0]; if(f) handleFile(f); }}
+          >
+            <div style={{ fontSize: 40 }}>📄</div>
+            <p className="mt-3 font-semibold" style={{ color: "#F0F4F8" }}>Arraste o PDF do Jairo aqui</p>
+            <p className="text-sm mt-1" style={{ color: "#64748B" }}>Extrai despesas e etapas automaticamente com IA</p>
+            <button className="mt-4 px-5 py-2 rounded-lg text-sm font-semibold" style={{ background: "rgba(232,201,122,0.1)", color: "#E8C97A", border: "1px solid rgba(232,201,122,0.3)" }}>
+              Selecionar arquivo
+            </button>
+            <input id="pdf-upload-input" type="file" accept=".pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if(f) handleFile(f); }} />
+          </div>
+        )}
+
+        {/* ── Parsing ── */}
+        {step === "parsing" && (
+          <div className="text-center py-12">
+            <div className="inline-block w-10 h-10 rounded-full border-2 border-t-yellow-400 border-slate-700 animate-spin mb-4" />
+            <p style={{ color: "#E8C97A", fontWeight: 600 }}>Lendo PDF com IA…</p>
+            <p className="text-sm mt-1" style={{ color: "#64748B" }}>{fileName}</p>
+            <p className="text-xs mt-2" style={{ color: "#4A5568" }}>Extraindo despesas e inferindo etapas…</p>
+          </div>
+        )}
+
+        {/* ── Preview ── */}
+        {step === "preview" && (
+          <div className="space-y-4">
+            {/* KPIs */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="rounded-lg p-3 text-center" style={{ background: "#080C10", border: "1px solid #1A2535" }}>
+                <p className="text-xs" style={{ color: "#64748B" }}>Despesas</p>
+                <p className="font-bold text-lg" style={{ color: "#E8C97A" }}>{selExpCount}</p>
+              </div>
+              <div className="rounded-lg p-3 text-center" style={{ background: "#080C10", border: "1px solid #1A2535" }}>
+                <p className="text-xs" style={{ color: "#64748B" }}>Total selecionado</p>
+                <p className="font-bold text-lg" style={{ color: "#E8C97A" }}>{formatCurrency(selExpTotal)}</p>
+              </div>
+              <div className="rounded-lg p-3 text-center" style={{ background: "#080C10", border: "1px solid #1A2535" }}>
+                <p className="text-xs" style={{ color: "#64748B" }}>Etapas detectadas</p>
+                <p className="font-bold text-lg" style={{ color: "#2DD4BF" }}>{selStgCount}</p>
+              </div>
+            </div>
+
+            {/* Tabs */}
+            <div style={{ borderBottom: "1px solid #1A2535", display: "flex", gap: 4 }}>
+              <button style={tabStyle("expenses")} onClick={() => setActiveTab("expenses")}>
+                Despesas ({expenses.length})
+              </button>
+              <button style={tabStyle("stages")} onClick={() => setActiveTab("stages")}>
+                Etapas ({stages.length})
+              </button>
+            </div>
+
+            {/* Expenses tab */}
+            {activeTab === "expenses" && (
+              <div className="space-y-1 max-h-64 overflow-y-auto pr-1">
+                {expenses.map((e, i) => (
+                  <div key={i}
+                    className="flex items-center gap-3 rounded-lg px-3 py-2 cursor-pointer"
+                    style={{ background: e.checked ? "rgba(232,201,122,0.05)" : "transparent", border: `1px solid ${e.checked ? "rgba(232,201,122,0.15)" : "#1A2535"}`, opacity: e.checked ? 1 : 0.4 }}
+                    onClick={() => setExpenses(prev => prev.map((x,j) => j===i ? {...x, checked: !x.checked} : x))}
+                  >
+                    <div className="w-4 h-4 rounded flex-shrink-0 flex items-center justify-center text-xs"
+                      style={{ background: e.checked ? "rgba(232,201,122,0.2)" : "#1A2535", border: `1px solid ${e.checked ? "#E8C97A" : "#334155"}`, color: "#E8C97A" }}>
+                      {e.checked && "✓"}
+                    </div>
+                    <span className="text-xs w-20 flex-shrink-0" style={{ color: "#64748B" }}>{e.date}</span>
+                    <span className="text-xs flex-1 truncate" style={{ color: "#CBD5E1" }}>{e.description}</span>
+                    <span className="text-xs px-2 py-0.5 rounded" style={{ background: "rgba(100,116,139,0.15)", color: "#94A3B8", fontSize: 10 }}>{e.category}</span>
+                    {e.is_future && <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: "rgba(251,191,36,0.1)", color: "#FBBF24", fontSize: 10, border: "1px solid rgba(251,191,36,0.2)" }}>futuro</span>}
+                    <span className="text-xs font-mono font-bold flex-shrink-0" style={{ color: "#E8C97A" }}>{formatCurrency(e.value)}</span>
+                  </div>
+                ))}
+                {/* Split info */}
+                {wPct < 1 && (
+                  <p className="text-xs pt-1" style={{ color: "#64748B" }}>
+                    Split automático: William {(wPct*100).toFixed(0)}% · Sócio {((1-wPct)*100).toFixed(0)}%
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Stages tab */}
+            {activeTab === "stages" && (
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                {stages.length === 0 ? (
+                  <p className="text-center py-8 text-sm" style={{ color: "#64748B" }}>Nenhuma etapa detectada</p>
+                ) : stages.map((s, i) => (
+                  <div key={i}
+                    className="flex items-start gap-3 rounded-lg px-3 py-2.5 cursor-pointer"
+                    style={{ background: s.checked ? "rgba(45,212,191,0.04)" : "transparent", border: `1px solid ${s.checked ? "rgba(45,212,191,0.2)" : "#1A2535"}`, opacity: s.checked ? 1 : 0.4 }}
+                    onClick={() => setStages(prev => prev.map((x,j) => j===i ? {...x, checked: !x.checked} : x))}
+                  >
+                    <div className="w-4 h-4 rounded flex-shrink-0 mt-0.5 flex items-center justify-center text-xs"
+                      style={{ background: s.checked ? "rgba(45,212,191,0.2)" : "#1A2535", border: `1px solid ${s.checked ? "#2DD4BF" : "#334155"}`, color: "#2DD4BF" }}>
+                      {s.checked && "✓"}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium" style={{ color: "#F0F4F8" }}>{s.name}</p>
+                      <div className="flex gap-3 mt-0.5 flex-wrap">
+                        {s.start_date && <span className="text-xs" style={{ color: "#64748B" }}>▶ {s.start_date}</span>}
+                        {s.end_date && <span className="text-xs" style={{ color: "#64748B" }}>🏁 {s.end_date}</span>}
+                        <span className="text-xs px-1.5 py-0.5 rounded" style={{
+                          background: s.status === "concluida" ? "rgba(16,185,129,0.1)" : s.status === "em_andamento" ? "rgba(45,212,191,0.1)" : "rgba(100,116,139,0.1)",
+                          color: s.status === "concluida" ? "#10B981" : s.status === "em_andamento" ? "#2DD4BF" : "#64748B",
+                          fontSize: 10,
+                        }}>
+                          {s.status === "concluida" ? "Concluída" : s.status === "em_andamento" ? "Em andamento" : "Pendente"}
+                          {s.pct_complete > 0 && ` ${s.pct_complete}%`}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <p className="text-xs pt-1" style={{ color: "#64748B" }}>As etapas existentes não são removidas — apenas as selecionadas serão adicionadas.</p>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex justify-between items-center pt-2">
+              <button onClick={() => setStep("upload")} className="text-sm" style={{ color: "#64748B" }}>← Novo arquivo</button>
+              <div className="flex gap-2">
+                <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm" style={{ border: "1px solid #1A2535", color: "#94A3B8" }}>Cancelar</button>
+                <GoldButton onClick={handleImport} disabled={selExpCount === 0 && selStgCount === 0}>
+                  ✓ Importar {selExpCount > 0 ? `${selExpCount} despesas` : ""}{selExpCount > 0 && selStgCount > 0 ? " + " : ""}{selStgCount > 0 ? `${selStgCount} etapas` : ""}
+                </GoldButton>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Importing ── */}
+        {step === "importing" && (
+          <div className="text-center py-12">
+            <div className="inline-block w-10 h-10 rounded-full border-2 border-t-yellow-400 border-slate-700 animate-spin mb-4" />
+            <p style={{ color: "#E8C97A", fontWeight: 600 }}>Importando…</p>
+          </div>
+        )}
+
+        {/* ── Done ── */}
+        {step === "done" && (
+          <div className="text-center py-10 space-y-3">
+            <div style={{ fontSize: 48 }}>✅</div>
+            <p className="font-bold text-lg" style={{ color: "#F0F4F8" }}>Importação concluída!</p>
+            <p className="text-sm" style={{ color: "#64748B" }}>
+              {expenses.filter(e => e.checked).length} despesas e {stages.filter(s => s.checked).length} etapas adicionadas a {construction.name}
+            </p>
+            <div className="flex gap-2 justify-center pt-2">
+              <button onClick={() => { setStep("upload"); setExpenses([]); setStages([]); }} className="px-4 py-2 rounded-lg text-sm" style={{ border: "1px solid #1A2535", color: "#94A3B8" }}>Importar outro</button>
+              <GoldButton onClick={onClose}>Fechar</GoldButton>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ConstructionsPage() {
@@ -858,8 +1145,9 @@ export default function ConstructionsPage() {
   const deleteConstruction = useDeleteConstruction();
   const { toast } = useToast();
 
-  const [stagesFor, setStagesFor]   = useState<any>(null);
+  const [stagesFor, setStagesFor]     = useState<any>(null);
   const [despesasFor, setDespesasFor] = useState<any>(null);
+  const [importFor, setImportFor]     = useState<any>(null);
   const [newOpen, setNewOpen]       = useState(false);
   const [editItem, setEditItem]     = useState<any>(null);
   const [delItem, setDelItem]       = useState<any>(null);
@@ -1091,6 +1379,11 @@ export default function ConstructionsPage() {
             variant="outline" className="text-xs py-1.5 px-3"
             onClick={() => setStagesFor(c)}
           ><Layers className="w-3 h-3" />Etapas</GoldButton>
+          <button
+            onClick={() => setImportFor(c)}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium"
+            style={{ background: "rgba(45,212,191,0.08)", color: "#2DD4BF", border: "1px solid rgba(45,212,191,0.2)" }}
+          >📄 PDF</button>
           <GoldButton
             variant="outline" className="text-xs py-1.5 px-3"
             onClick={() => openEdit(c)}
@@ -1157,6 +1450,7 @@ export default function ConstructionsPage() {
       {newOpen && <ConstructionFormModal title="Nova Obra" form={form} setF={setF} assets={assets as any[]} onSave={handleSaveConstruction} onClose={() => { setNewOpen(false); setForm({ ...emptyForm }); }} isPending={createConstruction.isPending || updateConstruction.isPending} />}
       {editItem && <ConstructionFormModal title="Editar Obra" form={form} setF={setF} assets={assets as any[]} onSave={handleSaveConstruction} onClose={() => { setEditItem(null); setForm({ ...emptyForm }); }} isPending={createConstruction.isPending || updateConstruction.isPending} />}
       {stagesFor && <StagesModal construction={stagesFor} onClose={() => setStagesFor(null)} />}
+      {importFor && <ImportPdfModal construction={importFor} onClose={() => setImportFor(null)} />}
 
       {/* Delete confirm */}
       {delItem && (

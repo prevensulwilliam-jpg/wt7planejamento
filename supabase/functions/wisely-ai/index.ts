@@ -67,6 +67,47 @@ FORMATO DA RESPOSTA:
 
 Responda SEMPRE em português. Direto e executivo. William precisa resolver isso em minutos.`;
 
+const CONSTRUCTION_EXTRACT_PROMPT = (today: string) => `Você é um extrator de dados de planilhas de custos de construção civil brasileira.
+
+Analise este PDF e retorne APENAS JSON puro, sem markdown, sem explicação.
+
+{
+  "expenses": [
+    {
+      "date": "DD/MM/YYYY",
+      "description": "descrição original",
+      "value": 1234.56,
+      "category": "Terreno|Terraplenagem|Materiais|Mão de Obra|Instalações|Acabamento|Taxas/Cartório|Outros",
+      "is_future": false
+    }
+  ],
+  "stages": [
+    {
+      "name": "nome da etapa",
+      "start_date": "YYYY-MM-DD",
+      "end_date": "YYYY-MM-DD ou null",
+      "status": "pendente|em_andamento|concluida",
+      "pct_complete": 0
+    }
+  ]
+}
+
+REGRAS EXPENSES:
+- Use a seção "Resumo" se existir (evita duplicatas de parcelas). Senão use Lançamentos.
+- is_future: true apenas para datas APÓS ${today}
+- Mapeamento de categorias: aterro/terraplanagem → Terraplenagem | pedreiro/mão de obra/parcela mão → Mão de Obra | blocos/ferragens/cimento/material/pingadeira/veda/fundo → Materiais | poste/elétrica/hidráulica/instalação → Instalações | pintura/reboco/acabamento → Acabamento | terreno/escritura → Terreno | IPTU/cartório/taxa → Taxas/Cartório | trator/máquina/equipamento → Terraplenagem
+
+REGRAS STAGES:
+- Infira fases agrupando despesas por tipo e período cronológico
+- Exemplos: despesas de aterro/trator em jan → etapa "Terraplenagem" start_date=primeiro dia daquele mês
+- Pedreiro/blocos/ferragens em mar → etapa "Alvenaria"
+- Pintura/reboco/acabamento → etapa "Acabamento"
+- Poste/elétrica → etapa "Instalações Elétricas"
+- Status: se todas despesas da etapa têm is_future=false → "concluida" pct_complete=100; se parte futura → "em_andamento"; se tudo futuro → "pendente"
+- Máximo 6 etapas, não crie etapas com apenas 1 item trivial
+
+Retorne APENAS o JSON.`;
+
 const CELESC_EXTRACT_PROMPT = `Você é um extrator de dados de faturas CELESC (energia elétrica de Santa Catarina, Brasil).
 
 Analise a imagem desta fatura e extraia os campos abaixo em JSON puro, sem markdown, sem explicações.
@@ -101,6 +142,50 @@ serve(async (req) => {
     }
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+
+    // ── Modo extração PDF de obra ──
+    if (body_req.action === "extract-construction-pdf") {
+      const { pdfBase64 } = body_req as any;
+      const today = new Date().toISOString().slice(0, 10);
+      const dataUrl = `data:application/pdf;base64,${pdfBase64}`;
+
+      const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          max_tokens: 2500,
+          messages: [{
+            role: "user",
+            content: [
+              { type: "image_url", image_url: { url: dataUrl } },
+              { type: "text", text: CONSTRUCTION_EXTRACT_PROMPT(today) },
+            ],
+          }],
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.text();
+        return new Response(JSON.stringify({ error: "Erro no gateway", detail: err }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const data = await res.json();
+      const rawText = data.choices?.[0]?.message?.content ?? "";
+      let extracted: Record<string, unknown> = {};
+      try {
+        extracted = JSON.parse(rawText.trim());
+      } catch {
+        const m = rawText.match(/\{[\s\S]*\}/);
+        if (m) extracted = JSON.parse(m[0]);
+      }
+
+      return new Response(JSON.stringify({ ok: true, expenses: extracted.expenses ?? [], stages: extracted.stages ?? [] }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     // ── Modo extração CELESC ──
     if (body_req.action === "extract-celesc") {
