@@ -21,7 +21,6 @@ const navGroups = [
       { label: "Despesas", icon: TrendingDown, href: "/expenses" },
       { label: "Bancos & Caixas", icon: Landmark, href: "/banks" },
       { label: "Conciliação Bancária", icon: ArrowLeftRight, href: "/reconciliation" },
-      { label: "Padrões IA", icon: Brain, href: "/patterns" },
       { label: "Categorias", icon: Tag, href: "/categories" },
     ],
   },
