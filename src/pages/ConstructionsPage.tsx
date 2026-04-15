@@ -16,7 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { DraggableGrid } from "@/components/wt7/DraggableGrid";
 import {
   useConstructions, useCreateConstruction, useUpdateConstruction, useDeleteConstruction,
-  useConstructionExpenses, useCreateConstructionExpense,
+  useConstructionExpenses, useCreateConstructionExpense, useUpdateConstructionExpense, useDeleteConstructionExpense,
   useConstructionStages, useCreateStage, useUpdateStage, useDeleteStage,
 } from "@/hooks/useConstructions";
 import { useAssets } from "@/hooks/useFinances";
@@ -389,6 +389,66 @@ function ConstructionFormModal({ title, form, setF, assets, onSave, onClose, isP
   );
 }
 
+// ─── Expense Form (nível de módulo — evita remount) ─────────────────────────
+
+function ExpenseForm({ expForm, setExpForm, stages }: { expForm: any; setExpForm: (fn: (f: any) => any) => void; stages: any[] }) {
+  return (
+    <div className="space-y-3">
+      <div><Label style={{ color: '#94A3B8' }}>Data</Label><DatePicker value={expForm.expense_date} onChange={v => setExpForm(f => ({ ...f, expense_date: v }))} /></div>
+      <div><Label style={{ color: '#94A3B8' }}>Descrição</Label><Input value={expForm.description} onChange={e => setExpForm(f => ({ ...f, description: e.target.value }))} style={inputStyle} /></div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label style={{ color: '#94A3B8' }}>Categoria</Label>
+          <Select value={expForm.category} onValueChange={v => setExpForm(f => ({ ...f, category: v }))}>
+            <SelectTrigger style={inputStyle}><SelectValue /></SelectTrigger>
+            <SelectContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+              {EXPENSE_CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label style={{ color: '#A78BFA' }}>Etapa (opcional)</Label>
+          <Select value={expForm.stage_id} onValueChange={v => setExpForm(f => ({ ...f, stage_id: v }))}>
+            <SelectTrigger style={{ ...inputStyle, borderColor: 'rgba(167,139,250,0.4)' }}><SelectValue placeholder="— Sem etapa —" /></SelectTrigger>
+            <SelectContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+              <SelectItem value="">— Sem etapa —</SelectItem>
+              {stages.map((s: any) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div><Label style={{ color: '#94A3B8' }}>Valor Total (R$)</Label><Input type="number" value={expForm.total_amount} onChange={e => setExpForm(f => ({ ...f, total_amount: e.target.value }))} style={inputStyle} /></div>
+      <div>
+        <Label style={{ color: '#94A3B8' }}>Pago por</Label>
+        <Select value={expForm.paid_by} onValueChange={v => setExpForm(f => ({ ...f, paid_by: v }))}>
+          <SelectTrigger style={inputStyle}><SelectValue /></SelectTrigger>
+          <SelectContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+            <SelectItem value="william">William</SelectItem>
+            <SelectItem value="socio">Sócio</SelectItem>
+            <SelectItem value="ambos">Ambos</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div>
+        <Label style={{ color: '#94A3B8' }}>Tipo</Label>
+        <Select value={expForm.payment_type} onValueChange={v => setExpForm(f => ({ ...f, payment_type: v }))}>
+          <SelectTrigger style={inputStyle}><SelectValue /></SelectTrigger>
+          <SelectContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+            <SelectItem value="avista">À vista</SelectItem>
+            <SelectItem value="parcelado">Parcelado</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      {expForm.payment_type === "parcelado" && (
+        <div className="grid grid-cols-2 gap-2">
+          <div><Label style={{ color: '#94A3B8' }}>Total parcelas</Label><Input type="number" value={expForm.installments_total} onChange={e => setExpForm(f => ({ ...f, installments_total: e.target.value }))} style={inputStyle} /></div>
+          <div><Label style={{ color: '#94A3B8' }}>Pagas</Label><Input type="number" value={expForm.installments_paid} onChange={e => setExpForm(f => ({ ...f, installments_paid: e.target.value }))} style={inputStyle} /></div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Despesas Modal (por card) ───────────────────────────────────────────────
 
 const emptyExpForm = {
@@ -401,9 +461,12 @@ function DespesasModal({ construction, onClose }: { construction: any; onClose: 
   const { data: expenses = [] } = useConstructionExpenses(construction.id);
   const { data: stages   = [] } = useConstructionStages(construction.id);
   const createExpense = useCreateConstructionExpense();
+  const updateExpense = useUpdateConstructionExpense();
+  const deleteExpense = useDeleteConstructionExpense();
   const { toast }     = useToast();
-  const [addOpen, setAddOpen] = useState(false);
-  const [expForm, setExpForm] = useState({ ...emptyExpForm });
+  const [addOpen, setAddOpen]   = useState(false);
+  const [editExp, setEditExp]   = useState<any>(null);
+  const [expForm, setExpForm]   = useState({ ...emptyExpForm });
 
   const totalBudget = construction.total_budget ?? 0;
   const expKPIs = {
@@ -441,6 +504,56 @@ function DespesasModal({ construction, onClose }: { construction: any; onClose: 
     } catch { toast({ title: "Erro ao criar despesa", variant: "destructive" }); }
   };
 
+  const openEditExp = (e: any) => {
+    setExpForm({
+      description: e.description ?? "",
+      category: e.category ?? "",
+      total_amount: String(e.total_amount ?? ""),
+      paid_by: e.paid_by ?? "william",
+      payment_type: e.payment_type ?? "avista",
+      installments_total: String(e.installments_total ?? ""),
+      installments_paid: String(e.installments_paid ?? ""),
+      next_due_date: e.next_due_date ?? "",
+      expense_date: e.expense_date ?? "",
+      stage_id: e.stage_id ?? "",
+    });
+    setEditExp(e);
+    setAddOpen(false);
+  };
+
+  const handleUpdate = async () => {
+    if (!editExp) return;
+    const total = parseFloat(expForm.total_amount);
+    const wPct  = (construction.ownership_pct ?? 100) / 100;
+    try {
+      await updateExpense.mutateAsync({
+        id: editExp.id,
+        description:        expForm.description,
+        category:           expForm.category,
+        total_amount:       total,
+        william_amount:     expForm.paid_by === "william" ? total : expForm.paid_by === "ambos" ? total * wPct : 0,
+        partner_amount:     expForm.paid_by === "socio"   ? total : expForm.paid_by === "ambos" ? total * (1 - wPct) : 0,
+        paid_by:            expForm.paid_by,
+        payment_type:       expForm.payment_type,
+        expense_date:       expForm.expense_date || null,
+        stage_id:           expForm.stage_id || null,
+        installments_total: expForm.payment_type === "parcelado" ? parseInt(expForm.installments_total) || null : null,
+        installments_paid:  expForm.payment_type === "parcelado" ? parseInt(expForm.installments_paid) || 0  : null,
+        next_due_date:      expForm.next_due_date || null,
+      });
+      toast({ title: "Despesa atualizada!" });
+      setEditExp(null);
+      setExpForm({ ...emptyExpForm });
+    } catch { toast({ title: "Erro ao atualizar", variant: "destructive" }); }
+  };
+
+  const handleDeleteExp = async (id: string) => {
+    try {
+      await deleteExpense.mutateAsync(id);
+      toast({ title: "Despesa removida" });
+    } catch { toast({ title: "Erro ao remover", variant: "destructive" }); }
+  };
+
   return (
     <Dialog open onOpenChange={o => !o && onClose()}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
@@ -472,11 +585,12 @@ function DespesasModal({ construction, onClose }: { construction: any; onClose: 
                   <TableHead key={h} className="whitespace-nowrap px-2" style={{ color: '#94A3B8' }}>{h}</TableHead>
                 ))}
                 <TableHead className="whitespace-nowrap px-2" style={{ color: '#A78BFA' }}>Etapa</TableHead>
+                <TableHead className="px-2" />
               </TableRow>
             </TableHeader>
             <TableBody>
               {expenses.length === 0 ? (
-                <TableRow><TableCell colSpan={8} className="text-center py-8" style={{ color: '#94A3B8' }}>Nenhuma despesa registrada</TableCell></TableRow>
+                <TableRow><TableCell colSpan={9} className="text-center py-8" style={{ color: '#94A3B8' }}>Nenhuma despesa registrada</TableCell></TableRow>
               ) : (expenses as any[]).map((e: any) => {
                 const stageName = e.stage_id ? (stages.find((s: any) => s.id === e.stage_id)?.name ?? "—") : null;
                 return (
@@ -497,6 +611,16 @@ function DespesasModal({ construction, onClose }: { construction: any; onClose: 
                         ? <span className="inline-block px-2 py-0.5 rounded text-xs font-medium" style={{ background: 'rgba(167,139,250,0.1)', color: '#A78BFA', border: '1px solid rgba(167,139,250,0.3)' }}>{stageName}</span>
                         : <span style={{ color: '#4A5568', fontSize: 11 }}>—</span>}
                     </TableCell>
+                    <TableCell className="px-2">
+                      <div className="flex gap-1">
+                        <button onClick={() => openEditExp(e)} className="p-1 rounded" style={{ background: 'rgba(200,168,76,0.1)', color: '#C9A84C', border: '1px solid rgba(200,168,76,0.2)' }}>
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                        <button onClick={() => handleDeleteExp(e.id)} className="p-1 rounded" style={{ background: 'rgba(244,63,94,0.1)', color: '#F43F5E', border: '1px solid rgba(244,63,94,0.2)' }}>
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </TableCell>
                   </TableRow>
                 );
               })}
@@ -505,69 +629,29 @@ function DespesasModal({ construction, onClose }: { construction: any; onClose: 
           </div>
         </PremiumCard>
 
-        {/* Nova despesa inline */}
-        {addOpen ? (
-          <PremiumCard className="mt-2">
-            <p className="text-sm font-medium mb-3" style={{ color: '#C9A84C' }}>Nova Despesa</p>
-            <div className="space-y-3">
-              <div><Label style={{ color: '#94A3B8' }}>Data</Label><DatePicker value={expForm.expense_date} onChange={v => setExpForm(f => ({ ...f, expense_date: v }))} /></div>
-              <div><Label style={{ color: '#94A3B8' }}>Descrição</Label><Input value={expForm.description} onChange={e => setExpForm(f => ({ ...f, description: e.target.value }))} style={inputStyle} /></div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label style={{ color: '#94A3B8' }}>Categoria</Label>
-                  <Select value={expForm.category} onValueChange={v => setExpForm(f => ({ ...f, category: v }))}>
-                    <SelectTrigger style={inputStyle}><SelectValue /></SelectTrigger>
-                    <SelectContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
-                      {EXPENSE_CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label style={{ color: '#A78BFA' }}>Etapa (opcional)</Label>
-                  <Select value={expForm.stage_id} onValueChange={v => setExpForm(f => ({ ...f, stage_id: v }))}>
-                    <SelectTrigger style={{ ...inputStyle, borderColor: 'rgba(167,139,250,0.4)' }}><SelectValue placeholder="— Sem etapa —" /></SelectTrigger>
-                    <SelectContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
-                      <SelectItem value="">— Sem etapa —</SelectItem>
-                      {(stages as any[]).map((s: any) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div><Label style={{ color: '#94A3B8' }}>Valor Total (R$)</Label><Input type="number" value={expForm.total_amount} onChange={e => setExpForm(f => ({ ...f, total_amount: e.target.value }))} style={inputStyle} /></div>
-              <div>
-                <Label style={{ color: '#94A3B8' }}>Pago por</Label>
-                <Select value={expForm.paid_by} onValueChange={v => setExpForm(f => ({ ...f, paid_by: v }))}>
-                  <SelectTrigger style={inputStyle}><SelectValue /></SelectTrigger>
-                  <SelectContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
-                    <SelectItem value="william">William</SelectItem>
-                    <SelectItem value="socio">Sócio</SelectItem>
-                    <SelectItem value="ambos">Ambos</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label style={{ color: '#94A3B8' }}>Tipo</Label>
-                <Select value={expForm.payment_type} onValueChange={v => setExpForm(f => ({ ...f, payment_type: v }))}>
-                  <SelectTrigger style={inputStyle}><SelectValue /></SelectTrigger>
-                  <SelectContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
-                    <SelectItem value="avista">À vista</SelectItem>
-                    <SelectItem value="parcelado">Parcelado</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {expForm.payment_type === "parcelado" && (
-                <div className="grid grid-cols-2 gap-2">
-                  <div><Label style={{ color: '#94A3B8' }}>Total parcelas</Label><Input type="number" value={expForm.installments_total} onChange={e => setExpForm(f => ({ ...f, installments_total: e.target.value }))} style={inputStyle} /></div>
-                  <div><Label style={{ color: '#94A3B8' }}>Pagas</Label><Input type="number" value={expForm.installments_paid} onChange={e => setExpForm(f => ({ ...f, installments_paid: e.target.value }))} style={inputStyle} /></div>
-                </div>
-              )}
-              <div className="flex gap-2 pt-1">
-                <button onClick={() => { setAddOpen(false); setExpForm({ ...emptyExpForm }); }} className="px-4 py-2 rounded-lg text-sm" style={{ border: '1px solid #1A2535', color: '#94A3B8' }}>Cancelar</button>
-                <GoldButton onClick={handleCreate} disabled={createExpense.isPending}>Registrar</GoldButton>
-              </div>
+        {/* Editar despesa inline */}
+        {editExp && (
+          <PremiumCard className="mt-2" style={{ borderColor: 'rgba(200,168,76,0.3)' }}>
+            <p className="text-sm font-medium mb-3" style={{ color: '#C9A84C' }}>Editar Despesa</p>
+            <ExpenseForm expForm={expForm} setExpForm={setExpForm} stages={stages} />
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => { setEditExp(null); setExpForm({ ...emptyExpForm }); }} className="px-4 py-2 rounded-lg text-sm" style={{ border: '1px solid #1A2535', color: '#94A3B8' }}>Cancelar</button>
+              <GoldButton onClick={handleUpdate} disabled={updateExpense.isPending}>Salvar</GoldButton>
             </div>
           </PremiumCard>
-        ) : (
+        )}
+
+        {/* Nova despesa inline */}
+        {!editExp && addOpen ? (
+          <PremiumCard className="mt-2">
+            <p className="text-sm font-medium mb-3" style={{ color: '#C9A84C' }}>Nova Despesa</p>
+            <ExpenseForm expForm={expForm} setExpForm={setExpForm} stages={stages} />
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => { setAddOpen(false); setExpForm({ ...emptyExpForm }); }} className="px-4 py-2 rounded-lg text-sm" style={{ border: '1px solid #1A2535', color: '#94A3B8' }}>Cancelar</button>
+              <GoldButton onClick={handleCreate} disabled={createExpense.isPending}>Registrar</GoldButton>
+            </div>
+          </PremiumCard>
+        ) : !editExp && (
           <GoldButton className="mt-2" onClick={() => setAddOpen(true)}>
             <Plus className="w-4 h-4" />Nova Despesa
           </GoldButton>

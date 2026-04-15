@@ -145,6 +145,28 @@ export function useCreateConstructionExpense() {
   });
 }
 
+export function useUpdateConstructionExpense() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...updates }: any) => {
+      const { error } = await (supabase as any).from("construction_expenses").update(updates).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["construction_expenses"] }),
+  });
+}
+
+export function useDeleteConstructionExpense() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await (supabase as any).from("construction_expenses").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["construction_expenses"] }),
+  });
+}
+
 export function useUpdateProperty() {
   const qc = useQueryClient();
   return useMutation({
