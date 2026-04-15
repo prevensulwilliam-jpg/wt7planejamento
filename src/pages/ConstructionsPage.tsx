@@ -50,7 +50,7 @@ const DEFAULT_STAGES = [
 
 const EXPENSE_CATEGORIES = [
   "Terreno", "Terraplenagem", "Materiais", "Mão de Obra",
-  "Instalações", "Acabamento", "Taxas/Cartório", "Outros",
+  "Instalações", "Acabamento", "Taxas/Cartório", "Amortização", "Outros",
 ];
 
 const inputStyle = { background: '#080C10', border: '1px solid #1A2535', color: '#F0F4F8' };
@@ -366,6 +366,7 @@ const emptyForm = {
   total_budget: "",
   estimated_value_ready: "", ownership_pct: "100",
   partner_name: "", partner_pct: "", notes: "",
+  debt_to_partner: "", debt_partner_name: "", debt_target_date: "",
 };
 
 // ─── Construction Form Modal (nível de módulo — evita remount por re-render) ──
@@ -441,6 +442,25 @@ function ConstructionFormModal({ title, form, setF, assets, onSave, onClose, isP
             <div><Label style={{ color: '#94A3B8' }}>% William</Label><Input type="number" value={form.ownership_pct} onChange={e => setF("ownership_pct", e.target.value)} style={inputStyle} placeholder="100" /></div>
             <div><Label style={{ color: '#94A3B8' }}>Sócio</Label><Input value={form.partner_name} onChange={e => setF("partner_name", e.target.value)} style={inputStyle} placeholder="Nome" /></div>
             <div><Label style={{ color: '#94A3B8' }}>% Sócio</Label><Input type="number" value={form.partner_pct} onChange={e => setF("partner_pct", e.target.value)} style={inputStyle} placeholder="0" /></div>
+          </div>
+
+          {/* Dívida com sócio */}
+          <div className="rounded-lg p-3 space-y-3" style={{ background: 'rgba(244,63,94,0.04)', border: '1px solid rgba(244,63,94,0.15)' }}>
+            <p className="text-xs font-semibold" style={{ color: '#F87171' }}>Dívida com sócio (opcional)</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label style={{ color: '#94A3B8' }}>Valor da dívida (R$)</Label>
+                <Input type="number" value={form.debt_to_partner} onChange={e => setF("debt_to_partner", e.target.value)} style={{ ...inputStyle, borderColor: 'rgba(244,63,94,0.3)' }} placeholder="ex: 85.000,00" />
+              </div>
+              <div>
+                <Label style={{ color: '#94A3B8' }}>Credor</Label>
+                <Input value={form.debt_partner_name} onChange={e => setF("debt_partner_name", e.target.value)} style={inputStyle} placeholder="ex: Jairo" />
+              </div>
+            </div>
+            <div>
+              <Label style={{ color: '#94A3B8' }}>Meta de quitação</Label>
+              <DatePicker value={form.debt_target_date} onChange={v => setF("debt_target_date", v)} placeholder="Data limite" />
+            </div>
           </div>
 
           <div>
@@ -683,6 +703,47 @@ function DespesasView({ construction, onClose }: { construction: any; onClose: (
         </h1>
       </div>
 
+      {/* Card de dívida com sócio */}
+      {(construction.debt_to_partner ?? 0) > 0 && (() => {
+        const debtOrig  = construction.debt_to_partner as number;
+        const pago      = (expenses as any[])
+          .filter((e: any) => e.category === "Amortização")
+          .reduce((s: number, e: any) => s + (e.william_amount ?? 0), 0);
+        const saldo     = Math.max(debtOrig - pago, 0);
+        const pct       = debtOrig > 0 ? Math.min((pago / debtOrig) * 100, 100) : 0;
+        const creditor  = construction.debt_partner_name ?? "Sócio";
+        const targetStr = construction.debt_target_date ? formatDate(construction.debt_target_date) : null;
+        return (
+          <div className="rounded-xl px-4 py-3" style={{ background: 'rgba(244,63,94,0.05)', border: '1px solid rgba(244,63,94,0.2)' }}>
+            <div className="flex items-center justify-between mb-2 gap-4 flex-wrap">
+              <p className="font-semibold text-sm" style={{ color: '#F87171' }}>Dívida com {creditor}</p>
+              {targetStr && <span className="text-xs" style={{ color: '#64748B' }}>Meta de quitação: <span style={{ color: '#94A3B8' }}>{targetStr}</span></span>}
+            </div>
+            <div className="grid grid-cols-3 gap-4 mb-3">
+              <div>
+                <p className="text-xs mb-0.5" style={{ color: '#64748B' }}>ORIGINAL</p>
+                <p className="font-mono font-bold text-sm" style={{ color: '#F87171' }}>{formatCurrency(debtOrig)}</p>
+              </div>
+              <div>
+                <p className="text-xs mb-0.5" style={{ color: '#64748B' }}>AMORTIZADO</p>
+                <p className="font-mono font-bold text-sm" style={{ color: '#10B981' }}>{formatCurrency(pago)}</p>
+                <p className="text-xs" style={{ color: '#64748B' }}>via cat. Amortização</p>
+              </div>
+              <div>
+                <p className="text-xs mb-0.5" style={{ color: '#64748B' }}>SALDO DEVEDOR</p>
+                <p className="font-mono font-bold text-sm" style={{ color: saldo === 0 ? '#10B981' : '#E8C97A' }}>{formatCurrency(saldo)}</p>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <div style={{ height: 6, background: '#1A2535', borderRadius: 99, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${pct}%`, background: '#10B981', borderRadius: 99, transition: 'width 0.3s' }} />
+              </div>
+              <p className="text-right text-xs" style={{ color: '#64748B' }}>{pct.toFixed(1)}% quitado</p>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* KPIs */}
       <div className={`grid gap-3 ${budgetPct !== null ? 'grid-cols-4' : 'grid-cols-3'}`}>
           <KpiCard label="Total Investido" value={expKPIs.total} color="gold" />
@@ -832,6 +893,9 @@ export default function ConstructionsPage() {
       partner_name:           form.partner_name || null,
       partner_pct:            form.partner_pct ? parseFloat(form.partner_pct) : null,
       notes:                  form.notes || null,
+      debt_to_partner:        form.debt_to_partner ? parseFloat(form.debt_to_partner) : null,
+      debt_partner_name:      form.debt_partner_name || null,
+      debt_target_date:       form.debt_target_date || null,
     };
     try {
       if (editItem) {
@@ -863,6 +927,9 @@ export default function ConstructionsPage() {
       partner_name:           c.partner_name ?? "",
       partner_pct:            String(c.partner_pct ?? ""),
       notes:                  c.notes ?? "",
+      debt_to_partner:        String(c.debt_to_partner ?? ""),
+      debt_partner_name:      c.debt_partner_name ?? "",
+      debt_target_date:       c.debt_target_date ?? "",
     });
     setEditItem(c);
   };
@@ -972,6 +1039,44 @@ export default function ConstructionsPage() {
               <p className="text-right mt-1" style={{ fontSize: 10, color: '#94A3B8' }}>
                 {pct.toFixed(1)}% consumido{remaining > 0 ? ` · ${formatCurrency(remaining)} restante` : ''}
               </p>
+            </div>
+          );
+        })()}
+
+        {/* Dívida com sócio */}
+        {(c.debt_to_partner ?? 0) > 0 && (() => {
+          const debtOrig  = c.debt_to_partner as number;
+          const pago      = (allExpenses as any[])
+            .filter((e: any) => e.construction_id === c.id && e.category === "Amortização")
+            .reduce((s: number, e: any) => s + (e.william_amount ?? 0), 0);
+          const saldo     = Math.max(debtOrig - pago, 0);
+          const pct       = debtOrig > 0 ? Math.min((pago / debtOrig) * 100, 100) : 0;
+          const creditor  = c.debt_partner_name ?? "Sócio";
+          const targetStr = c.debt_target_date ? formatDate(c.debt_target_date) : null;
+          return (
+            <div className="rounded-lg px-3 py-2 space-y-1.5" style={{ background: 'rgba(244,63,94,0.05)', border: '1px solid rgba(244,63,94,0.2)' }}>
+              <div className="flex justify-between items-baseline">
+                <span className="text-xs font-semibold" style={{ color: '#F87171' }}>Dívida com {creditor}</span>
+                {targetStr && <span className="text-xs" style={{ color: '#64748B' }}>Meta: {targetStr}</span>}
+              </div>
+              <div className="flex justify-between text-xs">
+                <span style={{ color: '#64748B' }}>Original</span>
+                <span className="font-mono" style={{ color: '#F87171' }}>{formatCurrency(debtOrig)}</span>
+              </div>
+              {pago > 0 && (
+                <div className="flex justify-between text-xs">
+                  <span style={{ color: '#64748B' }}>Amortizado</span>
+                  <span className="font-mono" style={{ color: '#10B981' }}>{formatCurrency(pago)}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-xs font-bold">
+                <span style={{ color: '#94A3B8' }}>Saldo devedor</span>
+                <span className="font-mono" style={{ color: saldo === 0 ? '#10B981' : '#E8C97A' }}>{formatCurrency(saldo)}</span>
+              </div>
+              <div style={{ height: 4, background: '#1A2535', borderRadius: 99, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${pct}%`, background: '#10B981', borderRadius: 99 }} />
+              </div>
+              <p className="text-right" style={{ fontSize: 10, color: '#64748B' }}>{pct.toFixed(1)}% quitado</p>
             </div>
           );
         })()}
