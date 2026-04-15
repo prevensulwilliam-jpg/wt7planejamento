@@ -364,7 +364,8 @@ function StagesModal({ construction, onClose }: { construction: any; onClose: ()
 const emptyForm = {
   asset_id: "", name: "", status: "planejada",
   start_date: "", estimated_completion: "", end_date: "",
-  total_units_planned: "", estimated_rent_per_unit: "",
+  total_units_planned: "", total_units_built: "", total_units_rented: "",
+  estimated_rent_per_unit: "",
   total_budget: "",
   estimated_value_ready: "", ownership_pct: "100",
   partner_name: "", partner_pct: "", notes: "",
@@ -425,9 +426,14 @@ function ConstructionFormModal({ title, form, setF, assets, onSave, onClose, isP
             <div><Label style={{ color: '#94A3B8' }}>Conclusão real</Label><DatePicker value={form.end_date} onChange={v => setF("end_date", v)} placeholder="Concluído em" /></div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div><Label style={{ color: '#94A3B8' }}>Kitnets/Unidades</Label><Input type="number" value={form.total_units_planned} onChange={e => setF("total_units_planned", e.target.value)} style={inputStyle} placeholder="0" /></div>
-            <div><Label style={{ color: '#94A3B8' }}>Aluguel projetado/unidade</Label><Input type="number" value={form.estimated_rent_per_unit} onChange={e => setF("estimated_rent_per_unit", e.target.value)} style={inputStyle} placeholder="0,00" /></div>
+          <div className="grid grid-cols-3 gap-2">
+            <div><Label style={{ color: '#94A3B8' }}>Total planejadas</Label><Input type="number" value={form.total_units_planned} onChange={e => setF("total_units_planned", e.target.value)} style={inputStyle} placeholder="0" /></div>
+            <div><Label style={{ color: '#2DD4BF' }}>Construídas</Label><Input type="number" value={form.total_units_built} onChange={e => setF("total_units_built", e.target.value)} style={{ ...inputStyle, borderColor: 'rgba(45,212,191,0.3)' }} placeholder="0" /></div>
+            <div><Label style={{ color: '#E8C97A' }}>Alugadas</Label><Input type="number" value={form.total_units_rented} onChange={e => setF("total_units_rented", e.target.value)} style={{ ...inputStyle, borderColor: 'rgba(232,201,122,0.3)' }} placeholder="0" /></div>
+          </div>
+          <div>
+            <Label style={{ color: '#94A3B8' }}>Aluguel projetado/unidade</Label>
+            <Input type="number" value={form.estimated_rent_per_unit} onChange={e => setF("estimated_rent_per_unit", e.target.value)} style={inputStyle} placeholder="0,00" />
           </div>
 
           <div>
@@ -1246,6 +1252,8 @@ export default function ConstructionsPage() {
       estimated_completion:   form.estimated_completion || null,
       end_date:               form.end_date || null,
       total_units_planned:    parseInt(form.total_units_planned) || 0,
+      total_units_built:      parseInt(form.total_units_built) || 0,
+      total_units_rented:     parseInt(form.total_units_rented) || 0,
       estimated_rent_per_unit: parseFloat(form.estimated_rent_per_unit) || 0,
       total_budget:           form.total_budget ? parseFloat(form.total_budget) : null,
       estimated_value_ready:  form.estimated_value_ready ? parseFloat(form.estimated_value_ready) : null,
@@ -1280,6 +1288,8 @@ export default function ConstructionsPage() {
       estimated_completion:   c.estimated_completion ?? "",
       end_date:               c.end_date ?? "",
       total_units_planned:    String(c.total_units_planned ?? ""),
+      total_units_built:      String(c.total_units_built ?? ""),
+      total_units_rented:     String(c.total_units_rented ?? ""),
       estimated_rent_per_unit: String(c.estimated_rent_per_unit ?? ""),
       total_budget:           String(c.total_budget ?? ""),
       estimated_value_ready:  String(c.estimated_value_ready ?? ""),
