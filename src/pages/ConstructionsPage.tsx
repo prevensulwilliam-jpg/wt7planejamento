@@ -411,7 +411,7 @@ function ExpenseForm({ expForm, setExpForm, stages }: { expForm: any; setExpForm
           <Select value={expForm.stage_id} onValueChange={v => setExpForm(f => ({ ...f, stage_id: v }))}>
             <SelectTrigger style={{ ...inputStyle, borderColor: 'rgba(167,139,250,0.4)' }}><SelectValue placeholder="— Sem etapa —" /></SelectTrigger>
             <SelectContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
-              <SelectItem value="">— Sem etapa —</SelectItem>
+              <SelectItem value="none">— Sem etapa —</SelectItem>
               {stages.map((s: any) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
             </SelectContent>
           </Select>
