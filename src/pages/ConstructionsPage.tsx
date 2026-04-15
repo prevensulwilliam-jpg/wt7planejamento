@@ -286,11 +286,11 @@ function StagesModal({ construction, onClose }: { construction: any; onClose: ()
               return (
                 <div
                   key={s.id}
-                  draggable
+                  draggable={editStage?.id !== s.id && addOpen === false}
                   onDragStart={e => onDragStart(e, s.id)}
                   onDragOver={e => onDragOver(e, s.id)}
                   onDragEnd={onDragEnd}
-                  style={{ opacity: draggingId === s.id ? 0.4 : 1, transition: 'opacity 0.15s', cursor: 'grab' }}
+                  style={{ opacity: draggingId === s.id ? 0.4 : 1, transition: 'opacity 0.15s', cursor: editStage?.id === s.id ? 'default' : 'grab' }}
                 >
                 <PremiumCard className="p-3">
                   <div className="flex items-start justify-between gap-2">
