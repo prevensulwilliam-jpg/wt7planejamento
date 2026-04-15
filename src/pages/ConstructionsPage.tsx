@@ -378,7 +378,7 @@ function DespesasModal({ construction, onClose }: { construction: any; onClose: 
     const wPct  = (construction.ownership_pct ?? 100) / 100;
     try {
       await createExpense.mutateAsync({
-        property_id:        construction.id,
+        property_id:        null,               // legado — não usar para novas construções
         construction_id:    construction.id,
         property_code:      construction.name ?? null,
         description:        expForm.description,
