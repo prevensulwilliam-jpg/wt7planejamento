@@ -467,7 +467,8 @@ function DespesasView({ construction, onClose }: { construction: any; onClose: (
   const [addOpen, setAddOpen]   = useState(false);
   const [editExp, setEditExp]   = useState<any>(null);
   const [expForm, setExpForm]   = useState({ ...emptyExpForm });
-  const [dateSort, setDateSort] = useState<"desc" | "asc">("desc");
+  const [sortCol, setSortCol]   = useState<string>("expense_date");
+  const [sortDir, setSortDir]   = useState<"desc" | "asc">("desc");
 
   const totalBudget = construction.total_budget ?? 0;
   const expKPIs = {
@@ -477,11 +478,46 @@ function DespesasView({ construction, onClose }: { construction: any; onClose: (
   };
   const budgetPct = totalBudget > 0 ? (expKPIs.total / totalBudget) * 100 : null;
 
+  // mapa stageId → order_index para ordenar por ordem de etapa
+  const stageOrder: Record<string, number> = {};
+  (stages as any[]).forEach((s: any) => { stageOrder[s.id] = s.order_index ?? 0; });
+
+  const TYPE_ORDER: Record<string, number> = { avista: 0, parcelado: 1 };
+
+  const toggleSort = (col: string) => {
+    if (sortCol === col) setSortDir(d => d === "desc" ? "asc" : "desc");
+    else { setSortCol(col); setSortDir("asc"); }
+  };
+
   const sortedExpenses = [...(expenses as any[])].sort((a, b) => {
-    const da = a.expense_date ?? "";
-    const db = b.expense_date ?? "";
-    return dateSort === "desc" ? db.localeCompare(da) : da.localeCompare(db);
+    let va: any, vb: any;
+    switch (sortCol) {
+      case "expense_date":  va = a.expense_date ?? ""; vb = b.expense_date ?? ""; break;
+      case "category":      va = a.category ?? "";     vb = b.category ?? "";     break;
+      case "total_amount":  va = a.total_amount ?? 0;  vb = b.total_amount ?? 0;  break;
+      case "william_amount":va = a.william_amount ?? 0;vb = b.william_amount ?? 0;break;
+      case "partner_amount":va = a.partner_amount ?? 0;vb = b.partner_amount ?? 0;break;
+      case "payment_type":  va = TYPE_ORDER[a.payment_type] ?? 99; vb = TYPE_ORDER[b.payment_type] ?? 99; break;
+      case "stage_order":   va = a.stage_id ? (stageOrder[a.stage_id] ?? 999) : 999;
+                            vb = b.stage_id ? (stageOrder[b.stage_id] ?? 999) : 999; break;
+      default: va = ""; vb = "";
+    }
+    const cmp = typeof va === "number" ? va - vb : String(va).localeCompare(String(vb));
+    return sortDir === "asc" ? cmp : -cmp;
   });
+
+  const SortBtn = ({ col, label, style: extraStyle }: { col: string; label: string; style?: React.CSSProperties }) => (
+    <button
+      onClick={() => toggleSort(col)}
+      className="flex items-center gap-1 text-xs font-medium whitespace-nowrap"
+      style={{ color: sortCol === col ? '#E8C97A' : '#94A3B8', ...extraStyle }}
+    >
+      {label}
+      <span style={{ fontSize: 10, opacity: sortCol === col ? 1 : 0.4 }}>
+        {sortCol === col ? (sortDir === "asc" ? "↑" : "↓") : "↕"}
+      </span>
+    </button>
+  );
 
   const handleCreate = async () => {
     if (!expForm.description || !expForm.total_amount) return;
@@ -599,20 +635,14 @@ function DespesasView({ construction, onClose }: { construction: any; onClose: (
           <Table className="text-xs">
             <TableHeader>
               <TableRow style={{ borderColor: '#1A2535' }}>
-                <TableHead className="whitespace-nowrap px-2">
-                  <button
-                    onClick={() => setDateSort(d => d === "desc" ? "asc" : "desc")}
-                    className="flex items-center gap-1 text-xs font-medium"
-                    style={{ color: '#94A3B8' }}
-                  >
-                    Data
-                    <span style={{ fontSize: 10, opacity: 0.7 }}>{dateSort === "desc" ? "↓" : "↑"}</span>
-                  </button>
-                </TableHead>
-                {["Descrição","Cat.","Total","William","Sócio","Tipo"].map(h => (
-                  <TableHead key={h} className="whitespace-nowrap px-2" style={{ color: '#94A3B8' }}>{h}</TableHead>
-                ))}
-                <TableHead className="whitespace-nowrap px-2" style={{ color: '#A78BFA' }}>Etapa</TableHead>
+                <TableHead className="px-2"><SortBtn col="expense_date"   label="Data" /></TableHead>
+                <TableHead className="px-2"><SortBtn col="stage_order"    label="Descrição" /></TableHead>
+                <TableHead className="px-2"><SortBtn col="category"       label="Cat." /></TableHead>
+                <TableHead className="px-2"><SortBtn col="total_amount"   label="Total" /></TableHead>
+                <TableHead className="px-2"><SortBtn col="william_amount" label="William" /></TableHead>
+                <TableHead className="px-2"><SortBtn col="partner_amount" label="Sócio" /></TableHead>
+                <TableHead className="px-2"><SortBtn col="payment_type"   label="Tipo" /></TableHead>
+                <TableHead className="px-2"><SortBtn col="stage_order"    label="Etapa" style={{ color: sortCol === 'stage_order' ? '#E8C97A' : '#A78BFA' }} /></TableHead>
                 <TableHead className="px-2" />
               </TableRow>
             </TableHeader>
