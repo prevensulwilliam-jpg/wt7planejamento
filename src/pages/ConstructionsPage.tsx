@@ -21,6 +21,7 @@ import {
 } from "@/hooks/useConstructions";
 import { useAssets } from "@/hooks/useFinances";
 import { supabase } from "@/integrations/supabase/client";
+import * as XLSX from "xlsx";
 import { formatCurrency, formatDate } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -896,10 +897,23 @@ function ImportPdfModal({ construction, onClose }: { construction: any; onClose:
     setFileName(file.name);
     setStep("parsing");
     try {
-      const fileBase64 = await fileToBase64(file);
-      const { data, error } = await supabase.functions.invoke("wisely-ai", {
-        body: { action: "extract-construction-pdf", pdfBase64: fileBase64, isXlsx },
-      });
+      let body: Record<string, unknown>;
+
+      if (isXlsx) {
+        // Parse XLSX client-side → envia como texto para o Gemini
+        const ab = await file.arrayBuffer();
+        const wb = XLSX.read(ab, { type: "array" });
+        const csvParts: string[] = wb.SheetNames.map(sheetName => {
+          const csv = XLSX.utils.sheet_to_csv(wb.Sheets[sheetName]);
+          return `=== Aba: ${sheetName} ===\n${csv}`;
+        });
+        body = { action: "extract-construction-xlsx", xlsxText: csvParts.join("\n\n") };
+      } else {
+        const fileBase64 = await fileToBase64(file);
+        body = { action: "extract-construction-pdf", pdfBase64: fileBase64 };
+      }
+
+      const { data, error } = await supabase.functions.invoke("wisely-ai", { body });
       if (error || !data?.ok) throw new Error(error?.message ?? "Erro na extração");
       setExpenses((data.expenses as any[]).map((e: any) => ({ ...e, checked: !e.is_future })));
       setStages((data.stages as any[]).map((s: any) => ({ ...s, checked: true })));

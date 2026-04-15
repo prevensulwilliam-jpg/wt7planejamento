@@ -190,6 +190,46 @@ serve(async (req) => {
       });
     }
 
+    // ── Modo extração XLSX de obra (texto CSV) ──
+    if (body_req.action === "extract-construction-xlsx") {
+      const { xlsxText } = body_req as any;
+      const today = new Date().toISOString().slice(0, 10);
+
+      const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          max_tokens: 2500,
+          messages: [
+            { role: "system", content: CONSTRUCTION_EXTRACT_PROMPT(today) },
+            { role: "user", content: `Planilha de custos (CSV extraído):\n\n${xlsxText}` },
+          ],
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.text();
+        return new Response(JSON.stringify({ error: "Erro no gateway", detail: err }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const data = await res.json();
+      const rawText = data.choices?.[0]?.message?.content ?? "";
+      let extracted: Record<string, unknown> = {};
+      try {
+        extracted = JSON.parse(rawText.trim());
+      } catch {
+        const m = rawText.match(/\{[\s\S]*\}/);
+        if (m) extracted = JSON.parse(m[0]);
+      }
+
+      return new Response(JSON.stringify({ ok: true, expenses: extracted.expenses ?? [], stages: extracted.stages ?? [] }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // ── Modo extração CELESC ──
     if (body_req.action === "extract-celesc") {
       const { imageBase64, mediaType } = body_req;
