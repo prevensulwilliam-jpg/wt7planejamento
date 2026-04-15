@@ -192,7 +192,7 @@ function KitnetsTab({ month }: { month: string }) {
     <div className="space-y-6 mt-4">
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard label="Total Recebido" value={summary.totalReceived} color="gold" compact />
+        <KpiCard label="Total Recebido" value={summary.totalReceived} color="gold" />
         <div className="rounded-2xl p-4 space-y-1" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
           <p className="text-xs uppercase font-mono tracking-widest" style={{ color: '#94A3B8' }}>Ocupadas</p>
           <p className="font-mono text-2xl font-bold" style={{ color: '#10B981' }}>
