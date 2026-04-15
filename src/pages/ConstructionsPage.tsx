@@ -401,7 +401,7 @@ function DespesasModal({ construction, onClose }: { construction: any; onClose: 
 
   return (
     <Dialog open onOpenChange={o => !o && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
         <DialogHeader>
           <DialogTitle style={{ color: '#F0F4F8' }}>Despesas — {construction.name}</DialogTitle>
         </DialogHeader>
@@ -414,12 +414,13 @@ function DespesasModal({ construction, onClose }: { construction: any; onClose: 
         </div>
 
         {/* Tabela */}
-        <PremiumCard>
-          <Table>
+        <PremiumCard className="overflow-hidden">
+          <div className="overflow-x-auto">
+          <Table className="text-xs">
             <TableHeader>
               <TableRow style={{ borderColor: '#1A2535' }}>
-                {["Data","Descrição","Categoria","Total","William","Sócio","Tipo"].map(h => (
-                  <TableHead key={h} style={{ color: '#94A3B8' }}>{h}</TableHead>
+                {["Data","Descrição","Cat.","Total","William","Sócio","Tipo"].map(h => (
+                  <TableHead key={h} className="whitespace-nowrap px-2" style={{ color: '#94A3B8' }}>{h}</TableHead>
                 ))}
               </TableRow>
             </TableHeader>
@@ -428,13 +429,13 @@ function DespesasModal({ construction, onClose }: { construction: any; onClose: 
                 <TableRow><TableCell colSpan={7} className="text-center py-8" style={{ color: '#94A3B8' }}>Nenhuma despesa registrada</TableCell></TableRow>
               ) : (expenses as any[]).map((e: any) => (
                 <TableRow key={e.id} style={{ borderColor: '#1A2535' }}>
-                  <TableCell style={{ color: '#CBD5E1' }}>{e.expense_date ? formatDate(e.expense_date) : "—"}</TableCell>
-                  <TableCell style={{ color: '#F0F4F8' }}>{e.description}</TableCell>
-                  <TableCell><WtBadge variant="cyan">{e.category}</WtBadge></TableCell>
-                  <TableCell className="font-mono" style={{ color: '#E8C97A' }}>{formatCurrency(e.total_amount ?? 0)}</TableCell>
-                  <TableCell className="font-mono" style={{ color: '#2DD4BF' }}>{formatCurrency(e.william_amount ?? 0)}</TableCell>
-                  <TableCell className="font-mono" style={{ color: '#10B981' }}>{formatCurrency(e.partner_amount ?? 0)}</TableCell>
-                  <TableCell>
+                  <TableCell className="whitespace-nowrap px-2" style={{ color: '#CBD5E1' }}>{e.expense_date ? formatDate(e.expense_date) : "—"}</TableCell>
+                  <TableCell className="px-2 max-w-[140px] truncate" style={{ color: '#F0F4F8' }}>{e.description}</TableCell>
+                  <TableCell className="px-2"><WtBadge variant="cyan">{e.category}</WtBadge></TableCell>
+                  <TableCell className="font-mono whitespace-nowrap px-2" style={{ color: '#E8C97A' }}>{formatCurrency(e.total_amount ?? 0)}</TableCell>
+                  <TableCell className="font-mono whitespace-nowrap px-2" style={{ color: '#2DD4BF' }}>{formatCurrency(e.william_amount ?? 0)}</TableCell>
+                  <TableCell className="font-mono whitespace-nowrap px-2" style={{ color: '#10B981' }}>{formatCurrency(e.partner_amount ?? 0)}</TableCell>
+                  <TableCell className="px-2">
                     <WtBadge variant={e.payment_type === "parcelado" ? "gold" : "gray"}>
                       {e.payment_type === "parcelado" ? `${e.installments_paid}/${e.installments_total}x` : "À vista"}
                     </WtBadge>
@@ -443,6 +444,7 @@ function DespesasModal({ construction, onClose }: { construction: any; onClose: 
               ))}
             </TableBody>
           </Table>
+          </div>
         </PremiumCard>
 
         {/* Nova despesa inline */}
