@@ -69,6 +69,64 @@ function assetAddress(asset: any) {
   return parts.length > 0 ? parts.join(", ") : null;
 }
 
+// ─── Stage Form (nível de módulo — evita remount) ────────────────────────────
+
+type StageFormData = { name: string; status: string; pct_complete: number; start_date: string; end_date: string; notes: string };
+
+function StageForm({ form, setForm, onSave, onCancel, isPending }: {
+  form: StageFormData;
+  setForm: (f: StageFormData) => void;
+  onSave: () => void;
+  onCancel: () => void;
+  isPending: boolean;
+}) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <Label style={{ color: '#94A3B8' }}>Nome</Label>
+        <div className="flex gap-2">
+          <Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} style={inputStyle} placeholder="ex: Fundação" />
+          <Select value={form.name} onValueChange={v => setForm({ ...form, name: v })}>
+            <SelectTrigger className="w-40" style={inputStyle}><SelectValue placeholder="Sugestão" /></SelectTrigger>
+            <SelectContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+              {DEFAULT_STAGES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label style={{ color: '#94A3B8' }}>Status</Label>
+          <Select value={form.status} onValueChange={v => setForm({ ...form, status: v })}>
+            <SelectTrigger style={inputStyle}><SelectValue /></SelectTrigger>
+            <SelectContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+              {Object.entries(STAGE_STATUS_MAP).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label style={{ color: '#94A3B8' }}>Conclusão: {Math.round(form.pct_complete)}%</Label>
+          <div className="pt-3">
+            <Slider min={0} max={100} step={5} value={[form.pct_complete]} onValueChange={([v]) => setForm({ ...form, pct_complete: v })} />
+          </div>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div><Label style={{ color: '#94A3B8' }}>Início</Label><DatePicker value={form.start_date} onChange={v => setForm({ ...form, start_date: v })} placeholder="Data início" /></div>
+        <div><Label style={{ color: '#94A3B8' }}>Fim</Label><DatePicker value={form.end_date} onChange={v => setForm({ ...form, end_date: v })} placeholder="Data fim" /></div>
+      </div>
+      <div>
+        <Label style={{ color: '#94A3B8' }}>Observações</Label>
+        <Textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} style={inputStyle} rows={2} />
+      </div>
+      <div className="flex gap-2 justify-end">
+        <button onClick={onCancel} className="px-4 py-2 rounded-lg text-sm" style={{ border: '1px solid #1A2535', color: '#94A3B8' }}>Cancelar</button>
+        <GoldButton onClick={onSave} disabled={isPending}>Salvar</GoldButton>
+      </div>
+    </div>
+  );
+}
+
 // ─── Stages Modal ─────────────────────────────────────────────────────────────
 
 function StagesModal({ construction, onClose }: { construction: any; onClose: () => void }) {
@@ -122,56 +180,6 @@ function StagesModal({ construction, onClose }: { construction: any; onClose: ()
 
   const overallPct = stages.length > 0 ? stages.reduce((acc, s) => acc + (s.pct_complete ?? 0), 0) / stages.length : 0;
 
-  const StageForm = ({ onSave, onCancel, isPending }: { onSave: () => void; onCancel: () => void; isPending: boolean }) => (
-    <div className="space-y-3">
-      <div>
-        <Label style={{ color: '#94A3B8' }}>Nome</Label>
-        <div className="flex gap-2">
-          <Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} style={inputStyle} placeholder="ex: Fundação" />
-          <Select value={form.name} onValueChange={v => setForm({ ...form, name: v })}>
-            <SelectTrigger className="w-40" style={inputStyle}><SelectValue placeholder="Sugestão" /></SelectTrigger>
-            <SelectContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
-              {DEFAULT_STAGES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <Label style={{ color: '#94A3B8' }}>Status</Label>
-          <Select value={form.status} onValueChange={v => setForm({ ...form, status: v })}>
-            <SelectTrigger style={inputStyle}><SelectValue /></SelectTrigger>
-            <SelectContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
-              {Object.entries(STAGE_STATUS_MAP).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label style={{ color: '#94A3B8' }}>Conclusão: {Math.round(form.pct_complete)}%</Label>
-          <div className="pt-3">
-            <Slider
-              min={0} max={100} step={5}
-              value={[form.pct_complete]}
-              onValueChange={([v]) => setForm({ ...form, pct_complete: v })}
-            />
-          </div>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div><Label style={{ color: '#94A3B8' }}>Início</Label><DatePicker value={form.start_date} onChange={v => setForm({ ...form, start_date: v })} placeholder="Data início" /></div>
-        <div><Label style={{ color: '#94A3B8' }}>Fim</Label><DatePicker value={form.end_date} onChange={v => setForm({ ...form, end_date: v })} placeholder="Data fim" /></div>
-      </div>
-      <div>
-        <Label style={{ color: '#94A3B8' }}>Observações</Label>
-        <Textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} style={inputStyle} rows={2} />
-      </div>
-      <div className="flex gap-2 justify-end">
-        <button onClick={onCancel} className="px-4 py-2 rounded-lg text-sm" style={{ border: '1px solid #1A2535', color: '#94A3B8' }}>Cancelar</button>
-        <GoldButton onClick={onSave} disabled={isPending}>Salvar</GoldButton>
-      </div>
-    </div>
-  );
-
   return (
     <Dialog open onOpenChange={o => !o && onClose()}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
@@ -224,7 +232,7 @@ function StagesModal({ construction, onClose }: { construction: any; onClose: ()
                   </div>
                   {editStage?.id === s.id && (
                     <div className="mt-3 pt-3" style={{ borderTop: '1px solid #1A2535' }}>
-                      <StageForm onSave={handleEdit} onCancel={() => { setEditStage(null); resetForm(); }} isPending={updateStage.isPending} />
+                      <StageForm form={form} setForm={setForm} onSave={handleEdit} onCancel={() => { setEditStage(null); resetForm(); }} isPending={updateStage.isPending} />
                     </div>
                   )}
                 </PremiumCard>
@@ -237,7 +245,7 @@ function StagesModal({ construction, onClose }: { construction: any; onClose: ()
         {addOpen ? (
           <PremiumCard className="p-3">
             <p className="text-sm font-medium mb-3" style={{ color: '#C9A84C' }}>Nova etapa</p>
-            <StageForm onSave={handleAdd} onCancel={() => { setAddOpen(false); resetForm(); }} isPending={createStage.isPending} />
+            <StageForm form={form} setForm={setForm} onSave={handleAdd} onCancel={() => { setAddOpen(false); resetForm(); }} isPending={createStage.isPending} />
           </PremiumCard>
         ) : (
           <GoldButton className="w-full" onClick={() => setAddOpen(true)}>
