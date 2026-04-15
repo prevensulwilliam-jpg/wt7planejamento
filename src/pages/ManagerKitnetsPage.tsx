@@ -176,8 +176,8 @@ function KitnetsTab({ month }: { month: string }) {
   const { data: rawAlerts } = useKitnetAlertsForMonth(month);
   const [selected, setSelected] = useState<Tables<"kitnets"> | null>(null);
 
-  const alertsMap = (rawAlerts ?? []).reduce<Record<string, number>>((acc, a: any) => {
-    acc[a.kitnet_id] = (acc[a.kitnet_id] ?? 0) + a.pending_amount;
+  const alertsMap = (rawAlerts ?? []).reduce<Record<string, import("@/components/wt7/KitnetGrid").AlertInfo>>((acc, a: any) => {
+    acc[a.kitnet_id] = { id: a.id, amount: a.pending_amount, confirmed: a.confirmed ?? null, source_month: a.source_month };
     return acc;
   }, {});
 

@@ -570,6 +570,23 @@ export function useResolveKitnetAlert() {
   });
 }
 
+export function useConfirmAlert() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, confirmed }: { id: string; confirmed: boolean }) => {
+      const { error } = await (supabase as any)
+        .from("kitnet_alerts")
+        .update({ confirmed })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["kitnet_alerts"] });
+      qc.invalidateQueries({ queryKey: ["kitnet_alerts_month"] });
+    },
+  });
+}
+
 // Busca alertas de saldo pendente para exibir na tabela de lançamentos (por mês)
 export function useKitnetAlertsForMonth(month: string) {
   return useQuery({

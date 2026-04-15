@@ -182,8 +182,8 @@ function OverviewTab({ month, setMonth, isLocked }: { month: string; setMonth: (
   const { data: monthDataMap } = useKitnetMonthDataMap(month);
   // Alertas de saldo pendente para o mês atual → mapa kitnet_id → pending_amount
   const { data: rawAlerts } = useKitnetAlertsForMonth(month);
-  const alertsMap = (rawAlerts ?? []).reduce<Record<string, number>>((acc, a) => {
-    acc[a.kitnet_id] = (acc[a.kitnet_id] ?? 0) + a.pending_amount;
+  const alertsMap = (rawAlerts ?? []).reduce<Record<string, import("@/components/wt7/KitnetGrid").AlertInfo>>((acc, a) => {
+    acc[a.kitnet_id] = { id: a.id, amount: a.pending_amount, confirmed: (a as any).confirmed ?? null, source_month: a.source_month };
     return acc;
   }, {});
   const rwt02 = (kitnets ?? []).filter(k => k.residencial_code === "RWT02");
