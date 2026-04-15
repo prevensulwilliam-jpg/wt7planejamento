@@ -621,7 +621,7 @@ export default function AssetsPage() {
 
       {/* ─── CONFIRM DELETE ─── */}
       {delAsset  && <ConfirmDelete name={delAsset.name  ?? ""} onConfirm={handleDeleteAsset} onCancel={() => setDelAsset(null)}  />}
-      {delInv    && <ConfirmDelete name={delInv.name    ?? ""} onConfirm={handleDeleteInv}   onCancel={() => setDelInv(null)}    />}
+      {delInv    && <ConfirmDelete name={delInv.name || delInv.type || "investimento"} onConfirm={handleDeleteInv}   onCancel={() => setDelInv(null)}    />}
       {delCons   && <ConfirmDelete name={delCons.name   ?? ""} onConfirm={handleDeleteCons}  onCancel={() => setDelCons(null)}   />}
     </div>
   );
