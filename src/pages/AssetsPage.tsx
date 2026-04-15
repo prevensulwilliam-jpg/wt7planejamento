@@ -41,7 +41,7 @@ function ConfirmDelete({ name, onConfirm, onCancel }: { name: string; onConfirm:
 
 const inputStyle = { background: '#080C10', border: '1px solid #1A2535', color: '#F0F4F8' };
 const ASSET_TYPES = ["imovel","terreno","veiculo","aplicacao","consorcio","outros"];
-const INV_TYPES   = ["RDC","CDB","LCI","LCA","Tesouro Direto","FII","Ações","Poupança","Outros"];
+const INV_TYPES   = ["RDC","CDB","LCI","LCA","Carteira","Tesouro Direto","FII","Ações","Poupança","Outros"];
 const CDI_ATUAL   = 12.50; // % a.a. projeção 2026
 
 // ─── Main ────────────────────────────────────────────────────────────────────
@@ -293,62 +293,103 @@ export default function AssetsPage() {
               columns="grid-cols-1 md:grid-cols-2"
               renderCard={(inv: any) => (
                 <PremiumCard className="space-y-2 h-full">
+                  {/* ── Header comum ── */}
                   <div className="flex items-start gap-2">
                     <div className="flex-1 min-w-0">
                       <p className="font-display font-bold" style={{ color: '#F0F4F8' }}>{inv.name}</p>
                       <p className="text-xs" style={{ color: '#94A3B8' }}>{inv.bank} · {inv.type}</p>
                     </div>
-                    <WtBadge variant="cyan">{inv.rate_percent ? `${inv.rate_percent}% a.a.` : "—"}</WtBadge>
+                    {(inv as any).product_code && (
+                      <span className="text-xs px-1.5 py-0.5 rounded font-mono" style={{ background: 'rgba(45,212,191,0.1)', color: '#2DD4BF', border: '1px solid rgba(45,212,191,0.2)' }}>{(inv as any).product_code}</span>
+                    )}
                     <CardActions
                       onEdit={() => { setInvForm({ name: inv.name ?? "", bank: inv.bank ?? "", type: inv.type ?? "RDC", initial_amount: String(inv.initial_amount ?? ""), current_amount: String(inv.current_amount ?? ""), rescue_amount: String((inv as any).rescue_amount ?? ""), rate_percent: String(inv.rate_percent ?? ""), cdi_percent: String((inv as any).cdi_percent ?? "100"), is_cdi_linked: String((inv as any).is_cdi_linked ?? "true"), inclusion_date: (inv as any).inclusion_date ?? "", maturity_date: inv.maturity_date ?? "", product_code: (inv as any).product_code ?? "", notes: (inv as any).notes ?? "" }); setEditInv(inv); }}
                       onDelete={() => setDelInv(inv)}
                     />
                   </div>
-                  {/* Badge produto */}
-                  {(inv as any).product_code && (
-                    <span className="inline-block text-xs px-1.5 py-0.5 rounded font-mono" style={{ background: 'rgba(45,212,191,0.1)', color: '#2DD4BF', border: '1px solid rgba(45,212,191,0.2)' }}>{(inv as any).product_code}</span>
-                  )}
 
-                  {/* Saldos */}
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <p className="text-xs" style={{ color: '#64748B' }}>Saldo Total</p>
-                      <p className="font-mono font-bold" style={{ color: '#F0F4F8' }}>{formatCurrency(inv.current_amount ?? 0)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs" style={{ color: '#64748B' }}>Saldo p/ Resgate</p>
-                      <p className="font-mono font-bold" style={{ color: '#10B981' }}>{formatCurrency((inv as any).rescue_amount ?? inv.current_amount ?? 0)}</p>
-                    </div>
-                  </div>
-
-                  {/* Rendimento acumulado */}
-                  <p className="text-xs font-mono" style={{ color: (inv.current_amount ?? 0) >= (inv.initial_amount ?? 0) ? '#10B981' : '#F43F5E' }}>
-                    <TrendingUp className="inline w-3 h-3 mr-1" />
-                    +{formatCurrency((inv.current_amount ?? 0) - (inv.initial_amount ?? 0))}
-                    <span style={{ color: '#4A5568' }}> · Aplicado: {formatCurrency(inv.initial_amount ?? 0)}</span>
-                  </p>
-
-                  {/* Estimativa mensal CDI */}
-                  {(inv as any).is_cdi_linked && (() => {
-                    const pctCDI = parseFloat((inv as any).cdi_percent ?? 100);
-                    const taxaEfetiva = CDI_ATUAL * pctCDI / 100;
-                    const saldo = inv.current_amount ?? 0;
-                    const rendMensal = saldo * (Math.pow(1 + taxaEfetiva / 100, 1/12) - 1);
+                  {/* ── CARTEIRA XP: patrimônio + rentabilidade realizada ── */}
+                  {inv.type === "Carteira" ? (() => {
+                    const patrimonio = inv.current_amount ?? 0;
+                    const aplicado   = inv.initial_amount ?? 0;
+                    const rendimento = patrimonio - aplicado;
+                    const rentPct    = inv.rate_percent ?? 0;
+                    const cdiPct     = (inv as any).cdi_percent ?? 0;
+                    const rendMensal = patrimonio * (Math.pow(1 + CDI_ATUAL * cdiPct / 100 / 100, 1/12) - 1);
                     return (
-                      <div className="rounded-lg px-2 py-1.5" style={{ background: 'rgba(45,212,191,0.04)', border: '1px solid rgba(45,212,191,0.15)' }}>
-                        <p className="text-xs" style={{ color: '#64748B' }}>
-                          {pctCDI}% do CDI · {CDI_ATUAL}% a.a. estimado
-                          <span className="font-mono font-bold ml-2" style={{ color: '#2DD4BF' }}>≈ {formatCurrency(rendMensal)}/mês</span>
-                        </p>
-                      </div>
-                    );
-                  })()}
+                      <>
+                        {/* Patrimônio destaque */}
+                        <div className="rounded-lg px-3 py-2" style={{ background: 'rgba(232,201,122,0.05)', border: '1px solid rgba(232,201,122,0.15)' }}>
+                          <p className="text-xs mb-0.5" style={{ color: '#64748B' }}>Patrimônio Total</p>
+                          <p className="font-mono font-bold text-xl" style={{ color: '#E8C97A' }}>{formatCurrency(patrimonio)}</p>
+                        </div>
 
-                  {/* Datas */}
-                  <div className="flex gap-3 text-xs flex-wrap" style={{ color: '#64748B' }}>
-                    {(inv as any).inclusion_date && <span>📅 {formatDate((inv as any).inclusion_date)}</span>}
-                    {inv.maturity_date && <span>🏁 Venc. {formatDate(inv.maturity_date)}</span>}
-                  </div>
+                        {/* Rentabilidade realizada */}
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <p className="text-xs" style={{ color: '#64748B' }}>Rendimento</p>
+                            <p className="font-mono font-bold text-sm" style={{ color: '#10B981' }}>+{formatCurrency(rendimento)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs" style={{ color: '#64748B' }}>Rent. 12M</p>
+                            <p className="font-mono font-bold text-sm" style={{ color: '#10B981' }}>{rentPct}%</p>
+                          </div>
+                          <div>
+                            <p className="text-xs" style={{ color: '#64748B' }}>% do CDI</p>
+                            <p className="font-mono font-bold text-sm" style={{ color: '#2DD4BF' }}>{cdiPct}%</p>
+                          </div>
+                        </div>
+
+                        {/* Estimativa próximo mês */}
+                        <div className="rounded-lg px-2 py-1.5" style={{ background: 'rgba(45,212,191,0.04)', border: '1px solid rgba(45,212,191,0.15)' }}>
+                          <p className="text-xs" style={{ color: '#64748B' }}>
+                            CDI ref. {CDI_ATUAL}% a.a. · {cdiPct}% CDI
+                            <span className="font-mono font-bold ml-2" style={{ color: '#2DD4BF' }}>≈ {formatCurrency(rendMensal)}/mês</span>
+                          </p>
+                        </div>
+
+                        <p className="text-xs" style={{ color: '#4A5568' }}>Aplicado: {formatCurrency(aplicado)}</p>
+                      </>
+                    );
+                  })() : (
+                  /* ── CDI / RDC / CDB: saldo + estimativa ── */
+                  <>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <p className="text-xs" style={{ color: '#64748B' }}>Saldo Total</p>
+                        <p className="font-mono font-bold" style={{ color: '#F0F4F8' }}>{formatCurrency(inv.current_amount ?? 0)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs" style={{ color: '#64748B' }}>Saldo p/ Resgate</p>
+                        <p className="font-mono font-bold" style={{ color: '#10B981' }}>{formatCurrency((inv as any).rescue_amount ?? inv.current_amount ?? 0)}</p>
+                      </div>
+                    </div>
+
+                    <p className="text-xs font-mono" style={{ color: '#10B981' }}>
+                      <TrendingUp className="inline w-3 h-3 mr-1" />
+                      +{formatCurrency((inv.current_amount ?? 0) - (inv.initial_amount ?? 0))}
+                      <span style={{ color: '#4A5568' }}> · Aplicado: {formatCurrency(inv.initial_amount ?? 0)}</span>
+                    </p>
+
+                    {(inv as any).is_cdi_linked && (() => {
+                      const pctCDI = parseFloat((inv as any).cdi_percent ?? 100);
+                      const rendMensal = (inv.current_amount ?? 0) * (Math.pow(1 + CDI_ATUAL * pctCDI / 100 / 100, 1/12) - 1);
+                      return (
+                        <div className="rounded-lg px-2 py-1.5" style={{ background: 'rgba(45,212,191,0.04)', border: '1px solid rgba(45,212,191,0.15)' }}>
+                          <p className="text-xs" style={{ color: '#64748B' }}>
+                            {pctCDI}% do CDI · {CDI_ATUAL}% a.a. estimado
+                            <span className="font-mono font-bold ml-2" style={{ color: '#2DD4BF' }}>≈ {formatCurrency(rendMensal)}/mês</span>
+                          </p>
+                        </div>
+                      );
+                    })()}
+
+                    <div className="flex gap-3 text-xs flex-wrap" style={{ color: '#64748B' }}>
+                      {(inv as any).inclusion_date && <span>📅 {formatDate((inv as any).inclusion_date)}</span>}
+                      {inv.maturity_date && <span>🏁 Venc. {formatDate(inv.maturity_date)}</span>}
+                    </div>
+                  </>
+                  )}
                 </PremiumCard>
               )}
             />
