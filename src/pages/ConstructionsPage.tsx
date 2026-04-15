@@ -408,7 +408,7 @@ function ExpenseForm({ expForm, setExpForm, stages }: { expForm: any; setExpForm
         </div>
         <div>
           <Label style={{ color: '#A78BFA' }}>Etapa (opcional)</Label>
-          <Select value={expForm.stage_id} onValueChange={v => setExpForm(f => ({ ...f, stage_id: v }))}>
+          <Select value={expForm.stage_id || "none"} onValueChange={v => setExpForm(f => ({ ...f, stage_id: v === "none" ? "" : v }))}>
             <SelectTrigger style={{ ...inputStyle, borderColor: 'rgba(167,139,250,0.4)' }}><SelectValue placeholder="— Sem etapa —" /></SelectTrigger>
             <SelectContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
               <SelectItem value="none">— Sem etapa —</SelectItem>
