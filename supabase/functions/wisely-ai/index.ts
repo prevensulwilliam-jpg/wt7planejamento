@@ -125,6 +125,19 @@ Se um campo não estiver visível, use null.
   "amount_paid": number
 }`;
 
+function safeParseJson(raw: string): Record<string, unknown> {
+  const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    const m = cleaned.match(/\{[\s\S]*\}/);
+    if (m) {
+      try { return JSON.parse(m[0]); } catch { /* fall through */ }
+    }
+    return {};
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -143,72 +156,51 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    // ── Modos de extração de obras ──
-    if (body_req.action === "extract-construction-pdf" || body_req.action === "extract-construction-xlsx") {
+    // ── Modo extração PDF de obra ──
+    if (body_req.action === "extract-construction-pdf") {
+      const { pdfBase64, isXlsx } = body_req as any;
       const today = new Date().toISOString().slice(0, 10);
-      const isPdfAction = body_req.action === "extract-construction-pdf";
+      const mimeType = isXlsx
+        ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        : "application/pdf";
+      const dataUrl = `data:${mimeType};base64,${pdfBase64}`;
 
-      if (isPdfAction) {
-        const { pdfBase64, isXlsx } = body_req as { pdfBase64?: string; isXlsx?: boolean };
+      const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          max_tokens: 2500,
+          messages: [{
+            role: "user",
+            content: [
+              { type: "image_url", image_url: { url: dataUrl } },
+              { type: "text", text: CONSTRUCTION_EXTRACT_PROMPT(today) },
+            ],
+          }],
+        }),
+      });
 
-        if (typeof pdfBase64 !== "string" || !pdfBase64.trim()) {
-          return new Response(JSON.stringify({ error: "pdfBase64 é obrigatório para extract-construction-pdf" }), {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-
-        const mimeType = isXlsx
-          ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-          : "application/pdf";
-        const dataUrl = `data:${mimeType};base64,${pdfBase64}`;
-
-        const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model: "google/gemini-2.5-flash",
-            max_tokens: 2500,
-            messages: [{
-              role: "user",
-              content: [
-                { type: "image_url", image_url: { url: dataUrl } },
-                { type: "text", text: CONSTRUCTION_EXTRACT_PROMPT(today) },
-              ],
-            }],
-          }),
-        });
-
-        if (!res.ok) {
-          const err = await res.text();
-          return new Response(JSON.stringify({ error: "Erro no gateway", detail: err }), {
-            status: 500,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-
-        const data = await res.json();
-        const rawText = data.choices?.[0]?.message?.content ?? "";
-        let extracted: Record<string, unknown> = {};
-        try {
-          extracted = JSON.parse(rawText.trim());
-        } catch {
-          const m = rawText.match(/\{[\s\S]*\}/);
-          if (m) extracted = JSON.parse(m[0]);
-        }
-
-        return new Response(JSON.stringify({ ok: true, expenses: extracted.expenses ?? [], stages: extracted.stages ?? [] }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+      if (!res.ok) {
+        const err = await res.text();
+        return new Response(JSON.stringify({ error: "Erro no gateway", detail: err }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      const { xlsxText } = body_req as { xlsxText?: string };
-      if (typeof xlsxText !== "string" || !xlsxText.trim()) {
-        return new Response(JSON.stringify({ error: "xlsxText é obrigatório para extract-construction-xlsx" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+      const data = await res.json();
+      const rawText = data.choices?.[0]?.message?.content ?? "";
+      const extracted = safeParseJson(rawText);
+
+      return new Response(JSON.stringify({ ok: true, expenses: extracted.expenses ?? [], stages: extracted.stages ?? [] }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ── Modo extração XLSX de obra (texto CSV) ──
+    if (body_req.action === "extract-construction-xlsx") {
+      const { xlsxText } = body_req as any;
+      const today = new Date().toISOString().slice(0, 10);
 
       const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
@@ -226,29 +218,15 @@ serve(async (req) => {
       if (!res.ok) {
         const err = await res.text();
         return new Response(JSON.stringify({ error: "Erro no gateway", detail: err }), {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
       const data = await res.json();
       const rawText = data.choices?.[0]?.message?.content ?? "";
-      let extracted: Record<string, unknown> = {};
-      try {
-        extracted = JSON.parse(rawText.trim());
-      } catch {
-        const m = rawText.match(/\{[\s\S]*\}/);
-        if (m) extracted = JSON.parse(m[0]);
-      }
+      const extracted = safeParseJson(rawText);
 
       return new Response(JSON.stringify({ ok: true, expenses: extracted.expenses ?? [], stages: extracted.stages ?? [] }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    if (typeof body_req.action === "string" && body_req.action.startsWith("extract-construction-")) {
-      return new Response(JSON.stringify({ error: `Payload inválido para ${body_req.action}` }), {
-        status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -286,13 +264,7 @@ serve(async (req) => {
 
       const data = await res.json();
       const rawText = data.choices?.[0]?.message?.content ?? "";
-      let extracted: Record<string, unknown> = {};
-      try {
-        extracted = JSON.parse(rawText.trim());
-      } catch {
-        const m = rawText.match(/\{[\s\S]*\}/);
-        if (m) extracted = JSON.parse(m[0]);
-      }
+      const extracted = safeParseJson(rawText);
 
       return new Response(JSON.stringify({ ok: true, data: extracted }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -398,11 +370,8 @@ TOTAIS:
     // ── Modo chat Naval (padrão) ──
     const { messages, stream } = body_req;
     if (!Array.isArray(messages)) {
-      return new Response(JSON.stringify({
-        error: "messages deve ser um array",
-        invalidRequest: true,
-      }), {
-        status: 200,
+      return new Response(JSON.stringify({ error: "messages deve ser um array" }), {
+        status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
