@@ -279,6 +279,18 @@ export default function AssetsPage() {
         {/* ─── INVESTIMENTOS ─── */}
         <TabsContent value="investimentos" className="space-y-4">
 
+          {/* DEBUG v2 — remover após diagnóstico */}
+          {!invLoading && (
+            <pre className="text-xs p-3 rounded overflow-auto max-h-48" style={{ background: '#0a0f14', color: '#0f8', border: '2px solid #0f8' }}>
+              KEYS: {JSON.stringify((investments ?? []).length > 0 ? Object.keys((investments as any[])[0]).sort() : 'VAZIO')}{"\n\n"}
+              DATA: {JSON.stringify((investments ?? []).map((i: any) => {
+                const obj: any = {};
+                for (const k of Object.keys(i)) obj[k] = i[k];
+                return obj;
+              }), null, 2)}
+            </pre>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <KpiCard label="Total Investido" value={totalInvestido} color="gold" />
             <KpiCard label="Valor Atual" value={totalAtualInv} color="cyan" />

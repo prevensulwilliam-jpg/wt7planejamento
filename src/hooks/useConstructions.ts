@@ -194,17 +194,21 @@ export function useInvestments() {
   return useQuery({
     queryKey: ["investments"],
     queryFn: async () => {
+      // Tenta RPC primeiro
       const { data, error } = await supabase.rpc("get_investments" as any);
-      if (error) {
-        // fallback: select direto se a função não existir ainda
-        const { data: d2, error: e2 } = await supabase
-          .from("investments")
-          .select("id,name,type,bank,initial_amount,current_amount,rescue_amount,rate_percent,cdi_percent,is_cdi_linked,inclusion_date,maturity_date,product_code,notes,updated_at")
-          .order("name");
-        if (e2) throw e2;
-        return d2;
+      if (!error && data) {
+        console.log("[INV] RPC OK →", JSON.stringify(data));
+        return data as any[];
       }
-      return data as any[];
+      console.warn("[INV] RPC falhou:", error?.message, "→ fallback select");
+      // fallback: select direto
+      const { data: d2, error: e2 } = await supabase
+        .from("investments")
+        .select("id,name,type,bank,initial_amount,current_amount,rescue_amount,rate_percent,cdi_percent,is_cdi_linked,inclusion_date,maturity_date,product_code,notes,updated_at")
+        .order("name");
+      console.log("[INV] SELECT →", JSON.stringify(d2), "err:", e2?.message);
+      if (e2) throw e2;
+      return d2;
     },
   });
 }
