@@ -296,12 +296,9 @@ export default function CategoriesPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Tag className="w-6 h-6" style={{ color: "#C9A84C" }} />
-          <h1 className="font-display font-bold text-2xl" style={{ color: "#F0F4F8" }}>Categorias</h1>
-        </div>
-        <GoldButton onClick={openCreate}><Plus className="w-4 h-4 mr-1" />Nova Categoria</GoldButton>
+      <div className="flex items-center gap-3">
+        <Tag className="w-6 h-6" style={{ color: "#C9A84C" }} />
+        <h1 className="font-display font-bold text-2xl" style={{ color: "#F0F4F8" }}>Categorias</h1>
       </div>
 
       <Tabs defaultValue="categorias">
@@ -312,7 +309,7 @@ export default function CategoriesPage() {
 
         {/* ── Categorias ── */}
         <TabsContent value="categorias" className="space-y-6 mt-4">
-          {/* Filtro */}
+          {/* Filtro + botão nova categoria */}
           <div className="flex items-center gap-2 flex-wrap">
             {(["all", "despesa", "receita"] as const).map(f => (
               <button key={f} onClick={() => setFilter(f)}
@@ -325,7 +322,8 @@ export default function CategoriesPage() {
                 {f === "all" ? "Todas" : f === "despesa" ? "💸 Despesas" : "💰 Receitas"}
               </button>
             ))}
-            <span className="text-xs ml-2" style={{ color: "#4A5568" }}>{filtered.length} categorias</span>
+            <GoldButton onClick={openCreate} className="ml-1"><Plus className="w-4 h-4" />Nova Categoria</GoldButton>
+            <span className="text-xs ml-1" style={{ color: "#4A5568" }}>{filtered.length} categorias</span>
           </div>
 
           {isLoading ? (
