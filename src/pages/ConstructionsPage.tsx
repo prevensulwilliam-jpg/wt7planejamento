@@ -899,24 +899,68 @@ function ImportPdfModal({ construction, onClose }: { construction: any; onClose:
     try {
       let body: Record<string, unknown>;
 
+      // Extrai texto do arquivo (XLSX via SheetJS, PDF via FileReader texto)
+      let extractedText = "";
       if (isXlsx) {
-        // Parse XLSX client-side → envia como texto para o Gemini
         const ab = await file.arrayBuffer();
         const wb = XLSX.read(ab, { type: "array" });
         const csvParts: string[] = wb.SheetNames.map(sheetName => {
           const csv = XLSX.utils.sheet_to_csv(wb.Sheets[sheetName]);
           return `=== Aba: ${sheetName} ===\n${csv}`;
         });
-        body = { action: "extract-construction-xlsx", xlsxText: csvParts.join("\n\n") };
+        extractedText = csvParts.join("\n\n");
       } else {
+        // PDF: envia como base64 via image_url (Gemini lê PDF nativamente)
         const fileBase64 = await fileToBase64(file);
-        body = { action: "extract-construction-pdf", pdfBase64: fileBase64 };
+        extractedText = `__PDF_BASE64__${fileBase64}`;
       }
 
-      const { data, error } = await supabase.functions.invoke("wisely-ai", { body });
-      if (error || !data?.ok) throw new Error(error?.message ?? "Erro na extração");
-      setExpenses((data.expenses as any[]).map((e: any) => ({ ...e, checked: !e.is_future })));
-      setStages((data.stages as any[]).map((s: any) => ({ ...s, checked: true })));
+      const today = new Date().toISOString().slice(0, 10);
+      const prompt = `Você é um extrator de dados de planilhas de custos de construção civil brasileira.
+
+Analise este relatório e retorne APENAS JSON puro, sem markdown, sem explicação.
+
+{
+  "expenses": [
+    { "date": "DD/MM/YYYY", "description": "descrição", "value": 1234.56, "category": "Terreno|Terraplenagem|Materiais|Mão de Obra|Instalações|Acabamento|Taxas/Cartório|Outros", "is_future": false }
+  ],
+  "stages": [
+    { "name": "nome da etapa", "start_date": "YYYY-MM-DD", "end_date": "YYYY-MM-DD ou null", "status": "pendente|em_andamento|concluida", "pct_complete": 0 }
+  ]
+}
+
+REGRAS EXPENSES: Use a seção "Resumo" se existir (evita duplicatas). is_future=true apenas para datas após ${today}. Categorias: aterro/trator/máquina→Terraplenagem | pedreiro/mão de obra→Mão de Obra | blocos/ferragens/cimento/material→Materiais | poste/elétrica→Instalações | pintura/reboco→Acabamento | terreno→Terreno | IPTU/cartório→Taxas/Cartório.
+REGRAS STAGES: Infira fases agrupando despesas por tipo e período. Máximo 6 etapas. Status: concluida se tudo pago, pendente se tudo futuro, em_andamento se misto. Retorne APENAS o JSON.`;
+
+      let messageContent: any[];
+      if (extractedText.startsWith("__PDF_BASE64__")) {
+        const b64 = extractedText.replace("__PDF_BASE64__", "");
+        messageContent = [
+          { type: "image_url", image_url: { url: `data:application/pdf;base64,${b64}` } },
+          { type: "text", text: prompt },
+        ];
+      } else {
+        messageContent = [{ type: "text", text: `${prompt}\n\nDados da planilha:\n${extractedText}` }];
+      }
+
+      const { data, error } = await supabase.functions.invoke("wisely-ai", {
+        body: { messages: [{ role: "user", content: messageContent }] },
+      });
+      if (error) throw new Error(error?.message ?? "Erro na extração");
+
+      // Modo chat retorna { text }, parseamos o JSON da resposta
+      const rawText: string = data?.text ?? "";
+      let parsed: any = {};
+      try {
+        parsed = JSON.parse(rawText.trim());
+      } catch {
+        const m = rawText.match(/\{[\s\S]*\}/);
+        if (m) parsed = JSON.parse(m[0]);
+        else throw new Error("Não foi possível extrair dados do arquivo");
+      }
+
+      setExpenses(((parsed.expenses ?? []) as any[]).map((e: any) => ({ ...e, checked: !e.is_future })));
+      setStages(((parsed.stages ?? []) as any[]).map((s: any) => ({ ...s, checked: true })));
       setStep("preview");
     } catch (e: any) {
       toast({ title: "Erro ao processar PDF", description: e.message, variant: "destructive" });
