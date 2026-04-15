@@ -1393,7 +1393,7 @@ export default function ConstructionsPage() {
               onClick={() => setImportFor(c)}
               className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium"
               style={{ background: "rgba(45,212,191,0.08)", color: "#2DD4BF", border: "1px solid rgba(45,212,191,0.2)" }}
-            >📄 PDF</button>
+            >📂 Upload</button>
           )}
           <GoldButton
             variant="outline" className="text-xs py-1.5 px-3"
