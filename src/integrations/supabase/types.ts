@@ -642,6 +642,9 @@ export type Database = {
         Row: {
           asset_id: string | null
           created_at: string | null
+          debt_partner_name: string | null
+          debt_target_date: string | null
+          debt_to_partner: number | null
           end_date: string | null
           estimated_completion: string | null
           estimated_rent_per_unit: number | null
@@ -662,6 +665,9 @@ export type Database = {
         Insert: {
           asset_id?: string | null
           created_at?: string | null
+          debt_partner_name?: string | null
+          debt_target_date?: string | null
+          debt_to_partner?: number | null
           end_date?: string | null
           estimated_completion?: string | null
           estimated_rent_per_unit?: number | null
@@ -682,6 +688,9 @@ export type Database = {
         Update: {
           asset_id?: string | null
           created_at?: string | null
+          debt_partner_name?: string | null
+          debt_target_date?: string | null
+          debt_to_partner?: number | null
           end_date?: string | null
           estimated_completion?: string | null
           estimated_rent_per_unit?: number | null
