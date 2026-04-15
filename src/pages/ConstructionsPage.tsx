@@ -260,6 +260,90 @@ const emptyForm = {
   partner_name: "", partner_pct: "", notes: "",
 };
 
+// ─── Construction Form Modal (nível de módulo — evita remount por re-render) ──
+
+interface ConstructionFormModalProps {
+  title: string;
+  form: typeof emptyForm;
+  setF: (k: string, v: string) => void;
+  assets: any[];
+  onSave: () => void;
+  onClose: () => void;
+  isPending: boolean;
+}
+
+function ConstructionFormModal({ title, form, setF, assets, onSave, onClose, isPending }: ConstructionFormModalProps) {
+  return (
+    <Dialog open onOpenChange={o => !o && onClose()}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+        <DialogHeader><DialogTitle style={{ color: '#F0F4F8' }}>{title}</DialogTitle></DialogHeader>
+        <div className="space-y-3">
+          <div>
+            <Label style={{ color: '#94A3B8' }}>Patrimônio (opcional)</Label>
+            <Select value={form.asset_id} onValueChange={v => setF("asset_id", v)}>
+              <SelectTrigger style={inputStyle}><SelectValue placeholder="Selecionar imóvel/terreno..." /></SelectTrigger>
+              <SelectContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+                <SelectItem value="none">— Sem vínculo —</SelectItem>
+                {(assets ?? [])
+                  .filter((a: any) => ["imovel","terreno"].includes(a.type ?? ""))
+                  .map((a: any) => (
+                    <SelectItem key={a.id} value={a.id}>{assetLabel(a)}</SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Label style={{ color: '#94A3B8' }}>Nome da obra *</Label>
+            <Input value={form.name} onChange={e => setF("name", e.target.value)} style={inputStyle} placeholder="ex: Residencial W. Tavares 4" />
+          </div>
+
+          <div>
+            <Label style={{ color: '#94A3B8' }}>Status</Label>
+            <Select value={form.status} onValueChange={v => setF("status", v)}>
+              <SelectTrigger style={inputStyle}><SelectValue /></SelectTrigger>
+              <SelectContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+                {Object.entries(STATUS_MAP).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2">
+            <div><Label style={{ color: '#94A3B8' }}>Início</Label><DatePicker value={form.start_date} onChange={v => setF("start_date", v)} placeholder="Data início" /></div>
+            <div><Label style={{ color: '#94A3B8' }}>Previsão término</Label><DatePicker value={form.estimated_completion} onChange={v => setF("estimated_completion", v)} placeholder="Previsão" /></div>
+            <div><Label style={{ color: '#94A3B8' }}>Conclusão real</Label><DatePicker value={form.end_date} onChange={v => setF("end_date", v)} placeholder="Concluído em" /></div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div><Label style={{ color: '#94A3B8' }}>Kitnets/Unidades</Label><Input type="number" value={form.total_units_planned} onChange={e => setF("total_units_planned", e.target.value)} style={inputStyle} placeholder="0" /></div>
+            <div><Label style={{ color: '#94A3B8' }}>Aluguel projetado/unidade</Label><Input type="number" value={form.estimated_rent_per_unit} onChange={e => setF("estimated_rent_per_unit", e.target.value)} style={inputStyle} placeholder="0,00" /></div>
+          </div>
+
+          <div>
+            <Label style={{ color: '#94A3B8' }}>Valor projetado do bem pronto (R$)</Label>
+            <Input type="number" value={form.estimated_value_ready} onChange={e => setF("estimated_value_ready", e.target.value)} style={inputStyle} placeholder="0,00" />
+          </div>
+
+          <div className="grid grid-cols-3 gap-2">
+            <div><Label style={{ color: '#94A3B8' }}>% William</Label><Input type="number" value={form.ownership_pct} onChange={e => setF("ownership_pct", e.target.value)} style={inputStyle} placeholder="100" /></div>
+            <div><Label style={{ color: '#94A3B8' }}>Sócio</Label><Input value={form.partner_name} onChange={e => setF("partner_name", e.target.value)} style={inputStyle} placeholder="Nome" /></div>
+            <div><Label style={{ color: '#94A3B8' }}>% Sócio</Label><Input type="number" value={form.partner_pct} onChange={e => setF("partner_pct", e.target.value)} style={inputStyle} placeholder="0" /></div>
+          </div>
+
+          <div>
+            <Label style={{ color: '#94A3B8' }}>Observações</Label>
+            <Textarea value={form.notes} onChange={e => setF("notes", e.target.value)} style={inputStyle} rows={2} />
+          </div>
+        </div>
+        <DialogFooter>
+          <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm" style={{ border: '1px solid #1A2535', color: '#94A3B8' }}>Cancelar</button>
+          <GoldButton onClick={onSave} disabled={isPending}>Salvar</GoldButton>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ConstructionsPage() {
@@ -486,80 +570,6 @@ export default function ConstructionsPage() {
     );
   };
 
-  // ─── Construction Form Modal ─────────────────────────────────────────────────
-  const ConstructionFormModal = ({ title, onClose }: { title: string; onClose: () => void }) => (
-    <Dialog open onOpenChange={o => !o && onClose()}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
-        <DialogHeader><DialogTitle style={{ color: '#F0F4F8' }}>{title}</DialogTitle></DialogHeader>
-        <div className="space-y-3">
-          {/* Asset link */}
-          <div>
-            <Label style={{ color: '#94A3B8' }}>Patrimônio (opcional)</Label>
-            <Select value={form.asset_id} onValueChange={v => setF("asset_id", v)}>
-              <SelectTrigger style={inputStyle}><SelectValue placeholder="Selecionar imóvel/terreno..." /></SelectTrigger>
-              <SelectContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
-                <SelectItem value="none">— Sem vínculo —</SelectItem>
-                {(assets ?? [])
-                  .filter((a: any) => ["imovel","terreno"].includes(a.type ?? ""))
-                  .map((a: any) => (
-                    <SelectItem key={a.id} value={a.id}>{assetLabel(a)}</SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div>
-            <Label style={{ color: '#94A3B8' }}>Nome da obra *</Label>
-            <Input value={form.name} onChange={e => setF("name", e.target.value)} style={inputStyle} placeholder="ex: Residencial W. Tavares 4" />
-          </div>
-
-          <div>
-            <Label style={{ color: '#94A3B8' }}>Status</Label>
-            <Select value={form.status} onValueChange={v => setF("status", v)}>
-              <SelectTrigger style={inputStyle}><SelectValue /></SelectTrigger>
-              <SelectContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
-                {Object.entries(STATUS_MAP).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid grid-cols-3 gap-2">
-            <div><Label style={{ color: '#94A3B8' }}>Início</Label><DatePicker value={form.start_date} onChange={v => setF("start_date", v)} placeholder="Data início" /></div>
-            <div><Label style={{ color: '#94A3B8' }}>Previsão término</Label><DatePicker value={form.estimated_completion} onChange={v => setF("estimated_completion", v)} placeholder="Previsão" /></div>
-            <div><Label style={{ color: '#94A3B8' }}>Conclusão real</Label><DatePicker value={form.end_date} onChange={v => setF("end_date", v)} placeholder="Concluído em" /></div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div><Label style={{ color: '#94A3B8' }}>Kitnets/Unidades</Label><Input type="number" value={form.total_units_planned} onChange={e => setF("total_units_planned", e.target.value)} style={inputStyle} placeholder="0" /></div>
-            <div><Label style={{ color: '#94A3B8' }}>Aluguel projetado/unidade</Label><Input type="number" value={form.estimated_rent_per_unit} onChange={e => setF("estimated_rent_per_unit", e.target.value)} style={inputStyle} placeholder="0,00" /></div>
-          </div>
-
-          <div>
-            <Label style={{ color: '#94A3B8' }}>Valor projetado do bem pronto (R$)</Label>
-            <Input type="number" value={form.estimated_value_ready} onChange={e => setF("estimated_value_ready", e.target.value)} style={inputStyle} placeholder="0,00" />
-          </div>
-
-          <div className="grid grid-cols-3 gap-2">
-            <div><Label style={{ color: '#94A3B8' }}>% William</Label><Input type="number" value={form.ownership_pct} onChange={e => setF("ownership_pct", e.target.value)} style={inputStyle} placeholder="100" /></div>
-            <div><Label style={{ color: '#94A3B8' }}>Sócio</Label><Input value={form.partner_name} onChange={e => setF("partner_name", e.target.value)} style={inputStyle} placeholder="Nome" /></div>
-            <div><Label style={{ color: '#94A3B8' }}>% Sócio</Label><Input type="number" value={form.partner_pct} onChange={e => setF("partner_pct", e.target.value)} style={inputStyle} placeholder="0" /></div>
-          </div>
-
-          <div>
-            <Label style={{ color: '#94A3B8' }}>Observações</Label>
-            <Textarea value={form.notes} onChange={e => setF("notes", e.target.value)} style={inputStyle} rows={2} />
-          </div>
-        </div>
-        <DialogFooter>
-          <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm" style={{ border: '1px solid #1A2535', color: '#94A3B8' }}>Cancelar</button>
-          <GoldButton onClick={handleSaveConstruction} disabled={createConstruction.isPending || updateConstruction.isPending}>
-            Salvar
-          </GoldButton>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-
   // ─── Render ──────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
@@ -670,8 +680,8 @@ export default function ConstructionsPage() {
       </Tabs>
 
       {/* ── Modals ── */}
-      {newOpen && <ConstructionFormModal title="Nova Obra" onClose={() => { setNewOpen(false); setForm({ ...emptyForm }); }} />}
-      {editItem && <ConstructionFormModal title="Editar Obra" onClose={() => { setEditItem(null); setForm({ ...emptyForm }); }} />}
+      {newOpen && <ConstructionFormModal title="Nova Obra" form={form} setF={setF} assets={assets as any[]} onSave={handleSaveConstruction} onClose={() => { setNewOpen(false); setForm({ ...emptyForm }); }} isPending={createConstruction.isPending || updateConstruction.isPending} />}
+      {editItem && <ConstructionFormModal title="Editar Obra" form={form} setF={setF} assets={assets as any[]} onSave={handleSaveConstruction} onClose={() => { setEditItem(null); setForm({ ...emptyForm }); }} isPending={createConstruction.isPending || updateConstruction.isPending} />}
       {stagesFor && <StagesModal construction={stagesFor} onClose={() => setStagesFor(null)} />}
 
       {/* Delete confirm */}
