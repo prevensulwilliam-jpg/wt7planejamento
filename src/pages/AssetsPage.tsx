@@ -278,6 +278,12 @@ export default function AssetsPage() {
 
         {/* ─── INVESTIMENTOS ─── */}
         <TabsContent value="investimentos" className="space-y-4">
+          {/* DEBUG TEMPORÁRIO — remover após diagnóstico */}
+          {!invLoading && (
+            <pre className="text-xs p-2 rounded overflow-auto max-h-40" style={{ background: '#0a0f14', color: '#00ff88', border: '1px solid #0f3' }}>
+              {JSON.stringify((investments ?? []).map((i: any) => ({ id: i.id?.slice(0,8), name: i.name, type: i.type, ia: i.initial_amount, ca: i.current_amount })), null, 2)}
+            </pre>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <KpiCard label="Total Investido" value={totalInvestido} color="gold" />
             <KpiCard label="Valor Atual" value={totalAtualInv} color="cyan" />
