@@ -818,29 +818,34 @@ function DespesasView({ construction, onClose }: { construction: any; onClose: (
           </div>
         </PremiumCard>
 
-        {/* Editar despesa inline */}
+        {/* Editar despesa — Dialog */}
         {editExp && (
-          <PremiumCard className="mt-2" style={{ borderColor: 'rgba(200,168,76,0.3)' }}>
-            <p className="text-sm font-medium mb-3" style={{ color: '#C9A84C' }}>Editar Despesa</p>
-            <ExpenseForm expForm={expForm} setExpForm={setExpForm} stages={stages} />
-            <div className="flex gap-2 pt-1">
-              <button onClick={() => { setEditExp(null); setExpForm({ ...emptyExpForm }); }} className="px-4 py-2 rounded-lg text-sm" style={{ border: '1px solid #1A2535', color: '#94A3B8' }}>Cancelar</button>
-              <GoldButton onClick={handleUpdate} disabled={updateExpense.isPending}>Salvar</GoldButton>
-            </div>
-          </PremiumCard>
+          <Dialog open onOpenChange={o => { if (!o) { setEditExp(null); setExpForm({ ...emptyExpForm }); } }}>
+            <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" style={{ background: '#0D1318', border: '1px solid rgba(200,168,76,0.3)' }}>
+              <DialogHeader><DialogTitle style={{ color: '#C9A84C' }}>Editar Despesa</DialogTitle></DialogHeader>
+              <ExpenseForm expForm={expForm} setExpForm={setExpForm} stages={stages} />
+              <DialogFooter className="gap-2 pt-1">
+                <button onClick={() => { setEditExp(null); setExpForm({ ...emptyExpForm }); }} className="px-4 py-2 rounded-lg text-sm" style={{ border: '1px solid #1A2535', color: '#94A3B8' }}>Cancelar</button>
+                <GoldButton onClick={handleUpdate} disabled={updateExpense.isPending}>Salvar</GoldButton>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         )}
 
-        {/* Nova despesa inline */}
-        {!editExp && addOpen ? (
-          <PremiumCard className="mt-2">
-            <p className="text-sm font-medium mb-3" style={{ color: '#C9A84C' }}>Nova Despesa</p>
-            <ExpenseForm expForm={expForm} setExpForm={setExpForm} stages={stages} />
-            <div className="flex gap-2 pt-1">
-              <button onClick={() => { setAddOpen(false); setExpForm({ ...emptyExpForm }); }} className="px-4 py-2 rounded-lg text-sm" style={{ border: '1px solid #1A2535', color: '#94A3B8' }}>Cancelar</button>
-              <GoldButton onClick={handleCreate} disabled={createExpense.isPending}>Registrar</GoldButton>
-            </div>
-          </PremiumCard>
-        ) : !editExp && (
+        {/* Nova despesa — Dialog */}
+        {!editExp && addOpen && (
+          <Dialog open onOpenChange={o => { if (!o) { setAddOpen(false); setExpForm({ ...emptyExpForm }); } }}>
+            <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+              <DialogHeader><DialogTitle style={{ color: '#C9A84C' }}>Nova Despesa</DialogTitle></DialogHeader>
+              <ExpenseForm expForm={expForm} setExpForm={setExpForm} stages={stages} />
+              <DialogFooter className="gap-2 pt-1">
+                <button onClick={() => { setAddOpen(false); setExpForm({ ...emptyExpForm }); }} className="px-4 py-2 rounded-lg text-sm" style={{ border: '1px solid #1A2535', color: '#94A3B8' }}>Cancelar</button>
+                <GoldButton onClick={handleCreate} disabled={createExpense.isPending}>Registrar</GoldButton>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
+        {!editExp && !addOpen && (
           <GoldButton onClick={() => setAddOpen(true)}>
             <Plus className="w-4 h-4" />Nova Despesa
           </GoldButton>
