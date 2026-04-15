@@ -174,7 +174,11 @@ function StagesModal({ construction, onClose }: { construction: any; onClose: ()
     await Promise.all(ids.map((id, idx) => updateStage.mutateAsync({ id, order_index: idx })));
   };
 
-  const onDragStart = (id: string) => { dragId.current = id; overIdRef.current = id; setDraggingId(id); };
+  const onDragStart = (e: React.DragEvent, id: string) => {
+    const tag = (e.target as HTMLElement).tagName.toLowerCase();
+    if (["input","textarea","select","button"].includes(tag)) { e.preventDefault(); return; }
+    dragId.current = id; overIdRef.current = id; setDraggingId(id);
+  };
   const onDragOver  = (e: React.DragEvent, id: string) => { e.preventDefault(); overIdRef.current = id; };
   const onDragEnd   = async () => {
     const from = dragId.current; const to = overIdRef.current;
@@ -283,7 +287,7 @@ function StagesModal({ construction, onClose }: { construction: any; onClose: ()
                 <div
                   key={s.id}
                   draggable
-                  onDragStart={() => onDragStart(s.id)}
+                  onDragStart={e => onDragStart(e, s.id)}
                   onDragOver={e => onDragOver(e, s.id)}
                   onDragEnd={onDragEnd}
                   style={{ opacity: draggingId === s.id ? 0.4 : 1, transition: 'opacity 0.15s', cursor: 'grab' }}
