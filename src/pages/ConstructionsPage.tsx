@@ -1379,11 +1379,13 @@ export default function ConstructionsPage() {
             variant="outline" className="text-xs py-1.5 px-3"
             onClick={() => setStagesFor(c)}
           ><Layers className="w-3 h-3" />Etapas</GoldButton>
-          <button
-            onClick={() => setImportFor(c)}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium"
-            style={{ background: "rgba(45,212,191,0.08)", color: "#2DD4BF", border: "1px solid rgba(45,212,191,0.2)" }}
-          >📄 PDF</button>
+          {c.partner_name?.toLowerCase().includes("jairo") && (
+            <button
+              onClick={() => setImportFor(c)}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium"
+              style={{ background: "rgba(45,212,191,0.08)", color: "#2DD4BF", border: "1px solid rgba(45,212,191,0.2)" }}
+            >📄 PDF</button>
+          )}
           <GoldButton
             variant="outline" className="text-xs py-1.5 px-3"
             onClick={() => openEdit(c)}
