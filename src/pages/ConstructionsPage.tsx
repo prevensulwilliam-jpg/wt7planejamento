@@ -467,6 +467,7 @@ function DespesasModal({ construction, onClose }: { construction: any; onClose: 
   const [addOpen, setAddOpen]   = useState(false);
   const [editExp, setEditExp]   = useState<any>(null);
   const [expForm, setExpForm]   = useState({ ...emptyExpForm });
+  const [dateSort, setDateSort] = useState<"desc" | "asc">("desc");
 
   const totalBudget = construction.total_budget ?? 0;
   const expKPIs = {
@@ -475,6 +476,12 @@ function DespesasModal({ construction, onClose }: { construction: any; onClose: 
     partner: expenses.reduce((s: number, e: any) => s + (e.partner_amount ?? 0), 0),
   };
   const budgetPct = totalBudget > 0 ? (expKPIs.total / totalBudget) * 100 : null;
+
+  const sortedExpenses = [...(expenses as any[])].sort((a, b) => {
+    const da = a.expense_date ?? "";
+    const db = b.expense_date ?? "";
+    return dateSort === "desc" ? db.localeCompare(da) : da.localeCompare(db);
+  });
 
   const handleCreate = async () => {
     if (!expForm.description || !expForm.total_amount) return;
@@ -581,7 +588,17 @@ function DespesasModal({ construction, onClose }: { construction: any; onClose: 
           <Table className="text-xs">
             <TableHeader>
               <TableRow style={{ borderColor: '#1A2535' }}>
-                {["Data","Descrição","Cat.","Total","William","Sócio","Tipo"].map(h => (
+                <TableHead className="whitespace-nowrap px-2">
+                  <button
+                    onClick={() => setDateSort(d => d === "desc" ? "asc" : "desc")}
+                    className="flex items-center gap-1 text-xs font-medium"
+                    style={{ color: '#94A3B8' }}
+                  >
+                    Data
+                    <span style={{ fontSize: 10, opacity: 0.7 }}>{dateSort === "desc" ? "↓" : "↑"}</span>
+                  </button>
+                </TableHead>
+                {["Descrição","Cat.","Total","William","Sócio","Tipo"].map(h => (
                   <TableHead key={h} className="whitespace-nowrap px-2" style={{ color: '#94A3B8' }}>{h}</TableHead>
                 ))}
                 <TableHead className="whitespace-nowrap px-2" style={{ color: '#A78BFA' }}>Etapa</TableHead>
@@ -589,9 +606,9 @@ function DespesasModal({ construction, onClose }: { construction: any; onClose: 
               </TableRow>
             </TableHeader>
             <TableBody>
-              {expenses.length === 0 ? (
+              {sortedExpenses.length === 0 ? (
                 <TableRow><TableCell colSpan={9} className="text-center py-8" style={{ color: '#94A3B8' }}>Nenhuma despesa registrada</TableCell></TableRow>
-              ) : (expenses as any[]).map((e: any) => {
+              ) : sortedExpenses.map((e: any) => {
                 const stageName = e.stage_id ? (stages.find((s: any) => s.id === e.stage_id)?.name ?? "—") : null;
                 return (
                   <TableRow key={e.id} style={{ borderColor: '#1A2535' }}>
