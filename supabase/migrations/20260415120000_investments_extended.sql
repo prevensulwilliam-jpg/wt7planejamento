@@ -1,3 +1,9 @@
+-- Fix type constraint to accept all real investment types
+ALTER TABLE public.investments DROP CONSTRAINT IF EXISTS investments_type_check;
+ALTER TABLE public.investments ADD CONSTRAINT investments_type_check
+  CHECK (type IN ('RDC','CDB','LCI','LCA','Carteira','Tesouro Direto','FII','Ações','Poupança','Outros'));
+
+-- Add extended columns
 ALTER TABLE public.investments
   ADD COLUMN IF NOT EXISTS rescue_amount   numeric(14,2),
   ADD COLUMN IF NOT EXISTS cdi_percent     numeric(6,2)  DEFAULT 100,

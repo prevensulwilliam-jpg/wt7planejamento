@@ -124,8 +124,8 @@ export default function AssetsPage() {
 
   // ─── KPIs ─────────────────────────────────────────────────────────────────
   const totalPatrimonio  = (assets ?? []).reduce((s, a) => s + (a.estimated_value ?? 0), 0);
-  const totalInvestido   = (investments ?? []).reduce((s, i) => s + ((i as any).initial_amount ?? 0), 0);
-  const totalAtualInv    = (investments ?? []).reduce((s, i) => s + ((i as any).current_amount ?? 0), 0);
+  const totalInvestido   = (investments ?? []).reduce((s, i) => s + (Number((i as any).initial_amount) || 0), 0);
+  const totalAtualInv    = (investments ?? []).reduce((s, i) => s + (Number((i as any).current_amount) || 0), 0);
   const rendimento       = totalAtualInv - totalInvestido;
 
   // ─── Bens handlers ────────────────────────────────────────────────────────
