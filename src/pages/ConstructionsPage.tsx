@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -344,6 +343,160 @@ function ConstructionFormModal({ title, form, setF, assets, onSave, onClose, isP
   );
 }
 
+// ─── Despesas Modal (por card) ───────────────────────────────────────────────
+
+const emptyExpForm = {
+  description: "", category: "", total_amount: "", paid_by: "william",
+  payment_type: "avista", installments_total: "", installments_paid: "",
+  next_due_date: "", expense_date: "",
+};
+
+function DespesasModal({ construction, onClose }: { construction: any; onClose: () => void }) {
+  const { data: expenses = [] } = useConstructionExpenses(construction.id);
+  const createExpense = useCreateConstructionExpense();
+  const { toast }     = useToast();
+  const [addOpen, setAddOpen] = useState(false);
+  const [expForm, setExpForm] = useState({ ...emptyExpForm });
+
+  const expKPIs = {
+    total:   expenses.reduce((s: number, e: any) => s + (e.total_amount   ?? 0), 0),
+    william: expenses.reduce((s: number, e: any) => s + (e.william_amount ?? 0), 0),
+    partner: expenses.reduce((s: number, e: any) => s + (e.partner_amount ?? 0), 0),
+  };
+
+  const handleCreate = async () => {
+    if (!expForm.description || !expForm.total_amount) return;
+    const total = parseFloat(expForm.total_amount);
+    const wPct  = (construction.ownership_pct ?? 100) / 100;
+    try {
+      await createExpense.mutateAsync({
+        property_id:        construction.id,
+        construction_id:    construction.id,
+        property_code:      construction.name ?? null,
+        description:        expForm.description,
+        category:           expForm.category,
+        total_amount:       total,
+        william_amount:     expForm.paid_by === "william" ? total : expForm.paid_by === "ambos" ? total * wPct : 0,
+        partner_amount:     expForm.paid_by === "socio"   ? total : expForm.paid_by === "ambos" ? total * (1 - wPct) : 0,
+        paid_by:            expForm.paid_by,
+        payment_type:       expForm.payment_type,
+        expense_date:       expForm.expense_date || null,
+        installments_total: expForm.payment_type === "parcelado" ? parseInt(expForm.installments_total) || null : null,
+        installments_paid:  expForm.payment_type === "parcelado" ? parseInt(expForm.installments_paid) || 0  : null,
+        next_due_date:      expForm.next_due_date || null,
+      } as any);
+      toast({ title: "Despesa registrada!" });
+      setAddOpen(false);
+      setExpForm({ ...emptyExpForm });
+    } catch { toast({ title: "Erro ao criar despesa", variant: "destructive" }); }
+  };
+
+  return (
+    <Dialog open onOpenChange={o => !o && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+        <DialogHeader>
+          <DialogTitle style={{ color: '#F0F4F8' }}>Despesas — {construction.name}</DialogTitle>
+        </DialogHeader>
+
+        {/* KPIs */}
+        <div className="grid grid-cols-3 gap-3 mb-2">
+          <KpiCard label="Total Investido" value={expKPIs.total} color="gold" />
+          <KpiCard label="Parte William"   value={expKPIs.william} color="cyan" />
+          <KpiCard label="Parte Sócio"     value={expKPIs.partner} color="green" />
+        </div>
+
+        {/* Tabela */}
+        <PremiumCard>
+          <Table>
+            <TableHeader>
+              <TableRow style={{ borderColor: '#1A2535' }}>
+                {["Data","Descrição","Categoria","Total","William","Sócio","Tipo"].map(h => (
+                  <TableHead key={h} style={{ color: '#94A3B8' }}>{h}</TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {expenses.length === 0 ? (
+                <TableRow><TableCell colSpan={7} className="text-center py-8" style={{ color: '#94A3B8' }}>Nenhuma despesa registrada</TableCell></TableRow>
+              ) : (expenses as any[]).map((e: any) => (
+                <TableRow key={e.id} style={{ borderColor: '#1A2535' }}>
+                  <TableCell style={{ color: '#CBD5E1' }}>{e.expense_date ? formatDate(e.expense_date) : "—"}</TableCell>
+                  <TableCell style={{ color: '#F0F4F8' }}>{e.description}</TableCell>
+                  <TableCell><WtBadge variant="cyan">{e.category}</WtBadge></TableCell>
+                  <TableCell className="font-mono" style={{ color: '#E8C97A' }}>{formatCurrency(e.total_amount ?? 0)}</TableCell>
+                  <TableCell className="font-mono" style={{ color: '#2DD4BF' }}>{formatCurrency(e.william_amount ?? 0)}</TableCell>
+                  <TableCell className="font-mono" style={{ color: '#10B981' }}>{formatCurrency(e.partner_amount ?? 0)}</TableCell>
+                  <TableCell>
+                    <WtBadge variant={e.payment_type === "parcelado" ? "gold" : "gray"}>
+                      {e.payment_type === "parcelado" ? `${e.installments_paid}/${e.installments_total}x` : "À vista"}
+                    </WtBadge>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </PremiumCard>
+
+        {/* Nova despesa inline */}
+        {addOpen ? (
+          <PremiumCard className="mt-2">
+            <p className="text-sm font-medium mb-3" style={{ color: '#C9A84C' }}>Nova Despesa</p>
+            <div className="space-y-3">
+              <div><Label style={{ color: '#94A3B8' }}>Data</Label><DatePicker value={expForm.expense_date} onChange={v => setExpForm(f => ({ ...f, expense_date: v }))} /></div>
+              <div><Label style={{ color: '#94A3B8' }}>Descrição</Label><Input value={expForm.description} onChange={e => setExpForm(f => ({ ...f, description: e.target.value }))} style={inputStyle} /></div>
+              <div>
+                <Label style={{ color: '#94A3B8' }}>Categoria</Label>
+                <Select value={expForm.category} onValueChange={v => setExpForm(f => ({ ...f, category: v }))}>
+                  <SelectTrigger style={inputStyle}><SelectValue /></SelectTrigger>
+                  <SelectContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+                    {EXPENSE_CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div><Label style={{ color: '#94A3B8' }}>Valor Total (R$)</Label><Input type="number" value={expForm.total_amount} onChange={e => setExpForm(f => ({ ...f, total_amount: e.target.value }))} style={inputStyle} /></div>
+              <div>
+                <Label style={{ color: '#94A3B8' }}>Pago por</Label>
+                <Select value={expForm.paid_by} onValueChange={v => setExpForm(f => ({ ...f, paid_by: v }))}>
+                  <SelectTrigger style={inputStyle}><SelectValue /></SelectTrigger>
+                  <SelectContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+                    <SelectItem value="william">William</SelectItem>
+                    <SelectItem value="socio">Sócio</SelectItem>
+                    <SelectItem value="ambos">Ambos</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label style={{ color: '#94A3B8' }}>Tipo</Label>
+                <Select value={expForm.payment_type} onValueChange={v => setExpForm(f => ({ ...f, payment_type: v }))}>
+                  <SelectTrigger style={inputStyle}><SelectValue /></SelectTrigger>
+                  <SelectContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+                    <SelectItem value="avista">À vista</SelectItem>
+                    <SelectItem value="parcelado">Parcelado</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {expForm.payment_type === "parcelado" && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div><Label style={{ color: '#94A3B8' }}>Total parcelas</Label><Input type="number" value={expForm.installments_total} onChange={e => setExpForm(f => ({ ...f, installments_total: e.target.value }))} style={inputStyle} /></div>
+                  <div><Label style={{ color: '#94A3B8' }}>Pagas</Label><Input type="number" value={expForm.installments_paid} onChange={e => setExpForm(f => ({ ...f, installments_paid: e.target.value }))} style={inputStyle} /></div>
+                </div>
+              )}
+              <div className="flex gap-2 pt-1">
+                <button onClick={() => { setAddOpen(false); setExpForm({ ...emptyExpForm }); }} className="px-4 py-2 rounded-lg text-sm" style={{ border: '1px solid #1A2535', color: '#94A3B8' }}>Cancelar</button>
+                <GoldButton onClick={handleCreate} disabled={createExpense.isPending}>Registrar</GoldButton>
+              </div>
+            </div>
+          </PremiumCard>
+        ) : (
+          <GoldButton className="mt-2" onClick={() => setAddOpen(true)}>
+            <Plus className="w-4 h-4" />Nova Despesa
+          </GoldButton>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ConstructionsPage() {
@@ -352,24 +505,14 @@ export default function ConstructionsPage() {
   const createConstruction = useCreateConstruction();
   const updateConstruction = useUpdateConstruction();
   const deleteConstruction = useDeleteConstruction();
-  const createExpense      = useCreateConstructionExpense();
   const { toast } = useToast();
 
-  const [selectedId, setSelectedId]   = useState<string>("");
-  const [stagesFor, setStagesFor]     = useState<any>(null);
-  const [newOpen, setNewOpen]         = useState(false);
-  const [editItem, setEditItem]       = useState<any>(null);
-  const [delItem, setDelItem]         = useState<any>(null);
-  const [expenseOpen, setExpenseOpen] = useState(false);
-  const [form, setForm]               = useState({ ...emptyForm });
-  const [expForm, setExpForm]         = useState({
-    description: "", category: "", total_amount: "", paid_by: "william",
-    payment_type: "avista", installments_total: "", installments_paid: "",
-    next_due_date: "", expense_date: "",
-  });
-
-  const { data: expenses = [] } = useConstructionExpenses(selectedId || undefined);
-  const selectedConstruction   = constructions.find(c => c.id === selectedId);
+  const [stagesFor, setStagesFor]   = useState<any>(null);
+  const [despesasFor, setDespesasFor] = useState<any>(null);
+  const [newOpen, setNewOpen]       = useState(false);
+  const [editItem, setEditItem]     = useState<any>(null);
+  const [delItem, setDelItem]       = useState<any>(null);
+  const [form, setForm]             = useState({ ...emptyForm });
 
   // KPIs globais
   const totalUnitsPlanned = constructions.filter(c => ["em_obra","planejada"].includes(c.status))
@@ -439,40 +582,6 @@ export default function ConstructionsPage() {
       toast({ title: "Obra excluída" });
       setDelItem(null);
     } catch { toast({ title: "Erro ao excluir", variant: "destructive" }); }
-  };
-
-  const handleCreateExpense = async () => {
-    if (!expForm.description || !expForm.total_amount || !selectedId) return;
-    const total     = parseFloat(expForm.total_amount);
-    const c         = constructions.find(x => x.id === selectedId);
-    const wPct      = (c?.ownership_pct ?? 100) / 100;
-    try {
-      await createExpense.mutateAsync({
-        property_id:        selectedId,          // compat legacy
-        construction_id:    selectedId as any,
-        property_code:      c?.name ?? null,
-        description:        expForm.description,
-        category:           expForm.category,
-        total_amount:       total,
-        william_amount:     expForm.paid_by === "william" ? total : expForm.paid_by === "ambos" ? total * wPct : 0,
-        partner_amount:     expForm.paid_by === "socio"   ? total : expForm.paid_by === "ambos" ? total * (1 - wPct) : 0,
-        paid_by:            expForm.paid_by,
-        payment_type:       expForm.payment_type,
-        expense_date:       expForm.expense_date || null,
-        installments_total: expForm.payment_type === "parcelado" ? parseInt(expForm.installments_total) || null : null,
-        installments_paid:  expForm.payment_type === "parcelado" ? parseInt(expForm.installments_paid) || 0  : null,
-        next_due_date:      expForm.next_due_date || null,
-      } as any);
-      toast({ title: "Despesa registrada!" });
-      setExpenseOpen(false);
-      setExpForm({ description: "", category: "", total_amount: "", paid_by: "william", payment_type: "avista", installments_total: "", installments_paid: "", next_due_date: "", expense_date: "" });
-    } catch { toast({ title: "Erro ao criar despesa", variant: "destructive" }); }
-  };
-
-  const expKPIs = {
-    total:   expenses.reduce((s, e) => s + (e.total_amount   ?? 0), 0),
-    william: expenses.reduce((s, e) => s + (e.william_amount ?? 0), 0),
-    partner: expenses.reduce((s, e) => s + (e.partner_amount ?? 0), 0),
   };
 
   // ─── Construction Card ──────────────────────────────────────────────────────
@@ -550,7 +659,7 @@ export default function ConstructionsPage() {
         <div className="flex gap-2 pt-1 flex-wrap">
           <GoldButton
             variant="outline" className="text-xs py-1.5 px-3"
-            onClick={() => { setSelectedId(c.id); document.querySelector<HTMLButtonElement>('[data-value="despesas"]')?.click(); }}
+            onClick={() => setDespesasFor(c)}
           >Despesas</GoldButton>
           <GoldButton
             variant="outline" className="text-xs py-1.5 px-3"
@@ -585,104 +694,38 @@ export default function ConstructionsPage() {
 
       {/* KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <KpiCard label="Unidades em Desenvolvimento" value={totalUnitsPlanned} color="cyan" compact />
+        <KpiCard label="Unidades em Desenvolvimento" value={totalUnitsPlanned} color="cyan" formatAs="number" />
         <KpiCard label="Renda Futura Projetada" value={totalRentProjection} color="gold" />
         <KpiCard label="Valor Projetado (Bens Prontos)" value={totalValueReady} color="green" />
       </div>
 
-      <Tabs defaultValue="projetos">
-        <TabsList style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
-          <TabsTrigger value="projetos">Projetos ({constructions.length})</TabsTrigger>
-          <TabsTrigger value="despesas" data-value="despesas">Despesas</TabsTrigger>
-        </TabsList>
-
-        {/* ── Projetos ── */}
-        <TabsContent value="projetos" className="space-y-4">
-          {isLoading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{[1,2,3].map(i => <Skeleton key={i} className="h-56 rounded-2xl" />)}</div>
-          ) : constructions.length === 0 ? (
-            <PremiumCard>
-              <div className="text-center py-10 space-y-3">
-                <Building2 className="w-10 h-10 mx-auto" style={{ color: '#1A2535' }} />
-                <p style={{ color: '#94A3B8' }}>Nenhuma obra cadastrada</p>
-                <p className="text-sm" style={{ color: '#64748B' }}>Adicione um imóvel/terreno em Patrimônio, depois crie uma obra aqui.</p>
-                <GoldButton onClick={() => { setForm({ ...emptyForm }); setNewOpen(true); }}><Plus className="w-4 h-4" />Nova Obra</GoldButton>
-              </div>
-            </PremiumCard>
-          ) : (
-            <DraggableGrid
-              storageKey="wt7_constructions_order"
-              items={constructions}
-              columns="grid-cols-1 md:grid-cols-2"
-              renderCard={renderCard}
-            />
-          )}
-        </TabsContent>
-
-        {/* ── Despesas ── */}
-        <TabsContent value="despesas" className="space-y-4">
-          <div className="flex items-center gap-4 flex-wrap">
-            <Select value={selectedId} onValueChange={setSelectedId}>
-              <SelectTrigger className="w-72" style={{ background: '#0D1318', border: '1px solid #1A2535', color: '#F0F4F8' }}>
-                <SelectValue placeholder="Selecione uma obra" />
-              </SelectTrigger>
-              <SelectContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
-                {constructions.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            {selectedId && (
-              <GoldButton onClick={() => setExpenseOpen(true)}>
-                <Plus className="w-4 h-4" />Nova Despesa
-              </GoldButton>
-            )}
-          </div>
-
-          {selectedId && (
-            <>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <KpiCard label="Total Investido" value={expKPIs.total} color="gold" />
-                <KpiCard label="Parte William" value={expKPIs.william} color="cyan" />
-                <KpiCard label="Parte Sócio" value={expKPIs.partner} color="green" />
-              </div>
-              <PremiumCard>
-                <Table>
-                  <TableHeader>
-                    <TableRow style={{ borderColor: '#1A2535' }}>
-                      {["Data","Descrição","Categoria","Total","William","Sócio","Tipo"].map(h => (
-                        <TableHead key={h} style={{ color: '#94A3B8' }}>{h}</TableHead>
-                      ))}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {expenses.length === 0 ? (
-                      <TableRow><TableCell colSpan={7} className="text-center py-8" style={{ color: '#94A3B8' }}>Nenhuma despesa registrada</TableCell></TableRow>
-                    ) : expenses.map(e => (
-                      <TableRow key={e.id} style={{ borderColor: '#1A2535' }}>
-                        <TableCell style={{ color: '#CBD5E1' }}>{e.expense_date ? formatDate(e.expense_date) : "—"}</TableCell>
-                        <TableCell style={{ color: '#F0F4F8' }}>{e.description}</TableCell>
-                        <TableCell><WtBadge variant="cyan">{e.category}</WtBadge></TableCell>
-                        <TableCell className="font-mono" style={{ color: '#E8C97A' }}>{formatCurrency(e.total_amount ?? 0)}</TableCell>
-                        <TableCell className="font-mono" style={{ color: '#2DD4BF' }}>{formatCurrency(e.william_amount ?? 0)}</TableCell>
-                        <TableCell className="font-mono" style={{ color: '#10B981' }}>{formatCurrency(e.partner_amount ?? 0)}</TableCell>
-                        <TableCell>
-                          <WtBadge variant={e.payment_type === "parcelado" ? "gold" : "gray"}>
-                            {e.payment_type === "parcelado" ? `${e.installments_paid}/${e.installments_total}x` : "À vista"}
-                          </WtBadge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </PremiumCard>
-            </>
-          )}
-        </TabsContent>
-      </Tabs>
+      <div className="space-y-4 mt-2">
+        {isLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{[1,2,3].map(i => <Skeleton key={i} className="h-56 rounded-2xl" />)}</div>
+        ) : constructions.length === 0 ? (
+          <PremiumCard>
+            <div className="text-center py-10 space-y-3">
+              <Building2 className="w-10 h-10 mx-auto" style={{ color: '#1A2535' }} />
+              <p style={{ color: '#94A3B8' }}>Nenhuma obra cadastrada</p>
+              <p className="text-sm" style={{ color: '#64748B' }}>Adicione um imóvel/terreno em Patrimônio, depois crie uma obra aqui.</p>
+              <GoldButton onClick={() => { setForm({ ...emptyForm }); setNewOpen(true); }}><Plus className="w-4 h-4" />Nova Obra</GoldButton>
+            </div>
+          </PremiumCard>
+        ) : (
+          <DraggableGrid
+            storageKey="wt7_constructions_order"
+            items={constructions}
+            columns="grid-cols-1 md:grid-cols-2"
+            renderCard={renderCard}
+          />
+        )}
+      </div>
 
       {/* ── Modals ── */}
       {newOpen && <ConstructionFormModal title="Nova Obra" form={form} setF={setF} assets={assets as any[]} onSave={handleSaveConstruction} onClose={() => { setNewOpen(false); setForm({ ...emptyForm }); }} isPending={createConstruction.isPending || updateConstruction.isPending} />}
       {editItem && <ConstructionFormModal title="Editar Obra" form={form} setF={setF} assets={assets as any[]} onSave={handleSaveConstruction} onClose={() => { setEditItem(null); setForm({ ...emptyForm }); }} isPending={createConstruction.isPending || updateConstruction.isPending} />}
-      {stagesFor && <StagesModal construction={stagesFor} onClose={() => setStagesFor(null)} />}
+      {stagesFor    && <StagesModal   construction={stagesFor}    onClose={() => setStagesFor(null)} />}
+      {despesasFor  && <DespesasModal construction={despesasFor}  onClose={() => setDespesasFor(null)} />}
 
       {/* Delete confirm */}
       {delItem && (
@@ -700,54 +743,6 @@ export default function ConstructionsPage() {
         </Dialog>
       )}
 
-      {/* New expense modal */}
-      <Dialog open={expenseOpen} onOpenChange={setExpenseOpen}>
-        <DialogContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
-          <DialogHeader><DialogTitle style={{ color: '#F0F4F8' }}>Nova Despesa — {selectedConstruction?.name}</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div><Label style={{ color: '#94A3B8' }}>Data</Label><DatePicker value={expForm.expense_date} onChange={v => setExpForm(f => ({ ...f, expense_date: v }))} /></div>
-            <div><Label style={{ color: '#94A3B8' }}>Descrição</Label><Input value={expForm.description} onChange={e => setExpForm(f => ({ ...f, description: e.target.value }))} style={inputStyle} /></div>
-            <div>
-              <Label style={{ color: '#94A3B8' }}>Categoria</Label>
-              <Select value={expForm.category} onValueChange={v => setExpForm(f => ({ ...f, category: v }))}>
-                <SelectTrigger style={inputStyle}><SelectValue /></SelectTrigger>
-                <SelectContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
-                  {EXPENSE_CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div><Label style={{ color: '#94A3B8' }}>Valor Total (R$)</Label><Input type="number" value={expForm.total_amount} onChange={e => setExpForm(f => ({ ...f, total_amount: e.target.value }))} style={inputStyle} /></div>
-            <div>
-              <Label style={{ color: '#94A3B8' }}>Pago por</Label>
-              <Select value={expForm.paid_by} onValueChange={v => setExpForm(f => ({ ...f, paid_by: v }))}>
-                <SelectTrigger style={inputStyle}><SelectValue /></SelectTrigger>
-                <SelectContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
-                  <SelectItem value="william">William</SelectItem>
-                  <SelectItem value="socio">Sócio</SelectItem>
-                  <SelectItem value="ambos">Ambos</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label style={{ color: '#94A3B8' }}>Tipo</Label>
-              <Select value={expForm.payment_type} onValueChange={v => setExpForm(f => ({ ...f, payment_type: v }))}>
-                <SelectTrigger style={inputStyle}><SelectValue /></SelectTrigger>
-                <SelectContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
-                  <SelectItem value="avista">À vista</SelectItem>
-                  <SelectItem value="parcelado">Parcelado</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {expForm.payment_type === "parcelado" && (
-              <div className="grid grid-cols-2 gap-2">
-                <div><Label style={{ color: '#94A3B8' }}>Total parcelas</Label><Input type="number" value={expForm.installments_total} onChange={e => setExpForm(f => ({ ...f, installments_total: e.target.value }))} style={inputStyle} /></div>
-                <div><Label style={{ color: '#94A3B8' }}>Pagas</Label><Input type="number" value={expForm.installments_paid} onChange={e => setExpForm(f => ({ ...f, installments_paid: e.target.value }))} style={inputStyle} /></div>
-              </div>
-            )}
-          </div>
-          <DialogFooter><GoldButton onClick={handleCreateExpense}>Registrar</GoldButton></DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
