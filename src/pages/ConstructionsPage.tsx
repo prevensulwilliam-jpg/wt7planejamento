@@ -887,15 +887,18 @@ function ImportPdfModal({ construction, onClose }: { construction: any; onClose:
   const wPct = (construction.ownership_pct ?? 100) / 100;
 
   const handleFile = async (file: File) => {
-    if (!file.name.toLowerCase().endsWith(".pdf")) {
-      toast({ title: "Selecione um arquivo PDF", variant: "destructive" }); return;
+    const name = file.name.toLowerCase();
+    const isXlsx = name.endsWith(".xlsx") || name.endsWith(".xls");
+    const isPdf  = name.endsWith(".pdf");
+    if (!isPdf && !isXlsx) {
+      toast({ title: "Formato não suportado", description: "Use PDF ou XLSX", variant: "destructive" }); return;
     }
     setFileName(file.name);
     setStep("parsing");
     try {
-      const pdfBase64 = await fileToBase64(file);
+      const fileBase64 = await fileToBase64(file);
       const { data, error } = await supabase.functions.invoke("wisely-ai", {
-        body: { action: "extract-construction-pdf", pdfBase64 },
+        body: { action: "extract-construction-pdf", pdfBase64: fileBase64, isXlsx },
       });
       if (error || !data?.ok) throw new Error(error?.message ?? "Erro na extração");
       setExpenses((data.expenses as any[]).map((e: any) => ({ ...e, checked: !e.is_future })));
@@ -972,21 +975,27 @@ function ImportPdfModal({ construction, onClose }: { construction: any; onClose:
 
         {/* ── Upload ── */}
         {step === "upload" && (
-          <div
-            className="rounded-xl text-center py-12 cursor-pointer transition-all"
-            style={{ border: "2px dashed #1A2535", background: "#080C10" }}
-            onClick={() => document.getElementById("pdf-upload-input")?.click()}
-            onDragOver={e => { e.preventDefault(); (e.currentTarget as HTMLElement).style.borderColor = "#E8C97A"; }}
-            onDragLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "#1A2535"; }}
-            onDrop={e => { e.preventDefault(); (e.currentTarget as HTMLElement).style.borderColor = "#1A2535"; const f = e.dataTransfer.files[0]; if(f) handleFile(f); }}
-          >
-            <div style={{ fontSize: 40 }}>📄</div>
-            <p className="mt-3 font-semibold" style={{ color: "#F0F4F8" }}>Arraste o PDF do Jairo aqui</p>
-            <p className="text-sm mt-1" style={{ color: "#64748B" }}>Extrai despesas e etapas automaticamente com IA</p>
-            <button className="mt-4 px-5 py-2 rounded-lg text-sm font-semibold" style={{ background: "rgba(232,201,122,0.1)", color: "#E8C97A", border: "1px solid rgba(232,201,122,0.3)" }}>
-              Selecionar arquivo
-            </button>
-            <input id="pdf-upload-input" type="file" accept=".pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if(f) handleFile(f); }} />
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-center" style={{ color: "#94A3B8" }}>
+              Selecione o relatório de custos para importar despesas e etapas automaticamente
+            </p>
+            <div className="flex justify-center">
+              <button
+                className="flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm"
+                style={{ background: "rgba(232,201,122,0.1)", color: "#E8C97A", border: "1px solid rgba(232,201,122,0.3)" }}
+                onClick={() => document.getElementById("pdf-upload-input")?.click()}
+              >
+                📂 Selecionar arquivo
+                <span className="text-xs font-normal" style={{ color: "#64748B" }}>PDF ou XLSX</span>
+              </button>
+            </div>
+            <input
+              id="pdf-upload-input"
+              type="file"
+              accept=".pdf,.xlsx,.xls"
+              className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if(f) handleFile(f); }}
+            />
           </div>
         )}
 

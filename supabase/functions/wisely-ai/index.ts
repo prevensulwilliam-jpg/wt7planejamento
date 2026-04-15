@@ -145,9 +145,12 @@ serve(async (req) => {
 
     // ── Modo extração PDF de obra ──
     if (body_req.action === "extract-construction-pdf") {
-      const { pdfBase64 } = body_req as any;
+      const { pdfBase64, isXlsx } = body_req as any;
       const today = new Date().toISOString().slice(0, 10);
-      const dataUrl = `data:application/pdf;base64,${pdfBase64}`;
+      const mimeType = isXlsx
+        ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        : "application/pdf";
+      const dataUrl = `data:${mimeType};base64,${pdfBase64}`;
 
       const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
