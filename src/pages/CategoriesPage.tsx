@@ -322,7 +322,15 @@ export default function CategoriesPage() {
                 {f === "all" ? "Todas" : f === "despesa" ? "💸 Despesas" : "💰 Receitas"}
               </button>
             ))}
-            <GoldButton onClick={openCreate} className="ml-1"><Plus className="w-4 h-4" />Nova Categoria</GoldButton>
+            <button onClick={openCreate}
+              className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-medium transition-all"
+              style={{
+                background: "rgba(201,168,76,0.2)",
+                color: "#E8C97A",
+                border: "1px solid rgba(201,168,76,0.4)",
+              }}>
+              <Plus className="w-3.5 h-3.5" />Nova Categoria
+            </button>
             <span className="text-xs ml-1" style={{ color: "#4A5568" }}>{filtered.length} categorias</span>
           </div>
 
