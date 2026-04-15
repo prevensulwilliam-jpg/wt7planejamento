@@ -13,6 +13,7 @@ import { WtBadge } from "@/components/wt7/WtBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { KitnetModal } from "@/components/wt7/KitnetModal";
 import { KitnetGrid } from "@/components/wt7/KitnetGrid";
+import { KitnetVisaoGeral } from "@/components/wt7/KitnetVisaoGeral";
 import { useKitnets, useKitnetEntries, useKitnetSummary, useCreateKitnetEntry, useUnreconciledEntries, usePrevMonth, useDeleteKitnetEntry, useReconcileWithTransactions, useLockedMonth, useLockMonth, useUnlockMonth, useKitnetAlertsForMonth, useKitnetMonthStatuses, useKitnetMonthDataMap } from "@/hooks/useKitnets";
 import { formatCurrency, formatMonth, getCurrentMonth, formatDate } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
@@ -163,103 +164,7 @@ export default function KitnetsPage() {
 
 // ─── Overview Tab ───
 function OverviewTab({ month, setMonth, isLocked }: { month: string; setMonth: (v: string) => void; isLocked: boolean }) {
-  const { data: kitnets, isLoading, refetch } = useKitnets();
-  const summary = useKitnetSummary(month);
-  const { data: entries } = useKitnetEntries(month);
-  const [selected, setSelected] = useState<Tables<"kitnets"> | null>(null);
-
-  const handleRelatorioConsolidado = () => {
-    if (!entries?.length) return;
-    const data = entries
-      .filter((e: any) => e.kitnets)
-      .map((e: any) => ({ kitnet: e.kitnets, fechamento: e }));
-    abrirReciboConsolidado(data, month);
-  };
-
-  const prevMonth = usePrevMonth(month);
-  const { data: prevEntries } = useKitnetEntries(prevMonth);
-  const { data: monthStatuses } = useKitnetMonthStatuses(month);
-  const { data: monthDataMap } = useKitnetMonthDataMap(month);
-  // Alertas de saldo pendente para o mês atual → mapa kitnet_id → pending_amount
-  const { data: rawAlerts } = useKitnetAlertsForMonth(month);
-  const alertsMap = (rawAlerts ?? []).reduce<Record<string, import("@/components/wt7/KitnetGrid").AlertInfo>>((acc, a) => {
-    acc[a.kitnet_id] = { id: a.id, amount: a.pending_amount, confirmed: (a as any).confirmed ?? null, source_month: a.source_month };
-    return acc;
-  }, {});
-  const rwt02 = (kitnets ?? []).filter(k => k.residencial_code === "RWT02");
-  const rwt03 = (kitnets ?? []).filter(k => k.residencial_code === "RWT03");
-
-  if (isLoading) {
-    return (
-      <div className="space-y-4 mt-4">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {[1,2,3,4].map(i => <Skeleton key={i} className="h-28 rounded-2xl" />)}
-        </div>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {[1,2,3,4,5,6,7,8].map(i => <Skeleton key={i} className="h-32 rounded-2xl" />)}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-6 mt-4">
-      {/* Seletor de mês + botão relatório */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <span className="text-xs font-mono uppercase tracking-widest" style={{ color: '#4A5568' }}>Mês de referência</span>
-        <MonthPicker value={month} onChange={setMonth} className="w-40" />
-        <button
-          onClick={handleRelatorioConsolidado}
-          disabled={!entries?.length}
-          className="ml-auto flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-40"
-          style={{ background: 'rgba(232,201,122,0.1)', color: '#E8C97A', border: '1px solid rgba(232,201,122,0.3)' }}
-          title={entries?.length ? `Gerar relatório com ${entries.length} fechamentos` : "Nenhum fechamento neste mês"}
-        >
-          <Printer className="w-4 h-4" />
-          Relatório do Mês
-        </button>
-      </div>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard label="Total Recebido" value={summary.totalReceived} color="gold" />
-        <div className="rounded-2xl p-4 space-y-1" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
-          <p className="text-xs uppercase font-mono tracking-widest" style={{ color: '#94A3B8' }}>Ocupadas</p>
-          <p className="font-mono text-2xl font-bold" style={{ color: '#10B981' }}>
-            {summary.occupied}<span className="text-sm font-normal" style={{ color: '#4A5568' }}>/{summary.total}</span>
-          </p>
-        </div>
-        <div className="rounded-2xl p-4 space-y-1" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
-          <p className="text-xs uppercase font-mono tracking-widest" style={{ color: '#94A3B8' }}>Conciliados</p>
-          <p className="font-mono text-2xl font-bold" style={{ color: '#2DD4BF' }}>
-            {summary.received}<span className="text-sm font-normal" style={{ color: '#4A5568' }}>/{summary.totalEntries}</span>
-          </p>
-          <p className="text-xs" style={{ color: '#4A5568' }}>conciliados / lançamentos</p>
-        </div>
-        <KpiCard label="Vacâncias" value={summary.vacant} color="red" compact formatAs="number" />
-      </div>
-
-      {/* RWT02 */}
-      <div>
-        <h2 className="font-display font-bold text-lg text-foreground mb-3">RWT02 — Rua Amauri de Souza, 08</h2>
-        <KitnetGrid kitnets={rwt02} onManage={setSelected} entries={entries ?? []} prevEntries={prevEntries ?? []} monthStatuses={monthStatuses ?? {}} monthDataMap={monthDataMap ?? {}} alertsMap={alertsMap} isLocked={isLocked} />
-      </div>
-
-      {/* RWT03 */}
-      <div>
-        <h2 className="font-display font-bold text-lg text-foreground mb-3">RWT03 — Rua Manoel Corrêa, 125</h2>
-        <KitnetGrid kitnets={rwt03} onManage={setSelected} entries={entries ?? []} prevEntries={prevEntries ?? []} monthStatuses={monthStatuses ?? {}} monthDataMap={monthDataMap ?? {}} alertsMap={alertsMap} isLocked={isLocked} />
-      </div>
-
-
-      {selected && (
-        <KitnetModal
-          kitnet={selected}
-          onClose={() => setSelected(null)}
-          onUpdated={() => refetch()}
-          defaultMonth={month}
-        />
-      )}
-    </div>
-  );
+  return <KitnetVisaoGeral month={month} onMonthChange={setMonth} isLocked={isLocked} showRelatorio />;
 }
 
 // ─── Entries Tab ───

@@ -8,23 +8,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { GoldButton } from "@/components/wt7/GoldButton";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
-import { KpiCard } from "@/components/wt7/KpiCard";
 import { WT7Logo } from "@/components/wt7/WT7Logo";
 import { Skeleton } from "@/components/ui/skeleton";
-import { KitnetModal } from "@/components/wt7/KitnetModal";
-import { KitnetGrid } from "@/components/wt7/KitnetGrid";
+import { KitnetVisaoGeral } from "@/components/wt7/KitnetVisaoGeral";
 import {
   useKitnets,
-  useKitnetSummary,
   useKitnetEntries,
   useEnergyReadings,
   useCelescInvoices,
   useSaveEnergyReadings,
   useEnergyConfig,
-  usePrevMonth,
-  useKitnetMonthStatuses,
-  useKitnetMonthDataMap,
-  useKitnetAlertsForMonth,
 } from "@/hooks/useKitnets";
 import { formatCurrency, formatMonth, getCurrentMonth } from "@/lib/formatters";
 import { DEFAULT_ENERGY_TARIFF } from "@/lib/constants";
@@ -166,82 +159,7 @@ function ManagerContent() {
 //  ABA KITNETS
 // ═══════════════════════════════════════════════════
 function KitnetsTab({ month }: { month: string }) {
-  const { data: kitnets, isLoading, refetch } = useKitnets();
-  const summary = useKitnetSummary(month);
-  const { data: entries } = useKitnetEntries(month);
-  const prevMonth = usePrevMonth(month);
-  const { data: prevEntries } = useKitnetEntries(prevMonth);
-  const { data: monthStatuses } = useKitnetMonthStatuses(month);
-  const { data: monthDataMap } = useKitnetMonthDataMap(month);
-  const { data: rawAlerts } = useKitnetAlertsForMonth(month);
-  const [selected, setSelected] = useState<Tables<"kitnets"> | null>(null);
-
-  const alertsMap = (rawAlerts ?? []).reduce<Record<string, import("@/components/wt7/KitnetGrid").AlertInfo>>((acc, a: any) => {
-    acc[a.kitnet_id] = { id: a.id, amount: a.pending_amount, confirmed: a.confirmed ?? null, source_month: a.source_month };
-    return acc;
-  }, {});
-
-  const rwt02 = (kitnets ?? []).filter(k => k.residencial_code === "RWT02");
-  const rwt03 = (kitnets ?? []).filter(k => k.residencial_code === "RWT03");
-  const complexos = [
-    { label: "RWT02 — Rua Amauri de Souza, 08", units: rwt02 },
-    { label: "RWT03 — Rua Manoel Corrêa, 125",  units: rwt03 },
-  ].filter(c => c.units.length > 0);
-
-  return (
-    <div className="space-y-6 mt-4">
-      {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard label="Total Recebido" value={summary.totalReceived} color="gold" />
-        <div className="rounded-2xl p-4 space-y-1" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
-          <p className="text-xs uppercase font-mono tracking-widest" style={{ color: '#94A3B8' }}>Ocupadas</p>
-          <p className="font-mono text-2xl font-bold" style={{ color: '#10B981' }}>
-            {summary.occupied}<span className="text-sm font-normal" style={{ color: '#4A5568' }}>/{summary.total}</span>
-          </p>
-        </div>
-        <div className="rounded-2xl p-4 space-y-1" style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
-          <p className="text-xs uppercase font-mono tracking-widest" style={{ color: '#94A3B8' }}>Conciliados</p>
-          <p className="font-mono text-2xl font-bold" style={{ color: '#2DD4BF' }}>
-            {summary.received}<span className="text-sm font-normal" style={{ color: '#4A5568' }}>/{summary.totalEntries}</span>
-          </p>
-          <p className="text-xs" style={{ color: '#4A5568' }}>conciliados / lançamentos</p>
-        </div>
-        <KpiCard label="Vacâncias" value={summary.vacant} color="red" compact formatAs="number" />
-      </div>
-
-      {isLoading ? (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-          {Array.from({ length: 13 }).map((_, i) => <Skeleton key={i} className="h-40 rounded-2xl" />)}
-        </div>
-      ) : (
-        complexos.map(({ label, units }) => (
-          <div key={label}>
-            <h2 className="font-display font-bold text-lg text-foreground mb-3">{label}</h2>
-            <KitnetGrid
-              kitnets={units}
-              onManage={setSelected}
-              entries={entries as any[] ?? []}
-              prevEntries={prevEntries ?? []}
-              monthStatuses={monthStatuses ?? {}}
-              monthDataMap={monthDataMap ?? {}}
-              alertsMap={alertsMap}
-              isLocked={false}
-            />
-          </div>
-        ))
-      )}
-
-      {selected && (
-        <KitnetModal
-          kitnet={selected}
-          onClose={() => setSelected(null)}
-          onUpdated={() => refetch()}
-          defaultMonth={month}
-          disableLock
-        />
-      )}
-    </div>
-  );
+  return <KitnetVisaoGeral month={month} disableLock />;
 }
 
 // ═══════════════════════════════════════════════════
