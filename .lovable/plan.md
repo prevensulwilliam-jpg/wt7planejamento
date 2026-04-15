@@ -1,15 +1,30 @@
 
 
-# Atualizar DESPESA_OPTIONS + labels de categorias
+# Plano: Corrigir exclusão de investimentos e zerar dados
 
-## Mudanças em 2 arquivos
+## Problema
+O dialog de confirmação mostra `Excluir ""?` com nome vazio. A funcionalidade de exclusão já existe no código, mas precisa de duas correções:
 
-### 1. `src/pages/ReconciliationPage.tsx`
-- **Linhas 31-55**: Substituir `DESPESA_OPTIONS` inteiro pelo novo array (30 categorias, ordem alfabética, inclui novas: camila, estudo, família, plataformas_ia, aluguel, kitnets_manutencao)
-- **Linhas 68-82**: Adicionar no `ALL_CATEGORY_LABELS` as entradas faltantes: camila, estudo, familia, farmacia, gasolina, gas, plataformas_ia, terapia, terrenos, viagens, aluguel
+## Mudanças
 
-### 2. `src/lib/categorizeTransaction.ts`
-- **Linhas 144-155**: Adicionar no `CATEGORY_LABELS` as mesmas entradas: camila, estudo, familia, farmacia, gasolina, plataformas_ia, terapia, terrenos, aluguel
+### 1. Apagar os 2 investimentos existentes no banco
+Usar o insert tool para deletar os registros atuais:
+```sql
+DELETE FROM investments WHERE id IN (
+  '94061928-acf1-4806-9730-ad07d3cc4181',
+  '487787ff-4605-4789-b5f1-6bcf1ddefaa1'
+);
+```
 
-Nenhuma lógica alterada — apenas listas de opções e labels.
+### 2. Corrigir bug do nome vazio no dialog de exclusão
+O `ConfirmDelete` na linha 624 usa `delInv.name ?? ""`. Se o `name` está vindo como string vazia do banco, o dialog mostra vazio. Vou adicionar um fallback melhor:
+```tsx
+{delInv && <ConfirmDelete name={delInv.name || delInv.type || "investimento"} .../>}
+```
+
+Isso garante que mesmo investimentos sem nome mostrem algo útil no dialog.
+
+## Resultado
+- Aba Investimentos ficará zerada, pronta para novas entradas
+- Exclusão futura mostrará nome correto no dialog de confirmação
 
