@@ -467,34 +467,147 @@ export type Database = {
         }
         Relationships: []
       }
+      consortium_installments: {
+        Row: {
+          accounting_date: string | null
+          admin_pct: number | null
+          amount_due: number | null
+          amount_paid: number | null
+          consortium_id: string
+          created_at: string | null
+          fc_pct: number | null
+          id: string
+          installment_number: number
+          insurance_pct: number | null
+          interest: number | null
+          payment_date: string | null
+          penalty: number | null
+          transaction_type: string | null
+        }
+        Insert: {
+          accounting_date?: string | null
+          admin_pct?: number | null
+          amount_due?: number | null
+          amount_paid?: number | null
+          consortium_id: string
+          created_at?: string | null
+          fc_pct?: number | null
+          id?: string
+          installment_number: number
+          insurance_pct?: number | null
+          interest?: number | null
+          payment_date?: string | null
+          penalty?: number | null
+          transaction_type?: string | null
+        }
+        Update: {
+          accounting_date?: string | null
+          admin_pct?: number | null
+          amount_due?: number | null
+          amount_paid?: number | null
+          consortium_id?: string
+          created_at?: string | null
+          fc_pct?: number | null
+          id?: string
+          installment_number?: number
+          insurance_pct?: number | null
+          interest?: number | null
+          payment_date?: string | null
+          penalty?: number | null
+          transaction_type?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "consortium_installments_consortium_id_fkey"
+            columns: ["consortium_id"]
+            isOneToOne: false
+            referencedRelation: "consortiums"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       consortiums: {
         Row: {
+          adhesion_date: string | null
+          admin_fee_paid: number | null
+          admin_fee_pct: number | null
+          asset_type: string | null
+          contract_number: string | null
+          credit_value: number | null
+          end_date: string | null
+          extrato_file_name: string | null
+          extrato_file_url: string | null
+          extrato_updated_at: string | null
+          fund_paid: number | null
+          group_number: string | null
           id: string
           installments_paid: number | null
+          installments_remaining: number | null
           installments_total: number | null
+          insurance_paid: number | null
           monthly_payment: number | null
           name: string | null
+          notes: string | null
+          quota: string | null
           status: string | null
+          total_paid: number | null
+          total_pending: number | null
           total_value: number | null
           updated_at: string | null
         }
         Insert: {
+          adhesion_date?: string | null
+          admin_fee_paid?: number | null
+          admin_fee_pct?: number | null
+          asset_type?: string | null
+          contract_number?: string | null
+          credit_value?: number | null
+          end_date?: string | null
+          extrato_file_name?: string | null
+          extrato_file_url?: string | null
+          extrato_updated_at?: string | null
+          fund_paid?: number | null
+          group_number?: string | null
           id?: string
           installments_paid?: number | null
+          installments_remaining?: number | null
           installments_total?: number | null
+          insurance_paid?: number | null
           monthly_payment?: number | null
           name?: string | null
+          notes?: string | null
+          quota?: string | null
           status?: string | null
+          total_paid?: number | null
+          total_pending?: number | null
           total_value?: number | null
           updated_at?: string | null
         }
         Update: {
+          adhesion_date?: string | null
+          admin_fee_paid?: number | null
+          admin_fee_pct?: number | null
+          asset_type?: string | null
+          contract_number?: string | null
+          credit_value?: number | null
+          end_date?: string | null
+          extrato_file_name?: string | null
+          extrato_file_url?: string | null
+          extrato_updated_at?: string | null
+          fund_paid?: number | null
+          group_number?: string | null
           id?: string
           installments_paid?: number | null
+          installments_remaining?: number | null
           installments_total?: number | null
+          insurance_paid?: number | null
           monthly_payment?: number | null
           name?: string | null
+          notes?: string | null
+          quota?: string | null
           status?: string | null
+          total_paid?: number | null
+          total_pending?: number | null
           total_value?: number | null
           updated_at?: string | null
         }
@@ -1932,7 +2045,28 @@ export type Database = {
       }
       clean_duplicate_expenses: { Args: never; Returns: undefined }
       clean_duplicate_revenues: { Args: never; Returns: undefined }
+      delete_investment: { Args: { p_id: string }; Returns: undefined }
       delete_user_by_admin: { Args: { p_user_id: string }; Returns: undefined }
+      get_investments: {
+        Args: never
+        Returns: {
+          bank: string
+          cdi_percent: number
+          current_amount: number
+          id: string
+          inclusion_date: string
+          initial_amount: number
+          is_cdi_linked: boolean
+          maturity_date: string
+          name: string
+          notes: string
+          product_code: string
+          rate_percent: number
+          rescue_amount: number
+          type: string
+          updated_at: string
+        }[]
+      }
       get_user_role: {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]
@@ -1947,6 +2081,7 @@ export type Database = {
       request_manager_access:
         | { Args: { p_user_id: string }; Returns: undefined }
         | { Args: { p_role?: string; p_user_id: string }; Returns: undefined }
+      upsert_investment: { Args: { p_data: Json }; Returns: undefined }
     }
     Enums: {
       app_role:
@@ -1955,6 +2090,7 @@ export type Database = {
         | "financial"
         | "partner"
         | "commissions"
+        | "wedding"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2088,6 +2224,7 @@ export const Constants = {
         "financial",
         "partner",
         "commissions",
+        "wedding",
       ],
     },
   },
