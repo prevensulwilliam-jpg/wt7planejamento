@@ -85,6 +85,8 @@ export default function LoginPage() {
         navigate("/partner/projects", { replace: true });
       } else if (role === "commissions") {
         navigate("/commissions/portal", { replace: true });
+      } else if (role === "wedding") {
+        navigate("/wedding/portal", { replace: true });
       } else {
         navigate("/dashboard", { replace: true });
       }

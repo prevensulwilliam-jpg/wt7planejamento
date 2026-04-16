@@ -33,6 +33,7 @@ import NavalPage from "@/pages/NavalPage";
 import ReconciliationPage from "@/pages/ReconciliationPage";
 import PatternsPage from "@/pages/PatternsPage";
 import CategoriesPage from "@/pages/CategoriesPage";
+import WeddingPortalPage from "@/pages/WeddingPortalPage";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -143,6 +144,9 @@ const App = () => (
 
           {/* Commissions portal */}
           <Route path="/commissions/portal" element={<CommissionsPortalPage />} />
+
+          {/* Wedding portal */}
+          <Route path="/wedding/portal" element={<WeddingPortalPage />} />
 
           {/* Partner routes */}
           <Route path="/partner/projects" element={<PartnerProjectsPage />} />
