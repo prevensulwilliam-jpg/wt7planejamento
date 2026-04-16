@@ -868,6 +868,31 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
 
       await matchMutation.mutateAsync({ id, category, intent, revenueId, expenseId });
       await recordClassification(tx.description, category, intent, label);
+
+      // ─── Auto-reconciliação de consórcio ───
+      if (category === "consorcio" && intent === "despesa") {
+        try {
+          const { data: consList } = await supabase
+            .from("consortiums" as any)
+            .select("id, installments_paid, total_paid")
+            .eq("status", "ativo")
+            .limit(1);
+          const cons = (consList as any)?.[0];
+          if (cons) {
+            const newPaid = (cons.installments_paid ?? 0) + 1;
+            const newTotal = (parseFloat(cons.total_paid) || 0) + Math.abs(tx.amount);
+            await supabase.from("consortiums" as any).update({
+              installments_paid: newPaid,
+              total_paid: newTotal,
+            }).eq("id", cons.id);
+            queryClient.invalidateQueries({ queryKey: ["consortiums"] });
+            toast.success(`Consórcio atualizado: parcela ${newPaid}, total pago ${formatCurrency(newTotal)}`);
+          }
+        } catch (err) {
+          console.error("Erro ao atualizar consórcio:", err);
+        }
+      }
+
       queryClient.invalidateQueries({ queryKey: ["revenues"] });
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
     } catch (err: any) {
@@ -915,9 +940,28 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
         await matchMutation.mutateAsync({ id: tx.id, category, intent, revenueId, expenseId });
         const pLabel = ALL_CATEGORY_LABELS[category] || category;
         await recordClassification(tx.description, category, intent, pLabel);
+
+        // Auto-reconciliação consórcio em lote
+        if (category === "consorcio" && intent === "despesa") {
+          try {
+            const { data: consList } = await supabase
+              .from("consortiums" as any)
+              .select("id, installments_paid, total_paid")
+              .eq("status", "ativo")
+              .limit(1);
+            const cons = (consList as any)?.[0];
+            if (cons) {
+              await supabase.from("consortiums" as any).update({
+                installments_paid: (cons.installments_paid ?? 0) + 1,
+                total_paid: (parseFloat(cons.total_paid) || 0) + Math.abs(tx.amount),
+              }).eq("id", cons.id);
+            }
+          } catch (err) { console.error("Erro ao atualizar consórcio:", err); }
+        }
       }
       queryClient.invalidateQueries({ queryKey: ["revenues"] });
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["consortiums"] });
       toast.success(`${revenues} receitas e ${expenses} despesas criadas automaticamente!`);
     } catch (err: any) {
       toast.error(`Erro ao confirmar em lote: ${err.message || "erro desconhecido"}`);

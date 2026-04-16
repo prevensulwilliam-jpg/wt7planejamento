@@ -23,7 +23,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatCurrency, formatDate } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
-import { Landmark, Plus, TrendingUp, Pencil, Trash2, GripVertical } from "lucide-react";
+import { Landmark, Plus, TrendingUp, Pencil, Trash2, GripVertical, Upload, FileText, Loader2 } from "lucide-react";
+import { parseConsortiumExtrato, type ConsortiumExtratoData } from "@/lib/parseConsortiumExtrato";
 
 // ─── Investments hooks INLINE (Lovable não deploya useConstructions.ts) ─────
 function useInvestments() {
@@ -167,6 +168,12 @@ export default function AssetsPage() {
   const [delCons,  setDelCons]    = useState<any | null>(null);
   const [consForm, setConsForm]   = useState(emptyCons);
 
+  // ─── Upload extrato state ────────────────────────────────────────────────
+  const [extratoTarget, setExtratoTarget] = useState<any | null>(null);
+  const [extratoData, setExtratoData]     = useState<ConsortiumExtratoData | null>(null);
+  const [extratoLoading, setExtratoLoading] = useState(false);
+  const [extratoFileName, setExtratoFileName] = useState("");
+
   // ─── KPIs ─────────────────────────────────────────────────────────────────
   const totalPatrimonio  = (assets ?? []).reduce((s, a) => s + (a.estimated_value ?? 0), 0);
   const totalInvestido   = (investments ?? []).reduce((s, i) => s + (Number((i as any).initial_amount) || 0), 0);
@@ -281,6 +288,60 @@ export default function AssetsPage() {
     if (!delCons) return;
     try { await deleteConsortium.mutateAsync(delCons.id); toast({ title: "Consórcio excluído" }); setDelCons(null); }
     catch { toast({ title: "Erro", variant: "destructive" }); }
+  };
+
+  // ─── Upload extrato handlers ────────────────────────────────────────────
+  const handleExtratoFile = async (e: React.ChangeEvent<HTMLInputElement>, consortium: any) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setExtratoTarget(consortium);
+    setExtratoFileName(file.name);
+    setExtratoLoading(true);
+    try {
+      const data = await parseConsortiumExtrato(file);
+      setExtratoData(data);
+    } catch (err: any) {
+      toast({ title: "Erro ao processar PDF: " + (err?.message || ""), variant: "destructive" });
+      setExtratoTarget(null);
+    } finally {
+      setExtratoLoading(false);
+    }
+    e.target.value = "";
+  };
+
+  const handleApplyExtrato = async () => {
+    if (!extratoTarget || !extratoData) return;
+    try {
+      const updates: any = {
+        extrato_file_name: extratoFileName,
+        extrato_updated_at: new Date().toISOString(),
+      };
+      if (extratoData.group_number) updates.group_number = extratoData.group_number;
+      if (extratoData.quota) updates.quota = extratoData.quota;
+      if (extratoData.contract_number) updates.contract_number = extratoData.contract_number;
+      if (extratoData.admin_fee_pct) updates.admin_fee_pct = extratoData.admin_fee_pct;
+      if (extratoData.asset_type) updates.asset_type = extratoData.asset_type;
+      if (extratoData.credit_value) updates.credit_value = extratoData.credit_value;
+      if (extratoData.adhesion_date) updates.adhesion_date = extratoData.adhesion_date;
+      if (extratoData.end_date) updates.end_date = extratoData.end_date;
+      if (extratoData.installments_total) updates.installments_total = extratoData.installments_total;
+      if (extratoData.installments_paid) updates.installments_paid = extratoData.installments_paid;
+      if (extratoData.installments_remaining) updates.installments_remaining = extratoData.installments_remaining;
+      if (extratoData.total_paid) updates.total_paid = extratoData.total_paid;
+      if (extratoData.total_pending) updates.total_pending = extratoData.total_pending;
+      if (extratoData.fund_paid) updates.fund_paid = extratoData.fund_paid;
+      if (extratoData.admin_fee_paid) updates.admin_fee_paid = extratoData.admin_fee_paid;
+      if (extratoData.insurance_paid) updates.insurance_paid = extratoData.insurance_paid;
+      if (extratoData.monthly_payment) updates.monthly_payment = extratoData.monthly_payment;
+      if (extratoData.total_value) updates.total_value = extratoData.total_value;
+
+      await updateConsortium.mutateAsync({ id: extratoTarget.id, ...updates });
+      toast({ title: `Extrato aplicado! ${extratoData.installments_paid ?? 0} parcelas detectadas.` });
+      setExtratoTarget(null);
+      setExtratoData(null);
+    } catch (err: any) {
+      toast({ title: "Erro: " + (err?.message || ""), variant: "destructive" });
+    }
   };
 
   // ─── Card action buttons ──────────────────────────────────────────────────
@@ -540,11 +601,23 @@ export default function AssetsPage() {
                       <Progress value={pct} className="h-2" />
                     </div>
 
-                    {/* Datas */}
-                    <div className="flex gap-3 text-xs flex-wrap" style={{ color: '#64748B' }}>
+                    {/* Datas + Upload */}
+                    <div className="flex items-center gap-3 text-xs flex-wrap" style={{ color: '#64748B' }}>
                       {c.adhesion_date && <span>Adesão: {formatDate(c.adhesion_date)}</span>}
                       {c.end_date && <span>Encerramento: {formatDate(c.end_date)}</span>}
+                      <label className="ml-auto flex items-center gap-1 cursor-pointer px-2 py-1 rounded-lg transition-colors hover:bg-white/5" style={{ color: '#818CF8', border: '1px solid rgba(129,140,248,0.2)' }}>
+                        <Upload className="w-3 h-3" />
+                        <span>Extrato</span>
+                        <input type="file" accept=".pdf" className="hidden" onChange={e => handleExtratoFile(e, c)} />
+                      </label>
                     </div>
+                    {c.extrato_file_name && (
+                      <div className="flex items-center gap-1 text-xs" style={{ color: '#4A5568' }}>
+                        <FileText className="w-3 h-3" />
+                        <span>{c.extrato_file_name}</span>
+                        {c.extrato_updated_at && <span>· {formatDate(c.extrato_updated_at)}</span>}
+                      </div>
+                    )}
                   </PremiumCard>
                 );
               }}
@@ -773,6 +846,91 @@ export default function AssetsPage() {
               <GoldButton onClick={editCons ? handleUpdateCons : handleCreateCons}>
                 {editCons ? "Salvar" : "Registrar"}
               </GoldButton>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* ─── DIALOG UPLOAD EXTRATO ─── */}
+      {(extratoTarget || extratoLoading) && (
+        <Dialog open onOpenChange={o => { if (!o) { setExtratoTarget(null); setExtratoData(null); } }}>
+          <DialogContent style={{ background: '#0D1318', border: '1px solid #1A2535', maxHeight: '90vh', overflowY: 'auto', maxWidth: '600px' }}>
+            <DialogHeader>
+              <DialogTitle style={{ color: '#F0F4F8' }}>
+                <FileText className="inline w-5 h-5 mr-2" style={{ color: '#818CF8' }} />
+                Upload Extrato — {extratoTarget?.name}
+              </DialogTitle>
+            </DialogHeader>
+            {extratoLoading ? (
+              <div className="flex items-center justify-center py-12 gap-3">
+                <Loader2 className="w-6 h-6 animate-spin" style={{ color: '#E8C97A' }} />
+                <span style={{ color: '#94A3B8' }}>Processando PDF...</span>
+              </div>
+            ) : extratoData ? (
+              <div className="space-y-3">
+                <p className="text-xs" style={{ color: '#94A3B8' }}>Arquivo: <span style={{ color: '#F0F4F8' }}>{extratoFileName}</span></p>
+
+                {/* Identificação */}
+                <div className="rounded-lg p-3 space-y-1" style={{ background: 'rgba(129,140,248,0.06)', border: '1px solid rgba(129,140,248,0.2)' }}>
+                  <p className="text-xs font-semibold mb-1" style={{ color: '#818CF8' }}>Identificação</p>
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    {extratoData.group_number && <div><span style={{ color: '#64748B' }}>Grupo: </span><span style={{ color: '#F0F4F8' }}>{extratoData.group_number}</span></div>}
+                    {extratoData.quota && <div><span style={{ color: '#64748B' }}>Cota: </span><span style={{ color: '#F0F4F8' }}>{extratoData.quota}</span></div>}
+                    {extratoData.contract_number && <div><span style={{ color: '#64748B' }}>Contrato: </span><span style={{ color: '#F0F4F8' }}>{extratoData.contract_number}</span></div>}
+                    {extratoData.asset_type && <div><span style={{ color: '#64748B' }}>Bem: </span><span style={{ color: '#F0F4F8' }}>{extratoData.asset_type}</span></div>}
+                    {extratoData.admin_fee_pct && <div><span style={{ color: '#64748B' }}>ADM: </span><span style={{ color: '#F0F4F8' }}>{extratoData.admin_fee_pct}%</span></div>}
+                  </div>
+                </div>
+
+                {/* Valores */}
+                <div className="rounded-lg p-3 space-y-1" style={{ background: 'rgba(232,201,122,0.06)', border: '1px solid rgba(232,201,122,0.2)' }}>
+                  <p className="text-xs font-semibold mb-1" style={{ color: '#E8C97A' }}>Valores Detectados</p>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    {extratoData.credit_value && <div><span style={{ color: '#64748B' }}>Crédito: </span><span className="font-mono" style={{ color: '#E8C97A' }}>{formatCurrency(extratoData.credit_value)}</span></div>}
+                    {extratoData.total_paid && <div><span style={{ color: '#64748B' }}>Total Pago: </span><span className="font-mono" style={{ color: '#10B981' }}>{formatCurrency(extratoData.total_paid)}</span></div>}
+                    {extratoData.total_pending && <div><span style={{ color: '#64748B' }}>A Pagar: </span><span className="font-mono" style={{ color: '#F43F5E' }}>{formatCurrency(extratoData.total_pending)}</span></div>}
+                    {extratoData.monthly_payment && <div><span style={{ color: '#64748B' }}>Parcela: </span><span className="font-mono" style={{ color: '#F0F4F8' }}>{formatCurrency(extratoData.monthly_payment)}</span></div>}
+                  </div>
+                </div>
+
+                {/* Parcelas */}
+                <div className="rounded-lg p-3 space-y-1" style={{ background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.2)' }}>
+                  <p className="text-xs font-semibold mb-1" style={{ color: '#10B981' }}>Parcelas</p>
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    {extratoData.installments_paid && <div><span style={{ color: '#64748B' }}>Pagas: </span><span style={{ color: '#10B981' }}>{extratoData.installments_paid}</span></div>}
+                    {extratoData.installments_total && <div><span style={{ color: '#64748B' }}>Total: </span><span style={{ color: '#F0F4F8' }}>{extratoData.installments_total}</span></div>}
+                    {extratoData.installments_remaining && <div><span style={{ color: '#64748B' }}>Restantes: </span><span style={{ color: '#F43F5E' }}>{extratoData.installments_remaining}</span></div>}
+                  </div>
+                </div>
+
+                {/* Composição */}
+                {(extratoData.fund_paid || extratoData.admin_fee_paid || extratoData.insurance_paid) && (
+                  <div className="rounded-lg p-3 space-y-1" style={{ background: 'rgba(45,212,191,0.04)', border: '1px solid rgba(45,212,191,0.15)' }}>
+                    <p className="text-xs font-semibold mb-1" style={{ color: '#2DD4BF' }}>Composição</p>
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      {extratoData.fund_paid && <div><span style={{ color: '#64748B' }}>Fundo: </span><span className="font-mono" style={{ color: '#2DD4BF' }}>{formatCurrency(extratoData.fund_paid)}</span></div>}
+                      {extratoData.admin_fee_paid && <div><span style={{ color: '#64748B' }}>ADM: </span><span className="font-mono" style={{ color: '#94A3B8' }}>{formatCurrency(extratoData.admin_fee_paid)}</span></div>}
+                      {extratoData.insurance_paid && <div><span style={{ color: '#64748B' }}>Seguro: </span><span className="font-mono" style={{ color: '#94A3B8' }}>{formatCurrency(extratoData.insurance_paid)}</span></div>}
+                    </div>
+                  </div>
+                )}
+
+                {/* Datas */}
+                <div className="flex gap-4 text-xs" style={{ color: '#64748B' }}>
+                  {extratoData.adhesion_date && <span>Adesão: {formatDate(extratoData.adhesion_date)}</span>}
+                  {extratoData.end_date && <span>Encerramento: {formatDate(extratoData.end_date)}</span>}
+                </div>
+              </div>
+            ) : (
+              <p className="text-center py-8 text-sm" style={{ color: '#94A3B8' }}>Nenhum dado extraído do PDF.</p>
+            )}
+            <DialogFooter className="gap-2">
+              <button onClick={() => { setExtratoTarget(null); setExtratoData(null); }} className="px-4 py-2 rounded-lg text-sm" style={{ border: '1px solid #1A2535', color: '#94A3B8' }}>Cancelar</button>
+              {extratoData && (
+                <GoldButton onClick={handleApplyExtrato} disabled={updateConsortium.isPending}>
+                  {updateConsortium.isPending ? "Salvando..." : "Aplicar Dados"}
+                </GoldButton>
+              )}
             </DialogFooter>
           </DialogContent>
         </Dialog>

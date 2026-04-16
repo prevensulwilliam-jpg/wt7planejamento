@@ -231,6 +231,81 @@ serve(async (req) => {
       });
     }
 
+    // ── Modo extração extrato consórcio ──
+    if (body_req.action === "extract-consortium") {
+      const { imageBase64, mediaType } = body_req as any;
+      const dataUrl = `data:${mediaType || "application/pdf"};base64,${imageBase64}`;
+
+      const CONSORTIUM_PROMPT = `Você é um extrator de dados de extratos de consórcio brasileiro (Ademicon, Porto Seguro, Rodobens, etc).
+
+Analise este PDF de extrato e extraia os dados em JSON puro, sem markdown, sem explicações.
+Se um campo não estiver visível, use null.
+
+{
+  "group_number": "000580",
+  "quota": "0434-00",
+  "contract_number": "0090065342",
+  "admin_fee_pct": 23.50,
+  "asset_type": "IMOVEIS",
+  "credit_value": 428132.79,
+  "adhesion_date": "2020-09-25",
+  "end_date": "2035-09-25",
+  "installments_total": 180,
+  "installments_paid": 72,
+  "installments_remaining": 108,
+  "total_paid": 79923.09,
+  "total_pending": 437890.51,
+  "fund_paid": 52345.67,
+  "admin_fee_paid": 18789.01,
+  "insurance_paid": 8788.41,
+  "monthly_payment": 1841.40,
+  "total_value": 517813.60
+}
+
+REGRAS:
+- Datas no formato YYYY-MM-DD
+- Valores numéricos sem R$, sem pontos de milhar
+- Conte o número de linhas de parcelas pagas para installments_paid
+- total_value = total_paid + total_pending (soma dos dois)
+- monthly_payment = valor da última parcela paga
+- fund_paid = soma do fundo comum nas parcelas
+- admin_fee_paid = soma da taxa de administração nas parcelas
+- insurance_paid = soma dos seguros nas parcelas
+- Se houver uma tabela resumo com totais, use esses valores
+- Retorne APENAS o JSON`;
+
+      const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          max_tokens: 1024,
+          messages: [{
+            role: "user",
+            content: [
+              { type: "image_url", image_url: { url: dataUrl } },
+              { type: "text", text: CONSORTIUM_PROMPT },
+            ],
+          }],
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.text();
+        return new Response(JSON.stringify({ error: "Erro no gateway", detail: err }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const data = await res.json();
+      const rawText = data.choices?.[0]?.message?.content ?? "";
+      const extracted = safeParseJson(rawText);
+
+      return new Response(JSON.stringify({ ok: true, data: extracted }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // ── Modo extração CELESC ──
     if (body_req.action === "extract-celesc") {
       const { imageBase64, mediaType } = body_req;
