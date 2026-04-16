@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "wt7-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 8080
+    },
+    {
+      "name": "preview-html",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "-p", "5500", "-s", "."],
+      "port": 5500
+    }
+  ]
+}

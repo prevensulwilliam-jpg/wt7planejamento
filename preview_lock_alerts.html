@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Preview — Pendência de Fechamento</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #060A0F; font-family: 'Inter', sans-serif; color: #F0F4F8; padding: 32px; }
+  h2 { color: #94A3B8; font-size: 12px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 16px; }
+
+  .grid { display: grid; grid-template-columns: repeat(3, 300px); gap: 16px; }
+
+  .card {
+    background: #0D1318; border: 1px solid #1A2535; border-radius: 16px; padding: 16px;
+  }
+  .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; }
+  .card-code { font-size: 12px; font-weight: 700; color: #F0F4F8; font-family: monospace; }
+  .badge { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 99px; }
+  .badge-green { background: rgba(16,185,129,.15); color: #10B981; border: 1px solid rgba(16,185,129,.3); }
+  .card-name  { font-size: 13px; color: #94A3B8; margin-bottom: 10px; }
+  .card-value { font-size: 22px; font-weight: 600; color: #E8C97A; font-family: monospace; margin-bottom: 12px; }
+
+  .status-bar {
+    border-radius: 8px; padding: 6px 10px; font-size: 11px; font-weight: 600;
+    display: flex; align-items: center; gap: 6px; margin-bottom: 6px;
+  }
+  .bar-conciliado { background: rgba(16,185,129,.12); color: #10B981; border: 1px solid rgba(16,185,129,.25); }
+
+  .bar-pending {
+    background: rgba(245,158,11,.12); color: #F59E0B; border: 1px solid rgba(245,158,11,.25);
+    cursor: pointer; transition: all .15s; user-select: none;
+  }
+  .bar-pending:hover { background: rgba(245,158,11,.22); border-color: rgba(245,158,11,.5); }
+  .bar-pending .hint { margin-left: auto; font-size: 10px; opacity: .65; }
+
+  .bar-acordo {
+    background: rgba(16,185,129,.12); color: #10B981; border: 1px solid rgba(16,185,129,.25);
+    cursor: pointer; transition: all .15s; user-select: none;
+  }
+  .bar-acordo:hover { background: rgba(16,185,129,.22); }
+
+  .btn-manage {
+    width: 100%; margin-top: 10px; padding: 8px; border-radius: 10px; font-size: 12px;
+    font-weight: 600; background: transparent; color: #C9A84C; cursor: pointer;
+    border: 1px solid rgba(201,168,76,.25); transition: all .15s;
+  }
+  .btn-manage:hover { background: rgba(201,168,76,.08); }
+
+  .section { margin-bottom: 40px; }
+
+  /* Overlay + Dialog */
+  .overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,.7); backdrop-filter: blur(4px);
+    z-index: 100; align-items: center; justify-content: center;
+  }
+  .overlay.open { display: flex; }
+  .dialog {
+    background: #0D1318; border: 1px solid #1A2535; border-radius: 20px;
+    padding: 28px; width: 380px; animation: pop .15s ease;
+  }
+  @keyframes pop { from { transform: scale(.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .dialog-icon { font-size: 28px; margin-bottom: 12px; }
+  .dialog h3 { font-size: 16px; font-weight: 700; color: #F0F4F8; margin-bottom: 6px; }
+  .dialog p  { font-size: 13px; color: #94A3B8; line-height: 1.55; margin-bottom: 20px; }
+  .dialog p strong { color: #E8C97A; }
+  .dialog-btns { display: flex; gap: 8px; }
+  .btn-cancel {
+    padding: 10px 14px; border-radius: 10px; font-size: 13px; font-weight: 500;
+    background: transparent; color: #64748B; border: 1px solid #1A2535; cursor: pointer;
+  }
+  .btn-sim {
+    flex: 1; padding: 10px; border-radius: 10px; font-size: 13px; font-weight: 600;
+    background: rgba(16,185,129,.15); color: #10B981; border: 1px solid rgba(16,185,129,.35);
+    cursor: pointer; transition: all .15s;
+  }
+  .btn-sim:hover { background: rgba(16,185,129,.28); }
+  .btn-nao {
+    flex: 1; padding: 10px; border-radius: 10px; font-size: 13px; font-weight: 600;
+    background: rgba(244,63,94,.1); color: #F43F5E; border: 1px solid rgba(244,63,94,.3);
+    cursor: pointer; transition: all .15s;
+  }
+  .btn-nao:hover { background: rgba(244,63,94,.2); }
+</style>
+</head>
+<body>
+
+<!-- Estado 1: pendente clicável -->
+<div class="section">
+  <h2>Estado 1 — Conciliado + pendência &nbsp;·&nbsp; clique no badge amarelo</h2>
+  <div class="grid">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-code">RWT02-08</span>
+        <span class="badge badge-green">Ocupada</span>
+      </div>
+      <div class="card-name">Daniela</div>
+      <div class="card-value">R$ 2.183,54</div>
+      <div class="status-bar bar-conciliado">✓ Conciliado · R$ 2.183,54</div>
+      <div class="status-bar bar-pending" onclick="openMain()">
+        ⚠ Pendente: R$ 314,64
+        <span class="hint">clique para confirmar →</span>
+      </div>
+      <button class="btn-manage">Gerenciar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Estado 2: acordo confirmado -->
+<div class="section">
+  <h2>Estado 2 — Após "Sim, foi incluído"</h2>
+  <div class="grid">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-code">RWT02-08</span>
+        <span class="badge badge-green">Ocupada</span>
+      </div>
+      <div class="card-name">Daniela</div>
+      <div class="card-value">R$ 2.183,54</div>
+      <div class="status-bar bar-conciliado">✓ Conciliado · R$ 2.183,54</div>
+      <div class="status-bar bar-acordo" onclick="openRevert()">
+        ✓ Acordo incluído · R$ 314,64
+      </div>
+      <button class="btn-manage">Gerenciar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Estado 3: ainda pendente (após Não) -->
+<div class="section">
+  <h2>Estado 3 — Após "Não, ainda pendente"</h2>
+  <div class="grid">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-code">RWT02-08</span>
+        <span class="badge badge-green">Ocupada</span>
+      </div>
+      <div class="card-name">Daniela</div>
+      <div class="card-value">R$ 2.183,54</div>
+      <div class="status-bar bar-conciliado">✓ Conciliado · R$ 2.183,54</div>
+      <div class="status-bar bar-pending" onclick="openMain()">
+        ⚠ Ainda pendente: R$ 314,64
+        <span class="hint">clique para confirmar →</span>
+      </div>
+      <button class="btn-manage">Gerenciar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Dialog principal -->
+<div class="overlay" id="dlgMain">
+  <div class="dialog">
+    <div class="dialog-icon">📋</div>
+    <h3>Acordo incluído no fechamento?</h3>
+    <p>
+      O valor de <strong>R$ 314,64</strong> referente ao parcelamento de
+      <strong>março/2026</strong> foi adicionado ao fechamento deste mês?
+    </p>
+    <div class="dialog-btns">
+      <button class="btn-cancel" onclick="closeAll()">Cancelar</button>
+      <button class="btn-nao"    onclick="closeAll()">Não, ainda pendente</button>
+      <button class="btn-sim"    onclick="closeAll()">Sim, foi incluído ✓</button>
+    </div>
+  </div>
+</div>
+
+<!-- Dialog reverter -->
+<div class="overlay" id="dlgRevert">
+  <div class="dialog">
+    <div class="dialog-icon">✅</div>
+    <h3>Acordo já registrado</h3>
+    <p>
+      O valor de <strong>R$ 314,64</strong> foi confirmado como incluído no fechamento.
+      Deseja reverter para pendente?
+    </p>
+    <div class="dialog-btns">
+      <button class="btn-cancel" onclick="closeAll()">Fechar</button>
+      <button class="btn-nao"    onclick="closeAll()">Reverter para pendente</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const dlgMain   = document.getElementById('dlgMain');
+  const dlgRevert = document.getElementById('dlgRevert');
+  function openMain()   { dlgMain.classList.add('open'); }
+  function openRevert() { dlgRevert.classList.add('open'); }
+  function closeAll()   { dlgMain.classList.remove('open'); dlgRevert.classList.remove('open'); }
+  document.querySelectorAll('.overlay').forEach(o => o.addEventListener('click', e => { if (e.target === o) closeAll(); }));
+</script>
+</body>
+</html>

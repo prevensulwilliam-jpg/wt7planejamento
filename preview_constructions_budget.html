@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Preview — Obras: Etapas + Orçamento</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #060A0F; font-family: 'Inter', system-ui, sans-serif; color: #F0F4F8; padding: 24px; }
+  h2 { font-size: 11px; text-transform: uppercase; letter-spacing: 3px; color: #4A5568; margin-bottom: 16px; margin-top: 32px; }
+  h2:first-child { margin-top: 0; }
+
+  /* ── Card ── */
+  .card { background: #0D1318; border: 1px solid #1A2535; border-radius: 16px; padding: 16px; max-width: 520px; }
+  .card-title { font-size: 15px; font-weight: 700; color: #F0F4F8; margin-bottom: 2px; }
+  .card-sub { font-size: 11px; color: #C9A84C; margin-bottom: 2px; }
+  .card-addr { font-size: 11px; color: #64748B; margin-bottom: 6px; }
+  .card-dates { font-size: 11px; color: #94A3B8; margin-bottom: 6px; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 8px; font-size: 11px; font-weight: 600; }
+  .badge-cyan { background: rgba(45,212,191,0.15); color: #2DD4BF; border: 1px solid rgba(45,212,191,0.3); }
+  .progress-row { display: flex; justify-content: space-between; font-size: 11px; color: #94A3B8; margin-bottom: 4px; }
+  .progress-bar { height: 5px; background: #1A2535; border-radius: 99px; overflow: hidden; margin-bottom: 10px; }
+  .progress-fill { height: 100%; background: #C9A84C; border-radius: 99px; }
+  .proj-row { font-size: 12px; font-family: monospace; color: #E8C97A; margin-bottom: 2px; }
+  .proj-row span { color: #64748B; }
+  .proj-row.green { color: #10B981; }
+  .partner-row { font-size: 11px; color: #2DD4BF; margin-bottom: 10px; }
+
+  /* NOVO: barra de orçamento */
+  .budget-bar-wrap { margin: 8px 0 10px; padding: 8px 10px; background: rgba(201,168,76,0.05); border: 1px solid rgba(201,168,76,0.15); border-radius: 10px; }
+  .budget-row { display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 5px; }
+  .budget-label { color: #64748B; }
+  .budget-val { font-family: monospace; }
+  .budget-val.gold { color: #E8C97A; }
+  .budget-val.red  { color: #F87171; }
+  .budget-val.green { color: #10B981; }
+  .budget-track { height: 4px; background: #1A2535; border-radius: 99px; overflow: hidden; }
+  .budget-used { height: 100%; border-radius: 99px; background: #E8C97A; transition: width 0.3s; }
+  .budget-pct { font-size: 10px; color: #94A3B8; text-align: right; margin-top: 3px; }
+
+  .card-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn { padding: 6px 14px; border-radius: 8px; font-size: 12px; font-weight: 500; cursor: pointer; border: none; display: flex; align-items: center; gap: 4px; }
+  .btn-gold { background: rgba(232,201,122,0.1); color: #E8C97A; border: 1px solid rgba(232,201,122,0.3); }
+  .btn-outline { background: rgba(201,168,76,0.05); color: #C9A84C; border: 1px solid rgba(201,168,76,0.2); }
+  .btn-red { background: rgba(239,68,68,0.1); color: #F87171; border: 1px solid rgba(239,68,68,0.3); }
+
+  /* ── Modal ── */
+  .modal { background: #0D1318; border: 1px solid #1A2535; border-radius: 16px; padding: 24px; max-width: 760px; margin-top: 8px; }
+  .modal-title { font-size: 16px; font-weight: 700; color: #F0F4F8; margin-bottom: 16px; }
+
+  /* KPIs */
+  .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+  .kpi-grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
+  .kpi { background: #080C10; border: 1px solid #1A2535; border-radius: 12px; padding: 12px; }
+  .kpi-label { font-size: 9px; text-transform: uppercase; letter-spacing: 2px; color: #94A3B8; margin-bottom: 4px; }
+  .kpi-val { font-size: 18px; font-family: monospace; font-weight: 700; }
+  .kpi-val.gold  { color: #E8C97A; }
+  .kpi-val.cyan  { color: #2DD4BF; }
+  .kpi-val.green { color: #10B981; }
+  .kpi-val.red   { color: #F87171; }
+  .kpi-val.purple { color: #A78BFA; }
+  .kpi-sub { font-size: 10px; color: #64748B; margin-top: 2px; }
+
+  /* Tabela */
+  .tbl-wrap { overflow-x: auto; border: 1px solid #1A2535; border-radius: 10px; margin-bottom: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  thead th { padding: 8px 10px; text-align: left; color: #64748B; font-weight: 500; border-bottom: 1px solid #1A2535; white-space: nowrap; }
+  tbody td { padding: 8px 10px; border-bottom: 1px solid #0D1318; white-space: nowrap; }
+  tbody tr:last-child td { border-bottom: none; }
+  .mono { font-family: monospace; }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 10px; font-weight: 600; }
+  .tag-cyan { background: rgba(45,212,191,0.12); color: #2DD4BF; border: 1px solid rgba(45,212,191,0.25); }
+  .tag-gold { background: rgba(232,201,122,0.12); color: #E8C97A; border: 1px solid rgba(232,201,122,0.25); }
+  .tag-gray { background: rgba(100,116,139,0.12); color: #94A3B8; border: 1px solid rgba(100,116,139,0.25); }
+  .tag-purple { background: rgba(167,139,250,0.12); color: #A78BFA; border: 1px solid rgba(167,139,250,0.25); }
+  /* NOVO: coluna etapa */
+  .tag-stage { background: rgba(167,139,250,0.1); color: #A78BFA; border: 1px solid rgba(167,139,250,0.3); }
+
+  /* Form */
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+  .form-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+  .form-group { display: flex; flex-direction: column; gap: 4px; }
+  .form-group label { font-size: 11px; color: #94A3B8; }
+  .form-control { background: #080C10; border: 1px solid #1A2535; color: #F0F4F8; border-radius: 8px; padding: 8px 10px; font-size: 13px; outline: none; }
+  .form-control:focus { border-color: rgba(201,168,76,0.5); }
+  .form-control.highlight { border-color: rgba(167,139,250,0.5); background: rgba(167,139,250,0.04); }
+  .form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px; }
+  .btn-cancel { background: transparent; border: 1px solid #1A2535; color: #94A3B8; padding: 8px 16px; border-radius: 8px; font-size: 13px; cursor: pointer; }
+  .btn-save { background: rgba(232,201,122,0.15); border: 1px solid rgba(232,201,122,0.4); color: #E8C97A; padding: 8px 20px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .new-btn { width: 100%; padding: 10px; background: rgba(232,201,122,0.08); border: 1px solid rgba(232,201,122,0.25); color: #E8C97A; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
+
+  /* Etapas */
+  .stage-item { background: #080C10; border: 1px solid #1A2535; border-radius: 10px; padding: 12px; margin-bottom: 8px; }
+  .stage-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .stage-name { font-size: 13px; font-weight: 600; color: #F0F4F8; }
+  .stage-pct { font-size: 12px; font-family: monospace; color: #C9A84C; }
+  .stage-progress { height: 4px; background: #1A2535; border-radius: 99px; overflow: hidden; margin-bottom: 8px; }
+  .stage-fill { height: 100%; background: #C9A84C; }
+  /* NOVO: orçamento da etapa */
+  .stage-budget { display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px; }
+  .stage-budget-label { color: #64748B; }
+  .stage-budget-ok    { color: #10B981; font-family: monospace; }
+  .stage-budget-warn  { color: #F59E0B; font-family: monospace; }
+  .stage-budget-over  { color: #F87171; font-family: monospace; }
+  .stage-budget-track { height: 3px; background: #1A2535; border-radius: 99px; overflow: hidden; }
+  .stage-budget-used  { height: 100%; border-radius: 99px; }
+  .divider { border: none; border-top: 1px solid #1A2535; margin: 16px 0; }
+  .new-form { background: rgba(201,168,76,0.04); border: 1px solid rgba(201,168,76,0.15); border-radius: 10px; padding: 14px; }
+  .new-form-title { font-size: 12px; font-weight: 600; color: #C9A84C; margin-bottom: 10px; }
+
+  /* Nav */
+  .section-nav { display: flex; gap: 8px; margin-bottom: 12px; }
+  .nav-btn { padding: 4px 14px; border-radius: 8px; font-size: 12px; cursor: pointer; border: none; }
+  .nav-btn.active { background: rgba(201,168,76,0.15); color: #E8C97A; border: 1px solid rgba(201,168,76,0.3); }
+  .nav-btn.inactive { background: transparent; color: #64748B; border: 1px solid #1A2535; }
+
+  .annotation { font-size: 11px; color: #10B981; background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2); border-radius: 8px; padding: 6px 12px; margin-bottom: 10px; display: inline-block; }
+  .annotation.purple { color: #A78BFA; background: rgba(167,139,250,0.08); border-color: rgba(167,139,250,0.2); }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════ -->
+<h2>① Card da Obra — com barra de orçamento</h2>
+<span class="annotation">NOVO: orçamento total vs gasto real</span>
+
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
+    <div class="card-title">Residencial RWT 05 &amp; Corrêa</div>
+    <span class="badge badge-cyan">Em Obra</span>
+  </div>
+  <div class="card-sub">🏗 RWT05 &amp; Corrêa.</div>
+  <div class="card-addr">📍 Rua Ana Mafra Pereira, 430, Cidade Nova, Itajaí, SC</div>
+  <div class="card-dates">▶ 12/04/2026 &nbsp;⬛ 30/06/2026</div>
+  <div class="progress-row"><span>0/5 construídas</span><span style="color:#C9A84C">0%</span></div>
+  <div class="progress-bar"><div class="progress-fill" style="width:0%"></div></div>
+
+  <div class="proj-row">Renda projetada: R$ 3.750,00/mês <span>(50% sua)</span></div>
+  <div class="proj-row green">Valor pronto: R$ 500.000,00</div>
+  <div class="partner-row" style="margin-top:4px">%% 50</div>
+
+  <!-- NOVO -->
+  <div class="budget-bar-wrap">
+    <div class="budget-row">
+      <span class="budget-label">Orçamento total da obra</span>
+      <span class="budget-val gold">R$ 180.000,00</span>
+    </div>
+    <div class="budget-row">
+      <span class="budget-label">Gasto até agora</span>
+      <span class="budget-val red">R$ 940,25</span>
+    </div>
+    <div class="budget-track">
+      <div class="budget-used" style="width:0.5%"></div>
+    </div>
+    <div class="budget-pct">0,5% do orçamento consumido &nbsp;·&nbsp; R$ 179.059,75 restante</div>
+  </div>
+
+  <div class="card-actions">
+    <button class="btn btn-gold">Despesas</button>
+    <button class="btn btn-outline">⊞ Etapas</button>
+    <button class="btn btn-outline">✏</button>
+    <button class="btn btn-red">🗑</button>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════ -->
+<h2>② Modal Despesas — com coluna Etapa e campo no formulário</h2>
+<span class="annotation purple">NOVO: coluna "Etapa" na tabela + campo no form</span>
+
+<div class="modal">
+  <div class="modal-title">Despesas — Residencial RWT 05 &amp; Corrêa</div>
+
+  <div class="kpi-grid">
+    <div class="kpi">
+      <div class="kpi-label">Total Investido</div>
+      <div class="kpi-val gold">R$ 940,25</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Parte William</div>
+      <div class="kpi-val cyan">R$ 470,13</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Parte Sócio</div>
+      <div class="kpi-val green">R$ 470,13</div>
+    </div>
+    <!-- NOVO KPI -->
+    <div class="kpi" style="border-color:rgba(167,139,250,0.25)">
+      <div class="kpi-label">% Orçamento</div>
+      <div class="kpi-val purple">0,5%</div>
+      <div class="kpi-sub">de R$ 180.000,00</div>
+    </div>
+  </div>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Data</th>
+          <th>Descrição</th>
+          <th>Cat.</th>
+          <th>Etapa</th><!-- NOVO -->
+          <th>Total</th>
+          <th>William</th>
+          <th>Sócio</th>
+          <th>Tipo</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>07/04/2026</td>
+          <td>Material Hidráulica</td>
+          <td><span class="tag tag-cyan">Materiais</span></td>
+          <td><span class="tag tag-stage">Instalações</span></td><!-- NOVO -->
+          <td class="mono" style="color:#E8C97A">R$ 940,25</td>
+          <td class="mono" style="color:#2DD4BF">R$ 470,13</td>
+          <td class="mono" style="color:#10B981">R$ 470,13</td>
+          <td><span class="tag tag-gray">À vista</span></td>
+        </tr>
+        <tr>
+          <td>10/04/2026</td>
+          <td>Mão de obra fundação</td>
+          <td><span class="tag tag-gold">Mão de Obra</span></td>
+          <td><span class="tag tag-stage">Fundação</span></td>
+          <td class="mono" style="color:#E8C97A">R$ 4.500,00</td>
+          <td class="mono" style="color:#2DD4BF">R$ 2.250,00</td>
+          <td class="mono" style="color:#10B981">R$ 2.250,00</td>
+          <td><span class="tag tag-gray">À vista</span></td>
+        </tr>
+        <tr>
+          <td>12/04/2026</td>
+          <td>Cimento e areia</td>
+          <td><span class="tag tag-cyan">Materiais</span></td>
+          <td><span style="font-size:11px;color:#4A5568">—</span></td><!-- sem etapa -->
+          <td class="mono" style="color:#E8C97A">R$ 1.200,00</td>
+          <td class="mono" style="color:#2DD4BF">R$ 600,00</td>
+          <td class="mono" style="color:#10B981">R$ 600,00</td>
+          <td><span class="tag tag-gray">À vista</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Form Nova Despesa -->
+  <div class="new-form">
+    <div class="new-form-title">Nova Despesa</div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Data</label>
+        <input class="form-control" type="text" value="15/04/2026" readonly>
+      </div>
+      <div class="form-group">
+        <label>Descrição</label>
+        <input class="form-control" placeholder="ex: Tijolos cerâmicos">
+      </div>
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Categoria</label>
+        <select class="form-control">
+          <option>Materiais</option>
+          <option>Mão de Obra</option>
+          <option>Instalações</option>
+        </select>
+      </div>
+      <!-- NOVO -->
+      <div class="form-group">
+        <label>Etapa (opcional)</label>
+        <select class="form-control highlight">
+          <option value="">— Sem etapa —</option>
+          <option>Fundação</option>
+          <option>Estrutura</option>
+          <option>Alvenaria</option>
+          <option selected>Instalações</option>
+          <option>Acabamento</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-grid-3">
+      <div class="form-group">
+        <label>Valor Total (R$)</label>
+        <input class="form-control" placeholder="0,00">
+      </div>
+      <div class="form-group">
+        <label>Pago por</label>
+        <select class="form-control">
+          <option>William</option>
+          <option>Sócio</option>
+          <option>Ambos</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Tipo</label>
+        <select class="form-control">
+          <option>À vista</option>
+          <option>Parcelado</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn-cancel">Cancelar</button>
+      <button class="btn-save">Registrar</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════ -->
+<h2>③ Modal Etapas — com orçamento por etapa</h2>
+<span class="annotation">NOVO: campo Orçamento no form + previsto vs realizado em cada etapa</span>
+
+<div class="modal" style="max-width:580px">
+  <div class="modal-title">⊞ Etapas — Residencial RWT 05 &amp; Corrêa</div>
+  <div style="display:flex;justify-content:space-between;font-size:12px;color:#94A3B8;margin-bottom:14px">
+    <span>3 etapas</span>
+    <span style="color:#C9A84C">38% concluído</span>
+  </div>
+
+  <!-- Etapa 1 -->
+  <div class="stage-item">
+    <div class="stage-header">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="color:#10B981">✓</span>
+        <span class="stage-name">Fundação</span>
+      </div>
+      <span class="stage-pct">100%</span>
+    </div>
+    <div class="stage-progress"><div class="stage-fill" style="width:100%;background:#10B981"></div></div>
+    <!-- NOVO -->
+    <div class="stage-budget">
+      <span class="stage-budget-label">Orçamento</span>
+      <span class="stage-budget-ok">R$ 4.500,00 / R$ 5.000,00 previsto ✓</span>
+    </div>
+    <div class="stage-budget-track">
+      <div class="stage-budget-used" style="width:90%;background:#10B981"></div>
+    </div>
+  </div>
+
+  <!-- Etapa 2 -->
+  <div class="stage-item">
+    <div class="stage-header">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="color:#F59E0B">⚙</span>
+        <span class="stage-name">Estrutura</span>
+      </div>
+      <span class="stage-pct">55%</span>
+    </div>
+    <div class="stage-progress"><div class="stage-fill" style="width:55%;background:#F59E0B"></div></div>
+    <!-- NOVO: acima do previsto -->
+    <div class="stage-budget">
+      <span class="stage-budget-label">Orçamento</span>
+      <span class="stage-budget-warn">R$ 9.200,00 / R$ 8.000,00 previsto ⚠ acima</span>
+    </div>
+    <div class="stage-budget-track">
+      <div class="stage-budget-used" style="width:100%;background:#F59E0B"></div>
+    </div>
+  </div>
+
+  <!-- Etapa 3 -->
+  <div class="stage-item">
+    <div class="stage-header">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="color:#64748B">○</span>
+        <span class="stage-name">Instalações</span>
+      </div>
+      <span class="stage-pct">0%</span>
+    </div>
+    <div class="stage-progress"><div class="stage-fill" style="width:0%"></div></div>
+    <!-- NOVO: sem gasto ainda -->
+    <div class="stage-budget">
+      <span class="stage-budget-label">Orçamento</span>
+      <span style="font-family:monospace;color:#94A3B8">R$ 0,00 / R$ 15.000,00 previsto</span>
+    </div>
+    <div class="stage-budget-track">
+      <div class="stage-budget-used" style="width:0%;background:#2DD4BF"></div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- Form nova etapa com orçamento -->
+  <div class="new-form">
+    <div class="new-form-title">Nova Etapa</div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Nome</label>
+        <input class="form-control" placeholder="ex: Acabamento">
+      </div>
+      <div class="form-group">
+        <label>Status</label>
+        <select class="form-control"><option>Pendente</option><option>Em andamento</option><option>Concluída</option></select>
+      </div>
+    </div>
+    <!-- NOVO -->
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Orçamento previsto (R$)</label>
+        <input class="form-control highlight" placeholder="ex: 20.000,00" style="border-color:rgba(167,139,250,0.5)">
+      </div>
+      <div class="form-group">
+        <label>Conclusão: 0%</label>
+        <div style="background:#1A2535;border-radius:99px;height:6px;margin-top:12px;cursor:pointer">
+          <div style="width:0%;height:100%;background:#C9A84C;border-radius:99px"></div>
+        </div>
+      </div>
+    </div>
+    <div class="form-grid">
+      <div class="form-group"><label>Início</label><input class="form-control" placeholder="Data início"></div>
+      <div class="form-group"><label>Fim</label><input class="form-control" placeholder="Data fim"></div>
+    </div>
+    <div class="form-actions">
+      <button class="btn-cancel">Cancelar</button>
+      <button class="btn-save">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════ -->
+<h2>④ Formulário Nova/Editar Obra — campo Orçamento total</h2>
+<span class="annotation">NOVO: campo total_budget no form de criação</span>
+
+<div class="modal" style="max-width:480px">
+  <div class="modal-title">Nova Obra</div>
+  <div style="display:flex;flex-direction:column;gap:12px">
+    <div class="form-group"><label>Patrimônio (opcional)</label><select class="form-control"><option>RWT05 &amp; Corrêa · Itajaí/SC</option></select></div>
+    <div class="form-group"><label>Nome da obra *</label><input class="form-control" value="Residencial RWT 05 &amp; Corrêa"></div>
+    <div class="form-group"><label>Status</label><select class="form-control"><option>Em Obra</option></select></div>
+    <div class="form-grid-3">
+      <div class="form-group"><label>Início</label><input class="form-control" value="12/04/2026"></div>
+      <div class="form-group"><label>Previsão término</label><input class="form-control" value="01/07/2026"></div>
+      <div class="form-group"><label>Conclusão real</label><input class="form-control" placeholder="Concluído em"></div>
+    </div>
+    <div class="form-grid">
+      <div class="form-group"><label>Kitnets/Unidades</label><input class="form-control" value="5"></div>
+      <div class="form-group"><label>Aluguel projetado/unidade</label><input class="form-control" value="1500,00"></div>
+    </div>
+    <!-- NOVO -->
+    <div class="form-group">
+      <label style="color:#A78BFA">Orçamento total da obra (R$)</label>
+      <input class="form-control" placeholder="ex: 180.000,00" style="border-color:rgba(167,139,250,0.4);background:rgba(167,139,250,0.03)">
+    </div>
+    <div class="form-group"><label>Valor projetado do bem pronto (R$)</label><input class="form-control" value="500000,00"></div>
+    <div class="form-grid-3">
+      <div class="form-group"><label>% William</label><input class="form-control" value="50"></div>
+      <div class="form-group"><label>Sócio</label><input class="form-control" value="Jairo"></div>
+      <div class="form-group"><label>% Sócio</label><input class="form-control" value="50"></div>
+    </div>
+    <div class="form-actions">
+      <button class="btn-cancel">Cancelar</button>
+      <button class="btn-save">Salvar</button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

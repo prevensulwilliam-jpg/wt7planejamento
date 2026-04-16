@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Import PDF — WT7</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #080C10;
+    color: #CBD5E1;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 13px;
+    min-height: 100vh;
+  }
+
+  /* ── Layout ── */
+  .page { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
+  .header { display: flex; align-items: center; gap: 12px; margin-bottom: 28px; }
+  .header h1 { font-size: 18px; font-weight: 700; color: #F0F4F8; }
+  .header .sub { font-size: 12px; color: #64748B; margin-top: 2px; }
+  .badge-obra {
+    background: rgba(232,201,122,0.12); color: #E8C97A;
+    border: 1px solid rgba(232,201,122,0.25); border-radius: 6px;
+    padding: 3px 10px; font-size: 11px; font-weight: 600;
+  }
+
+  /* ── Upload zone ── */
+  #upload-zone {
+    border: 2px dashed #1A2535; border-radius: 12px;
+    padding: 48px; text-align: center; cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    background: #0D1318;
+  }
+  #upload-zone:hover, #upload-zone.drag { border-color: #E8C97A; background: rgba(232,201,122,0.04); }
+  #upload-zone .icon { font-size: 36px; margin-bottom: 12px; }
+  #upload-zone .title { font-size: 15px; color: #F0F4F8; font-weight: 600; margin-bottom: 6px; }
+  #upload-zone .hint { font-size: 12px; color: #64748B; }
+  #file-input { display: none; }
+  .btn-upload {
+    margin-top: 16px; display: inline-block;
+    background: rgba(232,201,122,0.1); color: #E8C97A;
+    border: 1px solid rgba(232,201,122,0.3); border-radius: 8px;
+    padding: 8px 20px; font-size: 12px; cursor: pointer; font-weight: 600;
+  }
+  .btn-upload:hover { background: rgba(232,201,122,0.18); }
+
+  /* ── Progress/state indicator ── */
+  #step-indicator {
+    display: none; gap: 0;
+    margin-bottom: 24px;
+  }
+  .step {
+    flex: 1; text-align: center; padding: 10px 0; font-size: 11px;
+    border-bottom: 2px solid #1A2535; color: #4A5568;
+  }
+  .step.active { border-bottom-color: #E8C97A; color: #E8C97A; font-weight: 600; }
+  .step.done { border-bottom-color: #2DD4BF; color: #2DD4BF; }
+
+  /* ── Preview section ── */
+  #preview-section { display: none; }
+
+  .section-title {
+    font-size: 12px; font-weight: 700; color: #94A3B8;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    margin-bottom: 10px; margin-top: 24px;
+  }
+
+  /* ── KPI row ── */
+  .kpi-row { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+  .kpi {
+    flex: 1; min-width: 140px;
+    background: #0D1318; border: 1px solid #1A2535; border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .kpi .kpi-label { font-size: 10px; color: #4A5568; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+  .kpi .kpi-value { font-size: 18px; font-weight: 700; }
+  .kpi.gold .kpi-value { color: #E8C97A; }
+  .kpi.teal .kpi-value { color: #2DD4BF; }
+  .kpi.blue .kpi-value { color: #60A5FA; }
+  .kpi.green .kpi-value { color: #4ADE80; }
+
+  /* ── Obra selector ── */
+  .obra-row {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 20px;
+    background: #0D1318; border: 1px solid #1A2535; border-radius: 10px; padding: 12px 16px;
+  }
+  .obra-row label { font-size: 12px; color: #94A3B8; white-space: nowrap; }
+  .obra-row select {
+    flex: 1; background: #080C10; border: 1px solid #1A2535; border-radius: 6px;
+    color: #F0F4F8; font-size: 13px; padding: 6px 10px; outline: none;
+  }
+  .obra-row select:focus { border-color: rgba(232,201,122,0.4); }
+
+  /* ── Split toggle ── */
+  .split-row {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 16px;
+    font-size: 12px; color: #94A3B8;
+  }
+  .toggle {
+    width: 36px; height: 20px; background: #1A2535; border-radius: 10px;
+    position: relative; cursor: pointer; transition: background 0.2s;
+  }
+  .toggle.on { background: rgba(45,212,191,0.3); }
+  .toggle::after {
+    content: ''; position: absolute; top: 3px; left: 3px;
+    width: 14px; height: 14px; background: #4A5568; border-radius: 50%;
+    transition: left 0.2s, background 0.2s;
+  }
+  .toggle.on::after { left: 19px; background: #2DD4BF; }
+
+  /* ── Table ── */
+  .table-wrap {
+    background: #0D1318; border: 1px solid #1A2535; border-radius: 10px;
+    overflow: hidden; margin-bottom: 20px;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  thead { background: #080C10; }
+  thead th {
+    padding: 10px 12px; text-align: left; font-size: 10px;
+    color: #4A5568; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700;
+    border-bottom: 1px solid #1A2535;
+  }
+  thead th.center { text-align: center; }
+  tbody tr { border-bottom: 1px solid rgba(26,37,53,0.6); transition: background 0.1s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: rgba(255,255,255,0.02); }
+  tbody tr.unchecked { opacity: 0.4; }
+  tbody td { padding: 9px 12px; font-size: 12px; }
+  tbody td.center { text-align: center; }
+
+  /* ── Checkbox ── */
+  .cb {
+    width: 16px; height: 16px; border: 1.5px solid #1A2535; border-radius: 4px;
+    background: #080C10; cursor: pointer; display: flex; align-items: center;
+    justify-content: center; transition: background 0.15s, border-color 0.15s;
+    flex-shrink: 0;
+  }
+  .cb.checked { background: rgba(232,201,122,0.2); border-color: #E8C97A; }
+  .cb.checked::after { content: '✓'; font-size: 10px; color: #E8C97A; }
+
+  /* ── Category badge ── */
+  .cat-select {
+    background: rgba(100,116,139,0.1); border: 1px solid #1A2535;
+    color: #94A3B8; font-size: 11px; border-radius: 5px; padding: 3px 6px;
+    outline: none; cursor: pointer;
+  }
+  .cat-select:focus { border-color: rgba(232,201,122,0.3); }
+
+  /* ── Value cells ── */
+  .val-total { color: #E8C97A; font-weight: 700; }
+  .val-will { color: #60A5FA; font-weight: 600; }
+  .val-socio { color: #F472B6; font-weight: 600; }
+
+  /* ── Future chip ── */
+  .chip-future {
+    font-size: 9px; padding: 1px 6px; border-radius: 4px;
+    background: rgba(251,191,36,0.1); color: #FBBF24;
+    border: 1px solid rgba(251,191,36,0.2); font-weight: 600;
+  }
+  .chip-done {
+    font-size: 9px; padding: 1px 6px; border-radius: 4px;
+    background: rgba(74,222,128,0.1); color: #4ADE80;
+    border: 1px solid rgba(74,222,128,0.2); font-weight: 600;
+  }
+
+  /* ── Footer actions ── */
+  .footer-actions {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; flex-wrap: wrap;
+  }
+  .footer-left { font-size: 12px; color: #64748B; }
+  .footer-left span { color: #E8C97A; font-weight: 700; }
+  .btn-cancel {
+    background: transparent; border: 1px solid #1A2535; color: #64748B;
+    border-radius: 8px; padding: 8px 20px; font-size: 12px; cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .btn-cancel:hover { border-color: #94A3B8; color: #94A3B8; }
+  .btn-import {
+    background: rgba(232,201,122,0.12); color: #E8C97A;
+    border: 1px solid rgba(232,201,122,0.3); border-radius: 8px;
+    padding: 8px 24px; font-size: 13px; cursor: pointer; font-weight: 700;
+    transition: background 0.15s;
+  }
+  .btn-import:hover { background: rgba(232,201,122,0.2); }
+  .btn-import:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* ── Success ── */
+  #success-section {
+    display: none; text-align: center; padding: 60px 24px;
+  }
+  #success-section .icon { font-size: 48px; margin-bottom: 16px; }
+  #success-section h2 { font-size: 20px; color: #F0F4F8; font-weight: 700; margin-bottom: 8px; }
+  #success-section p { color: #64748B; font-size: 13px; margin-bottom: 24px; }
+  .btn-back {
+    background: rgba(45,212,191,0.1); color: #2DD4BF;
+    border: 1px solid rgba(45,212,191,0.25); border-radius: 8px;
+    padding: 10px 24px; font-size: 13px; cursor: pointer; font-weight: 600;
+  }
+
+  /* ── Parsing animation ── */
+  #parsing-overlay {
+    display: none; text-align: center; padding: 60px 24px;
+  }
+  .spinner {
+    width: 36px; height: 36px; border: 3px solid #1A2535;
+    border-top-color: #E8C97A; border-radius: 50%;
+    animation: spin 0.8s linear infinite; margin: 0 auto 16px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #parsing-overlay p { color: #64748B; font-size: 13px; }
+  #parsing-overlay strong { color: #E8C97A; }
+
+  /* ── Select all row ── */
+  .select-all-row {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11px; color: #64748B; margin-bottom: 8px; cursor: pointer;
+    user-select: none;
+  }
+  .select-all-row:hover { color: #94A3B8; }
+
+  /* ── Divider section in table ── */
+  .section-divider td {
+    background: rgba(26,37,53,0.5); color: #4A5568;
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; padding: 6px 12px !important;
+    border-top: 1px solid #1A2535 !important;
+  }
+
+  /* ── Totals row ── */
+  .totals-row td {
+    background: rgba(232,201,122,0.05);
+    border-top: 1px solid rgba(232,201,122,0.15) !important;
+    font-weight: 700;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Header -->
+  <div class="header">
+    <div>
+      <h1>Importar Relatório de Custos</h1>
+      <div class="sub">Lê o PDF do Jairo e importa as despesas direto na obra</div>
+    </div>
+  </div>
+
+  <!-- Steps -->
+  <div id="step-indicator" style="display:flex">
+    <div class="step done" id="step1">① Upload PDF</div>
+    <div class="step active" id="step2">② Revisar dados</div>
+    <div class="step" id="step3">③ Confirmar</div>
+  </div>
+
+  <!-- Upload zone (starts hidden, shows after reset) -->
+  <div id="upload-zone" onclick="document.getElementById('file-input').click()">
+    <div class="icon">📄</div>
+    <div class="title">Arraste o PDF do Jairo aqui</div>
+    <div class="hint">Formato: TERRENO [NOME] CUSTOS [DATA].pdf</div>
+    <label class="btn-upload" onclick="event.stopPropagation(); document.getElementById('file-input').click()">
+      Selecionar arquivo
+    </label>
+    <input type="file" id="file-input" accept=".pdf" />
+  </div>
+
+  <!-- Parsing overlay -->
+  <div id="parsing-overlay">
+    <div class="spinner"></div>
+    <p>Lendo PDF… extraindo seção <strong>Resumo</strong></p>
+  </div>
+
+  <!-- Preview section -->
+  <div id="preview-section">
+
+    <!-- KPIs -->
+    <div class="kpi-row">
+      <div class="kpi gold">
+        <div class="kpi-label">Total no PDF</div>
+        <div class="kpi-value" id="kpi-total">R$ 0</div>
+      </div>
+      <div class="kpi teal">
+        <div class="kpi-label">Linhas detectadas</div>
+        <div class="kpi-value" id="kpi-linhas">0</div>
+      </div>
+      <div class="kpi blue">
+        <div class="kpi-label">Sua parte (50%)</div>
+        <div class="kpi-value" id="kpi-will">R$ 0</div>
+      </div>
+      <div class="kpi green">
+        <div class="kpi-label">Selecionadas</div>
+        <div class="kpi-value" id="kpi-sel">0</div>
+      </div>
+    </div>
+
+    <!-- Obra selector -->
+    <div class="obra-row">
+      <label>Vincular à obra:</label>
+      <select id="obra-select">
+        <option value="rjw01">RJW01 — Terreno Passagem / Palhoça (Jairo 50%)</option>
+        <option value="rjw02">RJW02 — Terreno Itajaí (Jairo 50%)</option>
+        <option value="rwt04">RWT04 — Solo William</option>
+        <option value="rww01">RWW01 — Walmir 50%</option>
+      </select>
+    </div>
+
+    <!-- Split toggle -->
+    <div class="split-row">
+      <div class="toggle on" id="split-toggle" onclick="toggleSplit()"></div>
+      <span id="split-label">Split 50/50 ativado — mostrando colunas William e Sócio</span>
+    </div>
+
+    <!-- Select all -->
+    <div class="select-all-row" onclick="toggleAll()">
+      <div class="cb checked" id="cb-all"></div>
+      <span>Selecionar / desselecionar tudo</span>
+    </div>
+
+    <!-- Table -->
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="center" style="width:36px"></th>
+            <th>Data</th>
+            <th>Descrição</th>
+            <th>Categoria</th>
+            <th style="text-align:right">Total</th>
+            <th style="text-align:right" class="col-split" id="th-will">William</th>
+            <th style="text-align:right" class="col-split" id="th-socio">Sócio</th>
+            <th class="center">Status</th>
+          </tr>
+        </thead>
+        <tbody id="table-body"></tbody>
+      </table>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer-actions">
+      <div class="footer-left">
+        <span id="footer-count">0</span> despesas selecionadas &nbsp;·&nbsp;
+        Total: <span id="footer-total">R$ 0,00</span>
+      </div>
+      <div style="display:flex; gap:10px;">
+        <button class="btn-cancel" onclick="resetToUpload()">← Novo arquivo</button>
+        <button class="btn-import" id="btn-import" onclick="doImport()">
+          ✓ Importar despesas selecionadas
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Success -->
+  <div id="success-section">
+    <div class="icon">✅</div>
+    <h2 id="success-title">15 despesas importadas com sucesso</h2>
+    <p id="success-sub">Adicionadas à obra RJW01 — Terreno Passagem / Palhoça</p>
+    <button class="btn-back" onclick="resetToUpload()">Importar outro arquivo</button>
+  </div>
+
+</div>
+
+<script>
+// ── Dados reais do PDF do Jairo ──
+const PDF_DATA = [
+  { date: "14/01/2026", iso: "2026-01-14", desc: "Aterro Terreno", value: 13000.00, future: false },
+  { date: "30/01/2026", iso: "2026-01-30", desc: "Máquina para corrigir erro de aterramento", value: 4760.00, future: false },
+  { date: "06/02/2026", iso: "2026-02-06", desc: "Poste Trifásico instalado com luz", value: 2700.00, future: false },
+  { date: "02/03/2026", iso: "2026-03-02", desc: "Ferragens, Cimento, pó de pedra, etc", value: 2787.76, future: false },
+  { date: "04/03/2026", iso: "2026-03-04", desc: "Blocos de Concreto", value: 4929.99, future: false },
+  { date: "04/03/2026", iso: "2026-03-04", desc: "Pingadeira para borda do muro", value: 1267.50, future: false },
+  { date: "06/03/2026", iso: "2026-03-06", desc: "Trator para furar as colunas no chão", value: 1300.00, future: false },
+  { date: "06/03/2026", iso: "2026-03-06", desc: "1ª parcela Mão de obra Pedreiro", value: 4000.00, future: false },
+  { date: "13/03/2026", iso: "2026-03-13", desc: "2ª parcela Mão de obra Pedreiro", value: 4000.00, future: false },
+  { date: "13/03/2026", iso: "2026-03-13", desc: "2ª parcela Mão de obra Pedreiro complemento", value: 1000.00, future: false },
+  { date: "20/03/2026", iso: "2026-03-20", desc: "Veda Reboco (colocar na massa)", value: 160.00, future: false },
+  { date: "20/03/2026", iso: "2026-03-20", desc: "01 bolsa de cimento", value: 40.00, future: false },
+  { date: "20/03/2026", iso: "2026-03-20", desc: "Final parcela Mão de obra Pedreiro", value: 9600.00, future: false },
+  { date: "27/03/2026", iso: "2026-03-27", desc: "Fundo Preparador pintar muro", value: 600.00, future: false },
+  { date: "31/03/2026", iso: "2026-03-31", desc: "Ferragens, Cimento, pó de pedra, etc", value: 2928.00, future: false },
+  // Parcelas futuras
+  { date: "01/04/2026", iso: "2026-04-01", desc: "1ª Parcela — materiais + mão de obra (agrupado)", value: 2762.77, future: true },
+  { date: "01/05/2026", iso: "2026-05-01", desc: "2ª Parcela — materiais + mão de obra (agrupado)", value: 3494.77, future: true },
+  { date: "01/06/2026", iso: "2026-06-01", desc: "3ª Parcela — materiais + mão de obra (agrupado)", value: 3494.77, future: true },
+  { date: "01/07/2026", iso: "2026-07-01", desc: "4ª Parcela (parcial)", value: 1428.94, future: true },
+  { date: "01/08/2026", iso: "2026-08-01", desc: "5ª Parcela (parcial)", value: 732.00, future: true },
+];
+
+const CATEGORIES = [
+  "Terraplenagem", "Mão de obra", "Materiais", "Equipamentos",
+  "Instalações", "Outros"
+];
+
+const DEFAULT_CAT = {
+  "Aterro": "Terraplenagem",
+  "Máquina": "Equipamentos",
+  "Poste": "Instalações",
+  "Ferragens": "Materiais",
+  "Blocos": "Materiais",
+  "Pingadeira": "Materiais",
+  "Trator": "Equipamentos",
+  "Mão de obra": "Mão de obra",
+  "parcela": "Mão de obra",
+  "Parcela": "Mão de obra",
+  "Veda": "Materiais",
+  "cimento": "Materiais",
+  "Fundo": "Materiais",
+};
+
+function guessCategory(desc) {
+  for (const [key, cat] of Object.entries(DEFAULT_CAT)) {
+    if (desc.includes(key)) return cat;
+  }
+  return "Outros";
+}
+
+function fmt(v) {
+  return "R$ " + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// ── State ──
+let rows = [];   // { ...item, checked, category }
+let splitOn = true;
+
+function buildRows() {
+  rows = PDF_DATA.map(item => ({
+    ...item,
+    checked: !item.future,   // pré-seleciona apenas os já pagos
+    category: guessCategory(item.desc),
+  }));
+}
+
+function renderTable() {
+  const tbody = document.getElementById('table-body');
+  tbody.innerHTML = '';
+
+  let lastFuture = null;
+
+  rows.forEach((row, i) => {
+    // Section divider
+    if (row.future !== lastFuture) {
+      lastFuture = row.future;
+      const tr = document.createElement('tr');
+      tr.className = 'section-divider';
+      tr.innerHTML = `<td colspan="8">${row.future ? '📅 Parcelas futuras (agendadas)' : '✅ Lançamentos realizados'}</td>`;
+      tbody.appendChild(tr);
+    }
+
+    const will = (row.value / 2).toFixed(2);
+    const socio = (row.value / 2).toFixed(2);
+    const catOptions = CATEGORIES.map(c =>
+      `<option value="${c}" ${c === row.category ? 'selected' : ''}>${c}</option>`
+    ).join('');
+
+    const tr = document.createElement('tr');
+    tr.className = row.checked ? '' : 'unchecked';
+    tr.id = `row-${i}`;
+    tr.innerHTML = `
+      <td class="center">
+        <div class="cb ${row.checked ? 'checked' : ''}" onclick="toggleRow(${i})"></div>
+      </td>
+      <td style="white-space:nowrap; color:#94A3B8">${row.date}</td>
+      <td>${row.desc}</td>
+      <td>
+        <select class="cat-select" onchange="setCategory(${i}, this.value)">
+          ${catOptions}
+        </select>
+      </td>
+      <td style="text-align:right" class="val-total">${fmt(row.value)}</td>
+      <td style="text-align:right" class="val-will col-split">${fmt(parseFloat(will))}</td>
+      <td style="text-align:right" class="val-socio col-split">${fmt(parseFloat(socio))}</td>
+      <td class="center">
+        ${row.future
+          ? '<span class="chip-future">Futuro</span>'
+          : '<span class="chip-done">Lançado</span>'}
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  // Totals row
+  const selRows = rows.filter(r => r.checked);
+  const tot = selRows.reduce((a, r) => a + r.value, 0);
+  const tr = document.createElement('tr');
+  tr.className = 'totals-row';
+  tr.innerHTML = `
+    <td colspan="4" style="color:#94A3B8; font-size:11px">TOTAL SELECIONADO</td>
+    <td style="text-align:right" class="val-total">${fmt(tot)}</td>
+    <td style="text-align:right" class="val-will col-split">${fmt(tot/2)}</td>
+    <td style="text-align:right" class="val-socio col-split">${fmt(tot/2)}</td>
+    <td></td>
+  `;
+  tbody.appendChild(tr);
+
+  updateKPIs();
+  updateSplitCols();
+}
+
+function toggleRow(i) {
+  rows[i].checked = !rows[i].checked;
+  renderTable();
+}
+
+function setCategory(i, val) {
+  rows[i].category = val;
+}
+
+function toggleAll() {
+  const allChecked = rows.every(r => r.checked);
+  rows.forEach(r => r.checked = !allChecked);
+  document.getElementById('cb-all').className = 'cb' + (allChecked ? '' : ' checked');
+  renderTable();
+}
+
+function toggleSplit() {
+  splitOn = !splitOn;
+  const t = document.getElementById('split-toggle');
+  t.className = 'toggle' + (splitOn ? ' on' : '');
+  document.getElementById('split-label').textContent = splitOn
+    ? 'Split 50/50 ativado — mostrando colunas William e Sócio'
+    : 'Split desativado — apenas total';
+  updateSplitCols();
+}
+
+function updateSplitCols() {
+  const cols = document.querySelectorAll('.col-split');
+  cols.forEach(c => c.style.display = splitOn ? '' : 'none');
+}
+
+function updateKPIs() {
+  const all = rows;
+  const sel = rows.filter(r => r.checked);
+  const totAll = all.reduce((a, r) => a + r.value, 0);
+  const totSel = sel.reduce((a, r) => a + r.value, 0);
+
+  document.getElementById('kpi-total').textContent = fmt(totAll);
+  document.getElementById('kpi-linhas').textContent = all.length;
+  document.getElementById('kpi-will').textContent = fmt(totSel / 2);
+  document.getElementById('kpi-sel').textContent = sel.length;
+
+  document.getElementById('footer-count').textContent = sel.length;
+  document.getElementById('footer-total').textContent = fmt(totSel);
+
+  document.getElementById('btn-import').disabled = sel.length === 0;
+}
+
+// ── Upload simulation ──
+const fileInput = document.getElementById('file-input');
+const uploadZone = document.getElementById('upload-zone');
+
+function handleFile(file) {
+  if (!file) return;
+  if (!file.name.endsWith('.pdf')) {
+    alert('Por favor selecione um arquivo PDF.');
+    return;
+  }
+
+  // Simulate parsing
+  uploadZone.style.display = 'none';
+  document.getElementById('parsing-overlay').style.display = 'block';
+  document.getElementById('step-indicator').style.display = 'flex';
+
+  setTimeout(() => {
+    document.getElementById('parsing-overlay').style.display = 'none';
+    document.getElementById('step1').className = 'step done';
+    document.getElementById('step2').className = 'step active';
+
+    buildRows();
+    renderTable();
+
+    document.getElementById('preview-section').style.display = 'block';
+  }, 1800);
+}
+
+fileInput.addEventListener('change', () => handleFile(fileInput.files[0]));
+
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadZone.classList.remove('drag');
+  handleFile(e.dataTransfer.files[0]);
+});
+
+function resetToUpload() {
+  uploadZone.style.display = 'block';
+  document.getElementById('preview-section').style.display = 'none';
+  document.getElementById('success-section').style.display = 'none';
+  document.getElementById('parsing-overlay').style.display = 'none';
+  document.getElementById('step-indicator').style.display = 'none';
+  fileInput.value = '';
+}
+
+function doImport() {
+  const sel = rows.filter(r => r.checked);
+  if (!sel.length) return;
+
+  document.getElementById('preview-section').style.display = 'none';
+  document.getElementById('step2').className = 'step done';
+  document.getElementById('step3').className = 'step active';
+
+  const obraName = document.getElementById('obra-select').selectedOptions[0].text;
+  document.getElementById('success-title').textContent = `${sel.length} despesas importadas com sucesso`;
+  document.getElementById('success-sub').textContent = `Adicionadas à obra: ${obraName}`;
+  document.getElementById('success-section').style.display = 'block';
+}
+
+// ── Start with demo pre-loaded (remove this block to require file upload) ──
+// Auto-load demo data so you can see the preview right away:
+(function autoDemo() {
+  document.getElementById('step-indicator').style.display = 'flex';
+  document.getElementById('upload-zone').style.display = 'none';
+  buildRows();
+  renderTable();
+  document.getElementById('preview-section').style.display = 'block';
+})();
+</script>
+</body>
+</html>

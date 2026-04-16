@@ -276,7 +276,7 @@ export default function AssetsPage() {
           )}
         </TabsContent>
 
-        {/* ─── INVESTIMENTOS ─── */}
+        {/* ─── INVESTIMENTOS (v3 RPC) ─── */}
         <TabsContent value="investimentos" className="space-y-4">
 
 

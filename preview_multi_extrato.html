@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Preview — Conciliar com múltiplos extratos</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #080C10; color: #F0F4F8; font-family: 'Inter', sans-serif; padding: 32px; max-width: 680px; }
+
+  h2 { font-size: 12px; color: #4A5568; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 20px; }
+
+  .card { background: #0D1117; border: 1px solid #1C2333; border-radius: 10px; padding: 16px; margin-bottom: 14px; }
+
+  /* Cabeçalho da kitnet */
+  .entry-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+  .entry-code { font-family: monospace; font-weight: 700; font-size: 14px; color: #E8C97A; }
+  .entry-tenant { font-size: 12px; color: #4A5568; margin-left: 8px; }
+  .entry-total { font-family: monospace; font-size: 18px; font-weight: 700; color: #F0F4F8; }
+
+  /* Bloco de extrato */
+  .extrato-block { background: #080C10; border: 1px solid #1A2535; border-radius: 8px; padding: 12px; }
+  .extrato-label { font-size: 10px; font-family: monospace; text-transform: uppercase; letter-spacing: 0.08em; color: #4A5568; margin-bottom: 10px; }
+
+  /* Transações selecionadas */
+  .tx-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+  .tx-item { display: flex; align-items: center; justify-content: space-between; background: #0D1117; border: 1px solid #1C2333; border-radius: 6px; padding: 7px 10px; }
+  .tx-item.exact { border-color: rgba(16,185,129,0.3); }
+  .tx-item.partial { border-color: rgba(245,158,11,0.3); }
+  .tx-desc { font-size: 12px; color: #94A3B8; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tx-date { font-size: 11px; color: #4A5568; margin-left: 8px; white-space: nowrap; }
+  .tx-amount { font-family: monospace; font-size: 13px; font-weight: 600; color: #10B981; margin-left: 12px; white-space: nowrap; }
+  .tx-remove { background: none; border: none; cursor: pointer; color: #2D3748; font-size: 16px; margin-left: 8px; line-height: 1; padding: 0 2px; }
+  .tx-remove:hover { color: #F43F5E; }
+
+  /* Botão adicionar transação */
+  .add-tx { display: flex; align-items: center; gap: 6px; width: 100%; padding: 7px 10px; border-radius: 6px; border: 1px dashed #1C2333; background: none; color: #4A5568; font-size: 12px; cursor: pointer; transition: all 0.15s; }
+  .add-tx:hover { border-color: #2D3748; color: #94A3B8; }
+
+  /* Barra de progresso / soma */
+  .soma-block { margin-top: 10px; padding-top: 10px; border-top: 1px solid #1C2333; }
+  .soma-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
+  .soma-label { color: #4A5568; }
+  .soma-value { font-family: monospace; font-weight: 600; }
+  .soma-diff { font-family: monospace; font-size: 11px; margin-top: 4px; }
+
+  /* Estados da soma */
+  .match   .soma-value { color: #10B981; }
+  .match   .soma-diff  { color: #10B981; }
+  .partial .soma-value { color: #F59E0B; }
+  .partial .soma-diff  { color: #F59E0B; }
+  .over    .soma-value { color: #F43F5E; }
+  .over    .soma-diff  { color: #F43F5E; }
+
+  .progress-bar { height: 3px; border-radius: 2px; background: #1C2333; margin-top: 8px; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
+  .match   .progress-fill { background: #10B981; width: 100%; }
+  .partial .progress-fill { background: #F59E0B; width: 60%; }
+  .over    .progress-fill { background: #F43F5E; width: 100%; }
+
+  /* Ações */
+  .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+  .btn-sem  { display: flex; align-items: center; gap: 5px; padding: 7px 12px; border-radius: 7px; border: 1px solid #1A2535; background: none; color: #64748B; font-size: 12px; cursor: pointer; }
+  .btn-confirm { display: flex; align-items: center; gap: 5px; padding: 7px 16px; border-radius: 7px; border: 1px solid rgba(201,168,76,0.35); background: rgba(201,168,76,0.1); color: #C9A84C; font-size: 12px; font-weight: 600; cursor: pointer; }
+  .btn-confirm:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn-confirm.ready { border-color: rgba(16,185,129,0.4); background: rgba(16,185,129,0.12); color: #10B981; }
+
+  /* Dropdown simulado */
+  .fake-select { width: 100%; padding: 6px 10px; border-radius: 6px; border: 1px solid #1C2333; background: #080C10; color: #94A3B8; font-size: 12px; margin-top: 6px; }
+
+  .section-title { font-size: 11px; color: #4A5568; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 12px; margin-top: 24px; }
+</style>
+</head>
+<body>
+
+<h2>Conciliar com Extratos — múltiplos depósitos</h2>
+
+<!-- ═══ CASO 1: match exato único ═══ -->
+<p class="section-title">Caso 1 — Match exato (1 transação)</p>
+<div class="card">
+  <div class="entry-header">
+    <div><span class="entry-code">RWT02-08</span><span class="entry-tenant">Daniela</span></div>
+    <span class="entry-total">R$ 2.183,54</span>
+  </div>
+  <div class="extrato-block">
+    <div class="extrato-label">Transações do extrato vinculadas</div>
+    <div class="tx-list">
+      <div class="tx-item exact">
+        <span class="tx-desc">PIX RECEBIDO DANIELA SOUZA</span>
+        <span class="tx-date">10/04</span>
+        <span class="tx-amount">R$ 2.183,54</span>
+        <button class="tx-remove">×</button>
+      </div>
+    </div>
+    <button class="add-tx">+ Adicionar outra transação</button>
+    <div class="soma-block match">
+      <div class="soma-row">
+        <span class="soma-label">Soma selecionada</span>
+        <span class="soma-value">R$ 2.183,54</span>
+      </div>
+      <div class="soma-diff">✓ Valor exato — R$ 0,00 de diferença</div>
+      <div class="progress-bar"><div class="progress-fill"></div></div>
+    </div>
+  </div>
+  <div class="actions">
+    <button class="btn-sem">× Sem extrato</button>
+    <button class="btn-confirm ready">✓ Confirmar Conciliação</button>
+  </div>
+</div>
+
+<!-- ═══ CASO 2: depósito parcial — 2 transações ═══ -->
+<p class="section-title">Caso 2 — Depósito parcial (2 transações somando o total)</p>
+<div class="card">
+  <div class="entry-header">
+    <div><span class="entry-code">RWT03-05</span><span class="entry-tenant">Keven</span></div>
+    <span class="entry-total">R$ 1.369,21</span>
+  </div>
+  <div class="extrato-block">
+    <div class="extrato-label">Transações do extrato vinculadas</div>
+    <div class="tx-list">
+      <div class="tx-item partial">
+        <span class="tx-desc">PIX RECEBIDO KEVEN ALVES</span>
+        <span class="tx-date">08/04</span>
+        <span class="tx-amount">R$ 800,00</span>
+        <button class="tx-remove">×</button>
+      </div>
+      <div class="tx-item exact">
+        <span class="tx-desc">PIX RECEBIDO KEVEN ALVES</span>
+        <span class="tx-date">12/04</span>
+        <span class="tx-amount">R$ 569,21</span>
+        <button class="tx-remove">×</button>
+      </div>
+    </div>
+    <button class="add-tx">+ Adicionar outra transação</button>
+    <div class="soma-block match">
+      <div class="soma-row">
+        <span class="soma-label">Soma selecionada</span>
+        <span class="soma-value">R$ 1.369,21</span>
+      </div>
+      <div class="soma-diff">✓ Valor exato — R$ 0,00 de diferença</div>
+      <div class="progress-bar"><div class="progress-fill"></div></div>
+    </div>
+  </div>
+  <div class="actions">
+    <button class="btn-sem">× Sem extrato</button>
+    <button class="btn-confirm ready">✓ Confirmar Conciliação</button>
+  </div>
+</div>
+
+<!-- ═══ CASO 3: parcial ainda incompleto ═══ -->
+<p class="section-title">Caso 3 — Parcial ainda incompleto (falta 2ª transação)</p>
+<div class="card">
+  <div class="entry-header">
+    <div><span class="entry-code">RWT02-05</span><span class="entry-tenant">Carlos</span></div>
+    <span class="entry-total">R$ 1.750,00</span>
+  </div>
+  <div class="extrato-block">
+    <div class="extrato-label">Transações do extrato vinculadas</div>
+    <div class="tx-list">
+      <div class="tx-item partial">
+        <span class="tx-desc">PIX RECEBIDO CARLOS MENDES</span>
+        <span class="tx-date">05/04</span>
+        <span class="tx-amount">R$ 1.050,00</span>
+        <button class="tx-remove">×</button>
+      </div>
+    </div>
+    <select class="fake-select">
+      <option>+ Selecionar transação do extrato...</option>
+      <option>07/04 · R$ 700,00 · PIX RECEBIDO CARLOS MENDES</option>
+      <option>09/04 · R$ 350,00 · PIX RECEBIDO CARLOS MENDES</option>
+      <option>10/04 · R$ 2.183,54 · PIX RECEBIDO DANIELA SOUZA</option>
+    </select>
+    <div class="soma-block partial" style="margin-top:10px;">
+      <div class="soma-row">
+        <span class="soma-label">Soma selecionada</span>
+        <span class="soma-value">R$ 1.050,00</span>
+      </div>
+      <div class="soma-diff">⚠ Faltam R$ 700,00 para completar</div>
+      <div class="progress-bar"><div class="progress-fill"></div></div>
+    </div>
+  </div>
+  <div class="actions">
+    <button class="btn-sem">× Sem extrato</button>
+    <button class="btn-confirm" disabled>✓ Confirmar Conciliação</button>
+  </div>
+</div>
+
+<!-- ═══ CASO 4: sem transação no extrato ═══ -->
+<p class="section-title">Caso 4 — Nenhuma transação encontrada</p>
+<div class="card">
+  <div class="entry-header">
+    <div><span class="entry-code">RWT03-06</span><span class="entry-tenant">Mariana</span></div>
+    <span class="entry-total">R$ 1.380,00</span>
+  </div>
+  <div class="extrato-block">
+    <div class="extrato-label">Transações do extrato vinculadas</div>
+    <div class="tx-list" style="margin-bottom:8px;">
+      <p style="font-size:12px; color:#2D3748; font-style:italic; padding:6px 0;">Nenhuma transação selecionada</p>
+    </div>
+    <select class="fake-select">
+      <option>+ Selecionar transação do extrato...</option>
+      <option>07/04 · R$ 1.380,00 · TED MARIANA COSTA</option>
+      <option>09/04 · R$ 690,00 · PIX MARIANA COSTA</option>
+    </select>
+    <div class="soma-block partial" style="margin-top:10px;">
+      <div class="soma-row">
+        <span class="soma-label">Soma selecionada</span>
+        <span class="soma-value">R$ 0,00</span>
+      </div>
+      <div class="soma-diff">⚠ Selecione ao menos uma transação</div>
+      <div class="progress-bar"><div class="progress-fill" style="width:0%"></div></div>
+    </div>
+  </div>
+  <div class="actions">
+    <button class="btn-sem">× Sem extrato</button>
+    <button class="btn-confirm" disabled>✓ Confirmar Conciliação</button>
+  </div>
+</div>
+
+</body>
+</html>

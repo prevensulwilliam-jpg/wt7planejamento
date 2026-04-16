@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc:*)",
+      "Bash(npm run:*)",
+      "Bash(where node:*)",
+      "Bash(where npm:*)",
+      "Read(//c/Program Files/nodejs/**)",
+      "Read(//c/Users/Usuário/AppData/Roaming/**)",
+      "Read(//c/Users/Usuário/AppData/Local/**)",
+      "Bash(export PATH=\"/c/Program Files/nodejs:$PATH\")",
+      "Bash(export PATH=\"/c/Users/Usuário/AppData/Roaming/nvm/v22.15.0:$PATH\")",
+      "Bash(cmd.exe /c \"where node\")",
+      "Bash(cmd.exe /c \"where node 2>nul\")",
+      "Bash(cmd.exe /c \"where npm 2>nul\")"
+    ]
+  }
+}

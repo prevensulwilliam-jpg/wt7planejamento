@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Preview — Fechamento com Desconto / Acréscimo / Observação</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #080C10; color: #F0F4F8; font-family: 'Inter', sans-serif; padding: 32px; display: flex; gap: 40px; flex-wrap: wrap; align-items: flex-start; }
+
+  h2 { font-size: 11px; color: #4A5568; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 14px; }
+
+  .modal { background: #0D1117; border: 1px solid #1C2333; border-radius: 12px; padding: 20px; width: 400px; }
+  .modal-title { font-family: monospace; font-weight: 700; font-size: 14px; color: #E8C97A; margin-bottom: 4px; }
+  .modal-badge { display: inline-block; font-size: 10px; padding: 2px 8px; border-radius: 20px; background: rgba(16,185,129,0.15); color: #10B981; border: 1px solid rgba(16,185,129,0.3); margin-left: 6px; }
+
+  .section-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: #4A5568; margin-bottom: 6px; margin-top: 14px; display: block; }
+  .field { margin-bottom: 10px; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  input, select, textarea {
+    width: 100%; padding: 7px 10px; border-radius: 7px;
+    border: 1px solid #1C2333; background: #080C10;
+    color: #F0F4F8; font-size: 13px; font-family: inherit;
+    outline: none;
+  }
+  textarea { resize: vertical; min-height: 58px; }
+  input:focus, select:focus, textarea:focus { border-color: #C9A84C44; }
+
+  .divider { height: 1px; background: #1C2333; margin: 14px 0; }
+
+  /* Seções colapsáveis */
+  .collapsible { border: 1px solid #1C2333; border-radius: 8px; overflow: hidden; margin-bottom: 8px; }
+  .collapsible-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 9px 12px; cursor: pointer;
+    background: #080C10;
+    user-select: none;
+  }
+  .collapsible-header:hover { background: #0D1117; }
+  .collapsible-header .label { font-size: 12px; font-weight: 500; display: flex; align-items: center; gap-7px; }
+  .collapsible-header .toggle { font-size: 11px; color: #4A5568; }
+  .collapsible-body { padding: 12px; border-top: 1px solid #1C2333; background: #080C10; }
+
+  /* Cores por tipo de seção */
+  .sec-desconto .collapsible-header .label { color: #F59E0B; }
+  .sec-desconto .collapsible-header { border-left: 3px solid rgba(245,158,11,0.5); }
+  .sec-acrescimo .collapsible-header .label { color: #F43F5E; }
+  .sec-acrescimo .collapsible-header { border-left: 3px solid rgba(244,63,94,0.5); }
+  .sec-obs .collapsible-header .label { color: #60A5FA; }
+  .sec-obs .collapsible-header { border-left: 3px solid rgba(96,165,250,0.4); }
+
+  /* Badge de valor inline na header */
+  .val-badge { font-family: monospace; font-size: 11px; padding: 2px 7px; border-radius: 5px; font-weight: 600; }
+  .val-badge.desconto { background: rgba(245,158,11,0.12); color: #F59E0B; border: 1px solid rgba(245,158,11,0.25); }
+  .val-badge.acrescimo { background: rgba(244,63,94,0.1); color: #F43F5E; border: 1px solid rgba(244,63,94,0.2); }
+  .val-badge.obs { background: rgba(96,165,250,0.1); color: #60A5FA; border: 1px solid rgba(96,165,250,0.2); font-size: 10px; }
+
+  /* Total líquido */
+  .total-box { background: #080C10; border: 1px solid #C9A84C44; border-radius: 8px; padding: 14px; margin-top: 14px; }
+  .total-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: #4A5568; margin-bottom: 4px; }
+  .total-value { font-family: monospace; font-size: 26px; font-weight: 700; color: #C9A84C; }
+  .total-breakdown { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; }
+  .breakdown-row { display: flex; justify-content: space-between; font-size: 11px; }
+  .breakdown-row .bl { color: #4A5568; }
+  .breakdown-row .bv { font-family: monospace; }
+  .breakdown-row .bv.neg { color: #F59E0B; }
+  .breakdown-row .bv.plus { color: #F43F5E; }
+  .breakdown-row .bv.base { color: #94A3B8; }
+  .breakdown-row.total-line { border-top: 1px solid #1C2333; margin-top: 4px; padding-top: 4px; }
+  .breakdown-row.total-line .bv { color: #C9A84C; font-weight: 700; font-size: 12px; }
+
+  .btn-atualizar { width: 100%; margin-top: 12px; padding: 10px; border-radius: 8px; border: 1px solid rgba(201,168,76,0.35); background: rgba(201,168,76,0.1); color: #C9A84C; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .btn-atualizar:hover { background: rgba(201,168,76,0.18); }
+
+  /* Legenda lateral */
+  .legend { max-width: 300px; }
+  .legend-card { background: #0D1117; border: 1px solid #1C2333; border-radius: 8px; padding: 14px; margin-bottom: 12px; }
+  .legend-card h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
+  .legend-card h3.d { color: #F59E0B; }
+  .legend-card h3.a { color: #F43F5E; }
+  .legend-card h3.o { color: #60A5FA; }
+  .legend-card p { font-size: 12px; color: #4A5568; line-height: 1.6; }
+  .legend-card p b { color: #94A3B8; }
+  .chip { display: inline-block; font-size: 10px; padding: 2px 7px; border-radius: 4px; margin: 2px 2px 2px 0; background: #1C2333; color: #94A3B8; }
+</style>
+</head>
+<body>
+
+<!-- MODAL -->
+<div>
+<h2>KitnetModal — Aba Fechamentos (form expandido)</h2>
+<div class="modal">
+  <div style="margin-bottom:16px">
+    <span class="modal-title">RWT02-08</span>
+    <span class="modal-badge">Ocupada</span>
+    <span style="font-size:12px; color:#4A5568; margin-left:8px">Daniela</span>
+  </div>
+
+  <!-- Campos padrão -->
+  <span class="section-label">Mês Referência</span>
+  <div class="field"><input type="text" value="Fevereiro de 2026" readonly /></div>
+
+  <div class="row2">
+    <div><span class="section-label">Início</span><input type="text" value="01/02/2026" /></div>
+    <div><span class="section-label">Fim</span><input type="text" value="28/02/2026" /></div>
+  </div>
+
+  <div class="field" style="margin-top:10px">
+    <span class="section-label">Aluguel Bruto (R$)</span>
+    <input type="number" value="1890" />
+  </div>
+
+  <div class="row3" style="margin-top:4px">
+    <div><span class="section-label">IPTU + Taxa Lixo</span><input type="number" value="0" /></div>
+    <div><span class="section-label">SEMASA</span><input type="number" value="30.10" /></div>
+    <div><span class="section-label">CELESC (R$)</span><input type="number" value="160.18" /></div>
+  </div>
+
+  <div class="field" style="margin-top:10px">
+    <span class="section-label">Taxa ADM (10%)</span>
+    <input type="number" value="189.00" readonly style="color:#4A5568" />
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ─── Seção Desconto ─── -->
+  <div class="collapsible sec-desconto">
+    <div class="collapsible-header">
+      <span class="label">↓ Desconto de Aluguel</span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="val-badge desconto">− R$ 945,00</span>
+        <span class="toggle">▲</span>
+      </div>
+    </div>
+    <div class="collapsible-body">
+      <div class="row2" style="margin-bottom:8px">
+        <div>
+          <span class="section-label">Tipo</span>
+          <select>
+            <option selected>Acordo com inquilino</option>
+            <option>Cortesia</option>
+            <option>Desconto comercial</option>
+            <option>Outro</option>
+          </select>
+        </div>
+        <div>
+          <span class="section-label">Valor (R$)</span>
+          <input type="number" value="945.00" style="border-color: rgba(245,158,11,0.4)" />
+        </div>
+      </div>
+      <div>
+        <span class="section-label">Motivo</span>
+        <input type="text" value="Pagamento parcial — saldo R$ 945,00 a ser cobrado em março/2026" />
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Seção Acréscimo ─── -->
+  <div class="collapsible sec-acrescimo">
+    <div class="collapsible-header">
+      <span class="label">↑ Acréscimo de Aluguel</span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:11px; color:#2D3748">não utilizado</span>
+        <span class="toggle">▼</span>
+      </div>
+    </div>
+    <!-- fechado — body não mostrado -->
+  </div>
+
+  <!-- ─── Seção Observação ─── -->
+  <div class="collapsible sec-obs">
+    <div class="collapsible-header">
+      <span class="label">✎ Observação</span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="val-badge obs">1 nota</span>
+        <span class="toggle">▲</span>
+      </div>
+    </div>
+    <div class="collapsible-body">
+      <textarea>Acordo verbal com Daniela em 03/02/2026. Pagará a metade restante (R$ 945,00) junto com o aluguel de março. Confirmado por WhatsApp.</textarea>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Total Líquido recalculado -->
+  <div class="total-box">
+    <div class="total-label">Total Líquido</div>
+    <div class="total-value">R$ 946,28</div>
+    <div class="total-breakdown">
+      <div class="breakdown-row">
+        <span class="bl">Aluguel bruto</span>
+        <span class="bv base">R$ 1.890,00</span>
+      </div>
+      <div class="breakdown-row">
+        <span class="bl">− SEMASA</span>
+        <span class="bv base">R$ 30,10</span>
+      </div>
+      <div class="breakdown-row">
+        <span class="bl">− CELESC</span>
+        <span class="bv base">R$ 160,18</span>
+      </div>
+      <div class="breakdown-row">
+        <span class="bl">− Taxa ADM</span>
+        <span class="bv base">R$ 189,00</span>
+      </div>
+      <div class="breakdown-row">
+        <span class="bl">− Desconto (acordo)</span>
+        <span class="bv neg">− R$ 945,00</span>
+      </div>
+      <div class="breakdown-row total-line">
+        <span class="bl" style="font-weight:600;color:#94A3B8">Total Líquido</span>
+        <span class="bv">R$ 946,28</span>
+      </div>
+    </div>
+  </div>
+
+  <button class="btn-atualizar">Atualizar Fechamento</button>
+</div>
+</div>
+
+<!-- LEGENDA -->
+<div class="legend">
+  <h2>Como funciona cada seção</h2>
+
+  <div class="legend-card">
+    <h3 class="d">↓ Desconto de Aluguel</h3>
+    <p>Reduz o Total Líquido. Usado para:</p>
+    <div style="margin-top:6px">
+      <span class="chip">Acordo parcial</span>
+      <span class="chip">Cortesia</span>
+      <span class="chip">Desconto comercial</span>
+      <span class="chip">Outro</span>
+    </div>
+    <p style="margin-top:8px">Campos: <b>Tipo</b> + <b>Valor</b> + <b>Motivo</b></p>
+    <p style="margin-top:4px">Fórmula: Total = Bruto − Encargos − <b>Desconto</b></p>
+  </div>
+
+  <div class="legend-card">
+    <h3 class="a">↑ Acréscimo de Aluguel</h3>
+    <p>Aumenta o Total Líquido. Usado para:</p>
+    <div style="margin-top:6px">
+      <span class="chip">Multa atraso</span>
+      <span class="chip">Juros</span>
+      <span class="chip">Reparo cobrado</span>
+      <span class="chip">Outro</span>
+    </div>
+    <p style="margin-top:8px">Campos: <b>Tipo</b> + <b>Valor</b> + <b>Motivo</b></p>
+    <p style="margin-top:4px">Fórmula: Total = Bruto − Encargos + <b>Acréscimo</b></p>
+  </div>
+
+  <div class="legend-card">
+    <h3 class="o">✎ Observação</h3>
+    <p>Texto livre. Não afeta o cálculo. Ideal para registrar acordos, contexto, histórico de negociação.</p>
+    <p style="margin-top:6px">Aparece no recibo PDF quando preenchida.</p>
+  </div>
+
+  <div class="legend-card" style="border-color: rgba(201,168,76,0.2)">
+    <h3 style="color:#C9A84C">SQL necessário</h3>
+    <p>4 colunas novas em <b>kitnet_entries</b>:</p>
+    <div style="margin-top:6px; font-family:monospace; font-size:11px; color:#4A5568; line-height:1.9">
+      discount_amount &nbsp;numeric<br>
+      discount_reason &nbsp;text<br>
+      surcharge_amount numeric<br>
+      surcharge_reason text<br>
+      notes &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;text
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
