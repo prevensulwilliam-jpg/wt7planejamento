@@ -189,20 +189,15 @@ export function useDeleteProperty() {
   });
 }
 
-// Investments — usa RPC para bypassar PostgREST schema cache
+// Investments — SOMENTE via RPC (SECURITY DEFINER) para contornar
+// revogação periódica de GRANTs pelo Lovable
 export function useInvestments() {
   return useQuery({
     queryKey: ["investments"],
     queryFn: async () => {
       const { data, error } = await supabase.rpc("get_investments" as any);
-      if (!error && data) return data as any[];
-      // fallback: select direto
-      const { data: d2, error: e2 } = await supabase
-        .from("investments")
-        .select("id,name,type,bank,initial_amount,current_amount,rescue_amount,rate_percent,cdi_percent,is_cdi_linked,inclusion_date,maturity_date,product_code,notes,updated_at")
-        .order("name");
-      if (e2) throw e2;
-      return d2;
+      if (error) throw new Error("get_investments RPC: " + error.message);
+      return (data ?? []) as any[];
     },
   });
 }
@@ -210,8 +205,8 @@ export function useInvestments() {
 export function useCreateInvestment() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (entry: TablesInsert<"investments">) => {
-      const { error } = await supabase.from("investments").insert(entry);
+    mutationFn: async (entry: any) => {
+      const { error } = await supabase.rpc("upsert_investment" as any, { p_data: entry });
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["investments"] }),
@@ -370,7 +365,7 @@ export function useUpdateInvestment() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, ...updates }: any) => {
-      const { error } = await supabase.from("investments" as any).update(updates).eq("id", id);
+      const { error } = await supabase.rpc("upsert_investment" as any, { p_data: { id, ...updates } });
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["investments"] }),
@@ -381,7 +376,7 @@ export function useDeleteInvestment() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("investments" as any).delete().eq("id", id);
+      const { error } = await supabase.rpc("delete_investment" as any, { p_id: id });
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["investments"] }),
