@@ -15,13 +15,57 @@ import { WtBadge } from "@/components/wt7/WtBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAssets } from "@/hooks/useFinances";
 import {
-  useInvestments, useCreateInvestment, useConsortiums, useCreateConsortium, useCreateAsset,
-  useUpdateAsset, useDeleteAsset, useUpdateInvestment, useDeleteInvestment,
+  useConsortiums, useCreateConsortium, useCreateAsset,
+  useUpdateAsset, useDeleteAsset,
   useUpdateConsortium, useDeleteConsortium,
 } from "@/hooks/useConstructions";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatCurrency, formatDate } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
 import { Landmark, Plus, TrendingUp, Pencil, Trash2, GripVertical } from "lucide-react";
+
+// ─── Investments hooks INLINE (Lovable não deploya useConstructions.ts) ─────
+function useInvestments() {
+  return useQuery({
+    queryKey: ["investments"],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_investments" as any);
+      if (error) throw new Error("get_investments: " + error.message);
+      return (data ?? []) as any[];
+    },
+  });
+}
+function useCreateInvestment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (entry: any) => {
+      const { error } = await supabase.rpc("upsert_investment" as any, { p_data: entry });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["investments"] }),
+  });
+}
+function useUpdateInvestment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...updates }: any) => {
+      const { error } = await supabase.rpc("upsert_investment" as any, { p_data: { id, ...updates } });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["investments"] }),
+  });
+}
+function useDeleteInvestment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.rpc("delete_investment" as any, { p_id: id });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["investments"] }),
+  });
+}
 
 // ─── Confirm delete dialog ───────────────────────────────────────────────────
 function ConfirmDelete({ name, onConfirm, onCancel }: { name: string; onConfirm: () => void; onCancel: () => void }) {
