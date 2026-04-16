@@ -537,7 +537,8 @@ export default function AssetsPage() {
               renderCard={(c: any) => {
                 const pct  = c.installments_total ? ((c.installments_paid ?? 0) / c.installments_total) * 100 : 0;
                 const totalPaid = c.total_paid || ((c.installments_paid ?? 0) * (c.monthly_payment ?? 0));
-                const totalPending = c.total_pending || ((c.total_value ?? 0) - totalPaid);
+                const planTotal = c.total_value || (c.credit_value ? c.credit_value * (1 + (c.admin_fee_pct ?? 0) / 100) : 0);
+                const totalPending = c.total_pending > 0 ? c.total_pending : Math.max(0, planTotal - totalPaid);
                 const pctValor = c.total_value > 0 ? (totalPaid / c.total_value) * 100 : 0;
                 const fundPaid = c.fund_paid ?? 0;
                 const admPaid = c.admin_fee_paid ?? 0;

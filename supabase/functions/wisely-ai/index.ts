@@ -238,7 +238,7 @@ serve(async (req) => {
 
       const CONSORTIUM_PROMPT = `Você é um extrator de dados de extratos de consórcio brasileiro (Ademicon, Porto Seguro, Rodobens, etc).
 
-Analise este PDF de extrato e extraia os dados em JSON puro, sem markdown, sem explicações.
+Analise este documento (PDF ou imagem) de extrato/boleto de consórcio e extraia os dados em JSON puro, sem markdown, sem explicações.
 Se um campo não estiver visível, use null.
 
 {
@@ -264,14 +264,18 @@ Se um campo não estiver visível, use null.
 
 REGRAS:
 - Datas no formato YYYY-MM-DD
-- Valores numéricos sem R$, sem pontos de milhar
+- Valores numéricos sem R$, sem pontos de milhar (ex: 428132.79)
 - Conte o número de linhas de parcelas pagas para installments_paid
-- total_value = total_paid + total_pending (soma dos dois)
-- monthly_payment = valor da última parcela paga
-- fund_paid = soma do fundo comum nas parcelas
-- admin_fee_paid = soma da taxa de administração nas parcelas
-- insurance_paid = soma dos seguros nas parcelas
+- monthly_payment = valor da última parcela paga (campo "Valor Pago" ou boleto)
+- fund_paid = soma do fundo comum pago em todas as parcelas
+- admin_fee_paid = soma da taxa de administração paga em todas as parcelas
+- insurance_paid = soma dos seguros pagos em todas as parcelas
+- total_paid = soma de todos os valores pagos (ou campo "Você já pagou X%")
+- total_pending = "Valor a pagar" ou calcule: (installments_total - installments_paid) * monthly_payment. NUNCA retorne 0 ou negativo se houver parcelas restantes
+- total_value = total_paid + total_pending
+- credit_value = valor do crédito/bem do consórcio (ex: "Sem taxas" ou "Crédito")
 - Se houver uma tabela resumo com totais, use esses valores
+- Procure campos como: "Prazo", "Grupo", "Cota", "Taxa de Adm", "% a pagar", "Valor a pagar"
 - Retorne APENAS o JSON`;
 
       const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
