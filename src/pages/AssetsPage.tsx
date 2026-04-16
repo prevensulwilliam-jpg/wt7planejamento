@@ -161,7 +161,7 @@ export default function AssetsPage() {
   const [invForm, setInvForm]     = useState(emptyInv);
 
   // ─── Consórcios state ─────────────────────────────────────────────────────
-  const emptyCons = { name: "", total_value: "", monthly_payment: "", installments_total: "", installments_paid: "", status: "ativo" };
+  const emptyCons = { name: "", total_value: "", monthly_payment: "", installments_total: "", installments_paid: "", status: "ativo", group_number: "", quota: "", contract_number: "", admin_fee_pct: "", asset_type: "IMOVEIS", credit_value: "", adhesion_date: "", end_date: "", total_paid: "", fund_paid: "", admin_fee_paid: "", insurance_paid: "", total_pending: "", installments_remaining: "", notes: "" };
   const [consOpen, setConsOpen]   = useState(false);
   const [editCons, setEditCons]   = useState<any | null>(null);
   const [delCons,  setDelCons]    = useState<any | null>(null);
@@ -243,19 +243,39 @@ export default function AssetsPage() {
   };
 
   // ─── Consórcios handlers ──────────────────────────────────────────────────
+  const consPayload = () => ({
+    name: consForm.name, total_value: parseFloat(consForm.total_value) || null,
+    monthly_payment: parseFloat(consForm.monthly_payment) || null,
+    installments_total: parseInt(consForm.installments_total) || null,
+    installments_paid: parseInt(consForm.installments_paid) || 0,
+    status: consForm.status,
+    group_number: consForm.group_number || null, quota: consForm.quota || null,
+    contract_number: consForm.contract_number || null,
+    admin_fee_pct: parseFloat(consForm.admin_fee_pct) || null,
+    asset_type: consForm.asset_type || null,
+    credit_value: parseFloat(consForm.credit_value) || null,
+    adhesion_date: consForm.adhesion_date || null, end_date: consForm.end_date || null,
+    total_paid: parseFloat(consForm.total_paid) || 0,
+    fund_paid: parseFloat(consForm.fund_paid) || 0,
+    admin_fee_paid: parseFloat(consForm.admin_fee_paid) || 0,
+    insurance_paid: parseFloat(consForm.insurance_paid) || 0,
+    total_pending: parseFloat(consForm.total_pending) || 0,
+    installments_remaining: parseInt(consForm.installments_remaining) || 0,
+    notes: consForm.notes || null,
+  });
   const handleCreateCons = async () => {
     if (!consForm.name) return;
     try {
-      await createConsortium.mutateAsync({ name: consForm.name, total_value: parseFloat(consForm.total_value) || null, monthly_payment: parseFloat(consForm.monthly_payment) || null, installments_total: parseInt(consForm.installments_total) || null, installments_paid: parseInt(consForm.installments_paid) || 0, status: consForm.status });
+      await createConsortium.mutateAsync(consPayload() as any);
       toast({ title: "Consórcio registrado!" }); setConsOpen(false); setConsForm(emptyCons);
-    } catch { toast({ title: "Erro", variant: "destructive" }); }
+    } catch(e: any) { toast({ title: "Erro: " + (e?.message || ""), variant: "destructive" }); }
   };
   const handleUpdateCons = async () => {
     if (!editCons) return;
     try {
-      await updateConsortium.mutateAsync({ id: editCons.id, name: consForm.name, total_value: parseFloat(consForm.total_value) || null, monthly_payment: parseFloat(consForm.monthly_payment) || null, installments_total: parseInt(consForm.installments_total) || null, installments_paid: parseInt(consForm.installments_paid) || 0, status: consForm.status });
+      await updateConsortium.mutateAsync({ id: editCons.id, ...consPayload() } as any);
       toast({ title: "Consórcio atualizado!" }); setEditCons(null);
-    } catch { toast({ title: "Erro", variant: "destructive" }); }
+    } catch(e: any) { toast({ title: "Erro: " + (e?.message || ""), variant: "destructive" }); }
   };
   const handleDeleteCons = async () => {
     if (!delCons) return;
@@ -455,38 +475,75 @@ export default function AssetsPage() {
               columns="grid-cols-1 md:grid-cols-2"
               renderCard={(c: any) => {
                 const pct  = c.installments_total ? ((c.installments_paid ?? 0) / c.installments_total) * 100 : 0;
-                const totalPaid = c.total_paid ?? ((c.installments_paid ?? 0) * (c.monthly_payment ?? 0));
-                const restante = (c.total_value ?? 0) - totalPaid;
+                const totalPaid = c.total_paid || ((c.installments_paid ?? 0) * (c.monthly_payment ?? 0));
+                const totalPending = c.total_pending || ((c.total_value ?? 0) - totalPaid);
                 const pctValor = c.total_value > 0 ? (totalPaid / c.total_value) * 100 : 0;
+                const fundPaid = c.fund_paid ?? 0;
+                const admPaid = c.admin_fee_paid ?? 0;
+                const insPaid = c.insurance_paid ?? 0;
                 return (
                   <PremiumCard className="space-y-2 h-full">
                     <div className="flex items-start gap-2">
-                      <p className="font-display font-bold flex-1" style={{ color: '#F0F4F8' }}>{c.name}</p>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-display font-bold" style={{ color: '#F0F4F8' }}>{c.name}</p>
+                        <p className="text-xs" style={{ color: '#94A3B8' }}>
+                          {c.group_number ? `Grupo ${c.group_number}` : ""}{c.quota ? ` · Cota ${c.quota}` : ""}{c.asset_type ? ` · ${c.asset_type}` : ""}
+                        </p>
+                      </div>
                       <WtBadge variant={c.status === "contemplado" ? "green" : c.status === "ativo" ? "gold" : "gray"}>{c.status === "ativo" ? "Ativo" : c.status === "contemplado" ? "Contemplado" : c.status === "encerrado" ? "Encerrado" : c.status}</WtBadge>
                       <CardActions
-                        onEdit={() => { setConsForm({ name: c.name ?? "", total_value: String(c.total_value ?? ""), monthly_payment: String(c.monthly_payment ?? ""), installments_total: String(c.installments_total ?? ""), installments_paid: String(c.installments_paid ?? ""), status: c.status ?? "ativo" }); setEditCons(c); }}
+                        onEdit={() => { setConsForm({ name: c.name ?? "", total_value: String(c.total_value ?? ""), monthly_payment: String(c.monthly_payment ?? ""), installments_total: String(c.installments_total ?? ""), installments_paid: String(c.installments_paid ?? ""), status: c.status ?? "ativo", group_number: c.group_number ?? "", quota: c.quota ?? "", contract_number: c.contract_number ?? "", admin_fee_pct: String(c.admin_fee_pct ?? ""), asset_type: c.asset_type ?? "IMOVEIS", credit_value: String(c.credit_value ?? ""), adhesion_date: c.adhesion_date ?? "", end_date: c.end_date ?? "", total_paid: String(c.total_paid ?? ""), fund_paid: String(c.fund_paid ?? ""), admin_fee_paid: String(c.admin_fee_paid ?? ""), insurance_paid: String(c.insurance_paid ?? ""), total_pending: String(c.total_pending ?? ""), installments_remaining: String(c.installments_remaining ?? ""), notes: c.notes ?? "" }); setEditCons(c); }}
                         onDelete={() => setDelCons(c)}
                       />
                     </div>
 
-                    {/* Valor destaque dourado — padronizado com investimentos */}
+                    {/* Crédito destaque dourado */}
                     <div className="rounded-lg px-3 py-2" style={{ background: 'rgba(232,201,122,0.05)', border: '1px solid rgba(232,201,122,0.15)' }}>
                       <p className="text-xs mb-0.5" style={{ color: '#64748B' }}>Crédito Total</p>
-                      <p className="font-mono font-bold text-xl" style={{ color: '#E8C97A' }}>{formatCurrency(c.total_value ?? 0)}</p>
+                      <p className="font-mono font-bold text-xl" style={{ color: '#E8C97A' }}>{formatCurrency(c.credit_value || c.total_value || 0)}</p>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-2 text-sm">
-                      <div><p className="text-xs" style={{ color: '#64748B' }}>Parcela</p><p className="font-mono font-bold text-sm" style={{ color: '#F0F4F8' }}>{formatCurrency(c.monthly_payment ?? 0)}</p></div>
-                      <div><p className="text-xs" style={{ color: '#64748B' }}>Total Pago</p><p className="font-mono font-bold text-sm" style={{ color: '#10B981' }}>{formatCurrency(totalPaid)}</p></div>
-                      <div><p className="text-xs" style={{ color: '#64748B' }}>Restante</p><p className="font-mono font-bold text-sm" style={{ color: '#F43F5E' }}>{formatCurrency(restante)}</p></div>
+                    {/* Grid principal */}
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <p className="text-xs" style={{ color: '#64748B' }}>Parcela Atual</p>
+                        <p className="font-mono font-bold text-sm" style={{ color: '#F0F4F8' }}>{formatCurrency(c.monthly_payment ?? 0)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs" style={{ color: '#64748B' }}>Total Pago</p>
+                        <p className="font-mono font-bold text-sm" style={{ color: '#10B981' }}>{formatCurrency(totalPaid)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs" style={{ color: '#64748B' }}>A Pagar</p>
+                        <p className="font-mono font-bold text-sm" style={{ color: '#F43F5E' }}>{formatCurrency(totalPending)}</p>
+                      </div>
                     </div>
 
+                    {/* Composição do pago */}
+                    {(fundPaid > 0 || admPaid > 0) && (
+                      <div className="rounded-lg px-2 py-1.5" style={{ background: 'rgba(45,212,191,0.04)', border: '1px solid rgba(45,212,191,0.15)' }}>
+                        <div className="flex gap-3 text-xs flex-wrap">
+                          {fundPaid > 0 && <span style={{ color: '#2DD4BF' }}>Fundo: {formatCurrency(fundPaid)}</span>}
+                          {admPaid > 0 && <span style={{ color: '#94A3B8' }}>Taxa ADM: {formatCurrency(admPaid)}</span>}
+                          {insPaid > 0 && <span style={{ color: '#94A3B8' }}>Seguro: {formatCurrency(insPaid)}</span>}
+                          {c.admin_fee_pct && <span style={{ color: '#64748B' }}>({c.admin_fee_pct}% ADM)</span>}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Progress */}
                     <div className="space-y-1">
                       <div className="flex justify-between text-xs" style={{ color: '#94A3B8' }}>
                         <span>{c.installments_paid ?? 0}/{c.installments_total ?? 0} parcelas</span>
-                        <span>{pctValor.toFixed(1)}% do crédito</span>
+                        <span>{pctValor.toFixed(1)}% pago</span>
                       </div>
                       <Progress value={pct} className="h-2" />
+                    </div>
+
+                    {/* Datas */}
+                    <div className="flex gap-3 text-xs flex-wrap" style={{ color: '#64748B' }}>
+                      {c.adhesion_date && <span>Adesão: {formatDate(c.adhesion_date)}</span>}
+                      {c.end_date && <span>Encerramento: {formatDate(c.end_date)}</span>}
                     </div>
                   </PremiumCard>
                 );
@@ -647,28 +704,70 @@ export default function AssetsPage() {
       {/* ─── DIALOGS CRIAR/EDITAR CONSÓRCIOS ─── */}
       {(consOpen || !!editCons) && (
         <Dialog open onOpenChange={o => { if (!o) { setConsOpen(false); setEditCons(null); } }}>
-          <DialogContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+          <DialogContent style={{ background: '#0D1318', border: '1px solid #1A2535', maxHeight: '90vh', overflowY: 'auto' }}>
             <DialogHeader><DialogTitle style={{ color: '#F0F4F8' }}>{editCons ? "Editar Consórcio" : "Novo Consórcio"}</DialogTitle></DialogHeader>
             <div className="space-y-3">
-              <div><Label style={{ color: '#94A3B8' }}>Nome</Label><Input value={consForm.name} onChange={e => setConsForm({ ...consForm, name: e.target.value })} style={inputStyle} /></div>
+              {/* Identificação */}
               <div className="grid grid-cols-2 gap-2">
-                <div><Label style={{ color: '#94A3B8' }}>Valor Total</Label><Input type="number" value={consForm.total_value} onChange={e => setConsForm({ ...consForm, total_value: e.target.value })} style={inputStyle} /></div>
+                <div><Label style={{ color: '#94A3B8' }}>Administradora</Label><Input value={consForm.name} onChange={e => setConsForm({ ...consForm, name: e.target.value })} style={inputStyle} placeholder="ex: Ademicon" /></div>
+                <div><Label style={{ color: '#94A3B8' }}>Status</Label>
+                  <Select value={consForm.status} onValueChange={v => setConsForm({ ...consForm, status: v })}>
+                    <SelectTrigger style={inputStyle}><SelectValue /></SelectTrigger>
+                    <SelectContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+                      <SelectItem value="ativo">Ativo</SelectItem>
+                      <SelectItem value="contemplado">Contemplado</SelectItem>
+                      <SelectItem value="encerrado">Encerrado</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Dados do plano */}
+              <div className="pt-1"><p className="text-xs uppercase tracking-widest mb-2" style={{ color: '#4A5568' }}>Dados do Plano</p></div>
+              <div className="grid grid-cols-3 gap-2">
+                <div><Label style={{ color: '#94A3B8' }}>Grupo</Label><Input value={consForm.group_number} onChange={e => setConsForm({ ...consForm, group_number: e.target.value })} style={inputStyle} placeholder="000580" /></div>
+                <div><Label style={{ color: '#94A3B8' }}>Cota</Label><Input value={consForm.quota} onChange={e => setConsForm({ ...consForm, quota: e.target.value })} style={inputStyle} placeholder="0434-00" /></div>
+                <div><Label style={{ color: '#94A3B8' }}>Contrato</Label><Input value={consForm.contract_number} onChange={e => setConsForm({ ...consForm, contract_number: e.target.value })} style={inputStyle} placeholder="0090065342" /></div>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div><Label style={{ color: '#E8C97A' }}>Crédito (R$)</Label><Input type="number" value={consForm.credit_value} onChange={e => setConsForm({ ...consForm, credit_value: e.target.value })} style={{ ...inputStyle, borderColor: 'rgba(232,201,122,0.3)' }} placeholder="428132.79" /></div>
+                <div><Label style={{ color: '#94A3B8' }}>Taxa ADM %</Label><Input type="number" value={consForm.admin_fee_pct} onChange={e => setConsForm({ ...consForm, admin_fee_pct: e.target.value })} style={inputStyle} placeholder="23.50" /></div>
+                <div><Label style={{ color: '#94A3B8' }}>Bem</Label><Input value={consForm.asset_type} onChange={e => setConsForm({ ...consForm, asset_type: e.target.value })} style={inputStyle} placeholder="IMOVEIS" /></div>
+              </div>
+
+              {/* Valores e parcelas */}
+              <div className="pt-1"><p className="text-xs uppercase tracking-widest mb-2" style={{ color: '#4A5568' }}>Parcelas</p></div>
+              <div className="grid grid-cols-3 gap-2">
+                <div><Label style={{ color: '#94A3B8' }}>Valor Total Plano</Label><Input type="number" value={consForm.total_value} onChange={e => setConsForm({ ...consForm, total_value: e.target.value })} style={inputStyle} /></div>
                 <div><Label style={{ color: '#94A3B8' }}>Parcela Mensal</Label><Input type="number" value={consForm.monthly_payment} onChange={e => setConsForm({ ...consForm, monthly_payment: e.target.value })} style={inputStyle} /></div>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
                 <div><Label style={{ color: '#94A3B8' }}>Total Parcelas</Label><Input type="number" value={consForm.installments_total} onChange={e => setConsForm({ ...consForm, installments_total: e.target.value })} style={inputStyle} /></div>
-                <div><Label style={{ color: '#94A3B8' }}>Pagas</Label><Input type="number" value={consForm.installments_paid} onChange={e => setConsForm({ ...consForm, installments_paid: e.target.value })} style={inputStyle} /></div>
               </div>
-              <div><Label style={{ color: '#94A3B8' }}>Status</Label>
-                <Select value={consForm.status} onValueChange={v => setConsForm({ ...consForm, status: v })}>
-                  <SelectTrigger style={inputStyle}><SelectValue /></SelectTrigger>
-                  <SelectContent style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
-                    <SelectItem value="ativo">Ativo</SelectItem>
-                    <SelectItem value="contemplado">Contemplado</SelectItem>
-                    <SelectItem value="encerrado">Encerrado</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-3 gap-2">
+                <div><Label style={{ color: '#10B981' }}>Pagas</Label><Input type="number" value={consForm.installments_paid} onChange={e => setConsForm({ ...consForm, installments_paid: e.target.value })} style={{ ...inputStyle, borderColor: 'rgba(16,185,129,0.3)' }} /></div>
+                <div><Label style={{ color: '#94A3B8' }}>Restantes</Label><Input type="number" value={consForm.installments_remaining} onChange={e => setConsForm({ ...consForm, installments_remaining: e.target.value })} style={inputStyle} /></div>
+                <div><Label style={{ color: '#10B981' }}>Total Pago (R$)</Label><Input type="number" value={consForm.total_paid} onChange={e => setConsForm({ ...consForm, total_paid: e.target.value })} style={{ ...inputStyle, borderColor: 'rgba(16,185,129,0.3)' }} /></div>
               </div>
+
+              {/* Composição */}
+              <div className="rounded-lg p-3 space-y-2" style={{ background: 'rgba(45,212,191,0.04)', border: '1px solid rgba(45,212,191,0.15)' }}>
+                <p className="text-xs font-semibold" style={{ color: '#2DD4BF' }}>Composição do valor pago</p>
+                <div className="grid grid-cols-3 gap-2">
+                  <div><Label style={{ color: '#94A3B8' }}>Fundo Comum</Label><Input type="number" value={consForm.fund_paid} onChange={e => setConsForm({ ...consForm, fund_paid: e.target.value })} style={inputStyle} /></div>
+                  <div><Label style={{ color: '#94A3B8' }}>Taxa ADM</Label><Input type="number" value={consForm.admin_fee_paid} onChange={e => setConsForm({ ...consForm, admin_fee_paid: e.target.value })} style={inputStyle} /></div>
+                  <div><Label style={{ color: '#94A3B8' }}>Seguros</Label><Input type="number" value={consForm.insurance_paid} onChange={e => setConsForm({ ...consForm, insurance_paid: e.target.value })} style={inputStyle} /></div>
+                </div>
+              </div>
+
+              {/* A pagar */}
+              <div><Label style={{ color: '#F43F5E' }}>Total a Pagar (R$)</Label><Input type="number" value={consForm.total_pending} onChange={e => setConsForm({ ...consForm, total_pending: e.target.value })} style={{ ...inputStyle, borderColor: 'rgba(244,63,94,0.3)' }} /></div>
+
+              {/* Datas */}
+              <div className="grid grid-cols-2 gap-2">
+                <div><Label style={{ color: '#94A3B8' }}>Data Adesão</Label><DatePicker value={consForm.adhesion_date} onChange={v => setConsForm({ ...consForm, adhesion_date: v })} placeholder="Data da adesão" /></div>
+                <div><Label style={{ color: '#94A3B8' }}>Encerramento Previsto</Label><DatePicker value={consForm.end_date} onChange={v => setConsForm({ ...consForm, end_date: v })} placeholder="Data prevista" /></div>
+              </div>
+
+              <div><Label style={{ color: '#94A3B8' }}>Observações</Label><Input value={consForm.notes} onChange={e => setConsForm({ ...consForm, notes: e.target.value })} style={inputStyle} /></div>
             </div>
             <DialogFooter>
               <GoldButton onClick={editCons ? handleUpdateCons : handleCreateCons}>
