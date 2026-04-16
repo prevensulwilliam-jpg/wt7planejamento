@@ -183,6 +183,7 @@ export default function AssetsPage() {
     const src = i.rescue_amount ? 'resgate' : 'saldo atual';
     return `${i.name}: ${formatCurrency(val)} (${src})`;
   }).join('\n');
+  const tipResgateFull = `Valor disponível para saque:\n${tipResgate}`;
 
   // ─── Bens handlers ────────────────────────────────────────────────────────
   const assetPayload = () => ({
@@ -339,7 +340,7 @@ export default function AssetsPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <KpiCard label="Total Investido" value={totalInvestido} color="gold" tooltip={`Soma dos valores aplicados:\n${tipInvestido}`} />
             <KpiCard label="Valor Atual" value={totalAtualInv} color="cyan" tooltip={`Saldo bruto por aplicação:\n${tipAtual}`} />
-            <KpiCard label="Saldo Líquido p/ Resgate" value={totalResgate} color="green" tooltip={`Valor disponível para saque:\n${tipResgate}\n\nRendimento: ${formatCurrency(rendimento)}`} />
+            <KpiCard label="Saldo Líquido p/ Resgate" value={totalResgate} color="green" tooltip={tipResgateFull} />
           </div>
           <div className="flex justify-end"><GoldButton onClick={() => { setInvForm(emptyInv); setInvOpen(true); }}><Plus className="w-4 h-4" />Nova Aplicação</GoldButton></div>
           {invLoading ? <Skeleton className="h-32 rounded-2xl" /> : (investments ?? []).length === 0 ? (
