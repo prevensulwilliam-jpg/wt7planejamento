@@ -596,7 +596,7 @@ export default function AssetsPage() {
                     <div className="space-y-1">
                       <div className="flex justify-between text-xs" style={{ color: '#94A3B8' }}>
                         <span>{c.installments_paid ?? 0}/{c.installments_total ?? 0} parcelas</span>
-                        <span>{pctValor.toFixed(1)}% pago</span>
+                        <span>{pct.toFixed(1)}% pago</span>
                       </div>
                       <Progress value={pct} className="h-2" />
                     </div>
