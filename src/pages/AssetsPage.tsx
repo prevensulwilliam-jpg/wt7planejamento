@@ -455,24 +455,37 @@ export default function AssetsPage() {
               columns="grid-cols-1 md:grid-cols-2"
               renderCard={(c: any) => {
                 const pct  = c.installments_total ? ((c.installments_paid ?? 0) / c.installments_total) * 100 : 0;
-                const pago = (c.installments_paid ?? 0) * (c.monthly_payment ?? 0);
+                const totalPaid = c.total_paid ?? ((c.installments_paid ?? 0) * (c.monthly_payment ?? 0));
+                const restante = (c.total_value ?? 0) - totalPaid;
+                const pctValor = c.total_value > 0 ? (totalPaid / c.total_value) * 100 : 0;
                 return (
                   <PremiumCard className="space-y-2 h-full">
                     <div className="flex items-start gap-2">
                       <p className="font-display font-bold flex-1" style={{ color: '#F0F4F8' }}>{c.name}</p>
-                      <WtBadge variant={c.status === "contemplado" ? "green" : c.status === "ativo" ? "gold" : "gray"}>{c.status}</WtBadge>
+                      <WtBadge variant={c.status === "contemplado" ? "green" : c.status === "ativo" ? "gold" : "gray"}>{c.status === "ativo" ? "Ativo" : c.status === "contemplado" ? "Contemplado" : c.status === "encerrado" ? "Encerrado" : c.status}</WtBadge>
                       <CardActions
                         onEdit={() => { setConsForm({ name: c.name ?? "", total_value: String(c.total_value ?? ""), monthly_payment: String(c.monthly_payment ?? ""), installments_total: String(c.installments_total ?? ""), installments_paid: String(c.installments_paid ?? ""), status: c.status ?? "ativo" }); setEditCons(c); }}
                         onDelete={() => setDelCons(c)}
                       />
                     </div>
-                    <div className="grid grid-cols-3 gap-2 text-sm">
-                      <div><p className="text-xs" style={{ color: '#94A3B8' }}>Total</p><p className="font-mono" style={{ color: '#E8C97A' }}>{formatCurrency(c.total_value ?? 0)}</p></div>
-                      <div><p className="text-xs" style={{ color: '#94A3B8' }}>Parcela</p><p className="font-mono" style={{ color: '#F0F4F8' }}>{formatCurrency(c.monthly_payment ?? 0)}</p></div>
-                      <div><p className="text-xs" style={{ color: '#94A3B8' }}>Pago</p><p className="font-mono" style={{ color: '#10B981' }}>{formatCurrency(pago)}</p></div>
+
+                    {/* Valor destaque dourado — padronizado com investimentos */}
+                    <div className="rounded-lg px-3 py-2" style={{ background: 'rgba(232,201,122,0.05)', border: '1px solid rgba(232,201,122,0.15)' }}>
+                      <p className="text-xs mb-0.5" style={{ color: '#64748B' }}>Crédito Total</p>
+                      <p className="font-mono font-bold text-xl" style={{ color: '#E8C97A' }}>{formatCurrency(c.total_value ?? 0)}</p>
                     </div>
+
+                    <div className="grid grid-cols-3 gap-2 text-sm">
+                      <div><p className="text-xs" style={{ color: '#64748B' }}>Parcela</p><p className="font-mono font-bold text-sm" style={{ color: '#F0F4F8' }}>{formatCurrency(c.monthly_payment ?? 0)}</p></div>
+                      <div><p className="text-xs" style={{ color: '#64748B' }}>Total Pago</p><p className="font-mono font-bold text-sm" style={{ color: '#10B981' }}>{formatCurrency(totalPaid)}</p></div>
+                      <div><p className="text-xs" style={{ color: '#64748B' }}>Restante</p><p className="font-mono font-bold text-sm" style={{ color: '#F43F5E' }}>{formatCurrency(restante)}</p></div>
+                    </div>
+
                     <div className="space-y-1">
-                      <div className="flex justify-between text-xs" style={{ color: '#94A3B8' }}><span>{c.installments_paid ?? 0}/{c.installments_total ?? 0} parcelas</span><span>{pct.toFixed(0)}%</span></div>
+                      <div className="flex justify-between text-xs" style={{ color: '#94A3B8' }}>
+                        <span>{c.installments_paid ?? 0}/{c.installments_total ?? 0} parcelas</span>
+                        <span>{pctValor.toFixed(1)}% do crédito</span>
+                      </div>
                       <Progress value={pct} className="h-2" />
                     </div>
                   </PremiumCard>
