@@ -570,6 +570,7 @@ export default function AssetsPage() {
                     <div className="rounded-lg px-3 py-2" style={{ background: 'rgba(232,201,122,0.05)', border: '1px solid rgba(232,201,122,0.15)' }}>
                       <p className="text-xs mb-0.5" style={{ color: '#64748B' }}>{own < 1 ? `Crédito (${c.ownership_pct}%)` : "Crédito Total"}</p>
                       <p className="font-mono font-bold text-xl" style={{ color: '#E8C97A' }}>{formatCurrency(creditDisplay)}</p>
+                      {own < 1 && <p className="font-mono text-xs mt-0.5" style={{ color: '#4A5568' }}>Total da carta: {formatCurrency(c.credit_value || c.total_value || 0)}</p>}
                     </div>
 
                     {/* Grid principal */}
@@ -577,14 +578,17 @@ export default function AssetsPage() {
                       <div>
                         <p className="text-xs" style={{ color: '#64748B' }}>Parcela Atual</p>
                         <p className="font-mono font-bold text-sm" style={{ color: '#F0F4F8' }}>{formatCurrency(monthlyDisplay)}</p>
+                        {own < 1 && <p className="font-mono text-[10px]" style={{ color: '#4A5568' }}>/ {formatCurrency(c.monthly_payment ?? 0)}</p>}
                       </div>
                       <div>
                         <p className="text-xs" style={{ color: '#64748B' }}>Total Pago</p>
                         <p className="font-mono font-bold text-sm" style={{ color: '#10B981' }}>{formatCurrency(totalPaid)}</p>
+                        {own < 1 && <p className="font-mono text-[10px]" style={{ color: '#4A5568' }}>/ {formatCurrency(totalPaidFull)}</p>}
                       </div>
                       <div>
                         <p className="text-xs" style={{ color: '#64748B' }}>A Pagar</p>
                         <p className="font-mono font-bold text-sm" style={{ color: '#F43F5E' }}>{formatCurrency(totalPending)}</p>
+                        {own < 1 && <p className="font-mono text-[10px]" style={{ color: '#4A5568' }}>/ {formatCurrency(totalPendingFull)}</p>}
                       </div>
                     </div>
 
@@ -592,9 +596,9 @@ export default function AssetsPage() {
                     {(fundPaid > 0 || admPaid > 0) && (
                       <div className="rounded-lg px-2 py-1.5" style={{ background: 'rgba(45,212,191,0.04)', border: '1px solid rgba(45,212,191,0.15)' }}>
                         <div className="flex gap-3 text-xs flex-wrap">
-                          {fundPaid > 0 && <span style={{ color: '#2DD4BF' }}>Fundo: {formatCurrency(fundPaid)}</span>}
-                          {admPaid > 0 && <span style={{ color: '#94A3B8' }}>Taxa ADM: {formatCurrency(admPaid)}</span>}
-                          {insPaid > 0 && <span style={{ color: '#94A3B8' }}>Seguro: {formatCurrency(insPaid)}</span>}
+                          {fundPaid > 0 && <span style={{ color: '#2DD4BF' }}>Fundo: {formatCurrency(fundPaid)}{own < 1 && <span style={{ color: '#4A5568' }}> / {formatCurrency(c.fund_paid ?? 0)}</span>}</span>}
+                          {admPaid > 0 && <span style={{ color: '#94A3B8' }}>ADM: {formatCurrency(admPaid)}{own < 1 && <span style={{ color: '#4A5568' }}> / {formatCurrency(c.admin_fee_paid ?? 0)}</span>}</span>}
+                          {insPaid > 0 && <span style={{ color: '#94A3B8' }}>Seguro: {formatCurrency(insPaid)}{own < 1 && <span style={{ color: '#4A5568' }}> / {formatCurrency(c.insurance_paid ?? 0)}</span>}</span>}
                           {c.admin_fee_pct && <span style={{ color: '#64748B' }}>({c.admin_fee_pct}% ADM)</span>}
                         </div>
                       </div>
