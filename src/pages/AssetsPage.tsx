@@ -28,7 +28,8 @@ import { Landmark, Plus, TrendingUp, Pencil, Trash2, GripVertical } from "lucide
 // ─── Investments hooks INLINE (Lovable não deploya useConstructions.ts) ─────
 function useInvestments() {
   return useQuery({
-    queryKey: ["investments"],
+    queryKey: ["investments_rpc_v3"],
+    staleTime: 0,
     queryFn: async () => {
       const { data, error } = await supabase.rpc("get_investments" as any);
       if (error) throw new Error("get_investments: " + error.message);
