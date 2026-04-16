@@ -31,7 +31,7 @@ const navGroups = [
       { label: "Energia Solar", icon: Zap, href: "/energy" },
       { label: "Portal Administrador", icon: KeyRound, href: "/manager/kitnets" },
       { label: "Obras & Terrenos", icon: HardHat, href: "/constructions" },
-      { label: "Patrimônio", icon: Building2, href: "/assets" },
+      { label: "Patrimônio", icon: Building2, href: "/assets?tab=bens" },
     ],
   },
   {
@@ -39,7 +39,6 @@ const navGroups = [
     items: [
       { label: "Aplicações", icon: BarChart3, href: "/assets?tab=investimentos" },
       { label: "Consórcios", icon: RefreshCw, href: "/assets?tab=consorcios" },
-      { label: "Casamento 2027", icon: Heart, href: "/wedding" },
     ],
   },
   {
@@ -55,6 +54,7 @@ const navGroups = [
       { label: "Metas", icon: Target, href: "/goals" },
       { label: "Impostos & Dívidas", icon: Receipt, href: "/taxes" },
       { label: "Projeções", icon: Radio, href: "/projections" },
+      { label: "Casamento 2027", icon: Heart, href: "/wedding" },
     ],
   },
   {
@@ -119,7 +119,9 @@ export function AdminSidebar({ collapsed, onToggle }: AdminSidebarProps) {
             )}
             <div className="space-y-0.5">
               {group.items.map(item => {
-                const active = location.pathname === item.href;
+                const active = item.href.includes('?')
+                  ? (location.pathname + location.search) === item.href
+                  : location.pathname === item.href;
                 return (
                   <Link
                     key={item.href}

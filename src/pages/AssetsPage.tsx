@@ -282,21 +282,35 @@ export default function AssetsPage() {
     );
   }
 
+  // Contexto: se tab=bens → veio de Imóveis (só Bens). Se investimentos/consorcios → veio de Investimentos.
+  const context = defaultTab === "bens" ? "imoveis" : "investimentos";
+  const pageTitle = context === "imoveis" ? "Patrimônio" : "Investimentos";
+  const PageIcon = context === "imoveis" ? Landmark : TrendingUp;
+
   return (
     <div className="space-y-6">
       <h1 className="font-display font-bold text-2xl" style={{ color: '#F0F4F8' }}>
-        <Landmark className="inline w-6 h-6 mr-2" style={{ color: '#C9A84C' }} />
-        Patrimônio
+        <PageIcon className="inline w-6 h-6 mr-2" style={{ color: '#C9A84C' }} />
+        {pageTitle}
       </h1>
 
-      <KpiCard label="Patrimônio Líquido Total" value={totalPatrimonio + totalAtualInv} color="gold" tooltip={`Bens: ${formatCurrency(totalPatrimonio)}\nInvestimentos: ${formatCurrency(totalAtualInv)}`} />
+      {context === "imoveis" ? (
+        <KpiCard label="Patrimônio em Bens" value={totalPatrimonio} color="gold" />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <KpiCard label="Total Investido" value={totalInvestido} color="gold" tooltip={`Soma dos valores aplicados:\n${tipInvestido}`} />
+          <KpiCard label="Valor Atual" value={totalAtualInv} color="cyan" tooltip={`Saldo bruto por aplicação:\n${tipAtual}`} />
+          <KpiCard label="Saldo Líquido p/ Resgate" value={totalResgate} color="green" tooltip={tipResgateFull} />
+        </div>
+      )}
 
       <Tabs defaultValue={defaultTab}>
-        <TabsList style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
-          <TabsTrigger value="bens">Bens</TabsTrigger>
-          <TabsTrigger value="investimentos">Investimentos</TabsTrigger>
-          <TabsTrigger value="consorcios">Consórcios</TabsTrigger>
-        </TabsList>
+        {context === "investimentos" && (
+          <TabsList style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
+            <TabsTrigger value="investimentos">Aplicações</TabsTrigger>
+            <TabsTrigger value="consorcios">Consórcios</TabsTrigger>
+          </TabsList>
+        )}
 
         {/* ─── BENS ─── */}
         <TabsContent value="bens" className="space-y-4">
@@ -335,13 +349,6 @@ export default function AssetsPage() {
 
         {/* ─── INVESTIMENTOS (v3 RPC) ─── */}
         <TabsContent value="investimentos" className="space-y-4">
-
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <KpiCard label="Total Investido" value={totalInvestido} color="gold" tooltip={`Soma dos valores aplicados:\n${tipInvestido}`} />
-            <KpiCard label="Valor Atual" value={totalAtualInv} color="cyan" tooltip={`Saldo bruto por aplicação:\n${tipAtual}`} />
-            <KpiCard label="Saldo Líquido p/ Resgate" value={totalResgate} color="green" tooltip={tipResgateFull} />
-          </div>
           <div className="flex justify-end"><GoldButton onClick={() => { setInvForm(emptyInv); setInvOpen(true); }}><Plus className="w-4 h-4" />Nova Aplicação</GoldButton></div>
           {invLoading ? <Skeleton className="h-32 rounded-2xl" /> : (investments ?? []).length === 0 ? (
             <PremiumCard><p className="text-center py-8" style={{ color: '#94A3B8' }}>Nenhum investimento</p></PremiumCard>
