@@ -1,6 +1,6 @@
 /**
- * Parser de extrato de consórcio Ademicon
- * Envia PDF para wisely-ai (Gemini) para extração inteligente dos dados
+ * Parser de extrato de consórcio (PDF ou imagem)
+ * Envia para wisely-ai (Gemini) para extração inteligente dos dados
  */
 
 import { supabase } from "@/integrations/supabase/client";
@@ -34,7 +34,6 @@ async function fileToBase64(file: File): Promise<string> {
     const reader = new FileReader();
     reader.onload = () => {
       const result = reader.result as string;
-      // Remove "data:application/pdf;base64," prefix
       const base64 = result.split(",")[1];
       resolve(base64);
     };
@@ -44,16 +43,37 @@ async function fileToBase64(file: File): Promise<string> {
 }
 
 /**
- * Função principal: envia PDF para wisely-ai e retorna dados estruturados
+ * Detecta mediaType a partir do arquivo
+ */
+function getMediaType(file: File): string {
+  const ext = file.name.toLowerCase().split(".").pop();
+  switch (ext) {
+    case "jpg":
+    case "jpeg":
+      return "image/jpeg";
+    case "png":
+      return "image/png";
+    case "webp":
+      return "image/webp";
+    case "pdf":
+      return "application/pdf";
+    default:
+      return file.type || "application/octet-stream";
+  }
+}
+
+/**
+ * Função principal: envia PDF ou imagem para wisely-ai e retorna dados estruturados
  */
 export async function parseConsortiumExtrato(file: File): Promise<ConsortiumExtratoData> {
   const base64 = await fileToBase64(file);
+  const mediaType = getMediaType(file);
 
   const { data, error } = await supabase.functions.invoke("wisely-ai", {
     body: {
       action: "extract-consortium",
       imageBase64: base64,
-      mediaType: "application/pdf",
+      mediaType,
     },
   });
 

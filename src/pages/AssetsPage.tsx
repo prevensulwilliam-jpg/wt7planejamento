@@ -608,7 +608,7 @@ export default function AssetsPage() {
                       <label className="ml-auto flex items-center gap-1 cursor-pointer px-2 py-1 rounded-lg transition-colors hover:bg-white/5" style={{ color: '#818CF8', border: '1px solid rgba(129,140,248,0.2)' }}>
                         <Upload className="w-3 h-3" />
                         <span>Extrato</span>
-                        <input type="file" accept=".pdf" className="hidden" onChange={e => handleExtratoFile(e, c)} />
+                        <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,image/*" className="hidden" onChange={e => handleExtratoFile(e, c)} />
                       </label>
                     </div>
                     {c.extrato_file_name && (
