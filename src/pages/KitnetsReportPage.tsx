@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useKitnets, useKitnetEntries, usePrevMonth } from "@/hooks/useKitnets";
+import { useKitnets, useKitnetEntries, usePrevMonth, useKitnetMonthDataMap, useKitnetMonthStatuses } from "@/hooks/useKitnets";
 import { useCeoConfig, useUpdateCeoConfig } from "@/hooks/useCeoConfig";
 import { formatCurrency, formatMonth, getCurrentMonth } from "@/lib/formatters";
 import { ChevronLeft, ChevronRight, Monitor, Sun, Settings, X, Plus, Trash2 } from "lucide-react";
@@ -154,12 +154,12 @@ function getTheme(dark: boolean) {
 }
 
 // ─── Comparativo dinâmico RWT02 vs RWT03 ───
-function ComparativoCard({ dark, t, kitnets, entries, energyReadings, celescMonth, INVESTIMENTO, META_MENSAL, LUCRO_HISTORICO, CDI_TAXA }: any) {
+function ComparativoCard({ dark, t, kitnets, entries, energyReadings, celescMonth, INVESTIMENTO, META_MENSAL, LUCRO_HISTORICO, CDI_TAXA, monthStatusMap }: any) {
   const calc = (complex: "RWT02" | "RWT03") => {
     const fk = kitnets.filter((k: any) => k.residencial_code === complex);
     const fe = (entries as any[]).filter((e: any) => e.kitnets?.residencial_code === complex);
     const total = fk.length || 1;
-    const ocupadas = fk.filter((k: any) => k.status === "occupied" || k.status === "maintenance").length;
+    const ocupadas = fk.filter((k: any) => { const s = (monthStatusMap ?? {})[k.id] ?? k.status ?? "vacant"; return s === "occupied" || s === "maintenance"; }).length;
     const receita = fe.reduce((s: number, e: any) => s + (e.total_liquid ?? 0), 0);
     const inv = complex === "RWT02" ? INVESTIMENTO.RWT02 : INVESTIMENTO.RWT03;
     const lucroHist = inv > 0 ? (LUCRO_HISTORICO * (inv / INVESTIMENTO.total)) : 0;
@@ -353,6 +353,8 @@ export default function KitnetsReportPage() {
   const { data: entries = [] } = useKitnetEntries(month);
   const prevMonth = usePrevMonth(month);
   const { data: prevEntries = [] } = useKitnetEntries(prevMonth);
+  const { data: monthDataMap = {} } = useKitnetMonthDataMap(month);
+  const { data: monthStatusMap = {} } = useKitnetMonthStatuses(month);
   const { data: yearEntries = [] } = useAllYearEntries(year);
   const { data: energyReadings = [] } = useEnergyReadingsMonth(month);
   const { data: celescMonth = [] } = useCelescMonth(month);
@@ -418,10 +420,11 @@ export default function KitnetsReportPage() {
     return { mes: formatMonth(m).slice(0, 3), cobrado, fatura, saldo: cobrado - fatura };
   }), [yearEnergyReadings, celescYear, yearMonths, complex]);
 
-  // ─── Ocupação / inadimplência ───
+  // ─── Ocupação / inadimplência (usa status mensal quando disponível) ───
+  const getEffStatus = (k: any) => (monthStatusMap as Record<string, string>)[k.id] ?? k.status ?? "vacant";
   const totalUnidades = filteredKitnets.length || 1;
-  const ocupadas = filteredKitnets.filter(k => k.status === "occupied" || k.status === "maintenance").length;
-  const vagas = filteredKitnets.filter(k => k.status !== "occupied" && k.status !== "maintenance").length;
+  const ocupadas = filteredKitnets.filter(k => { const s = getEffStatus(k); return s === "occupied" || s === "maintenance"; }).length;
+  const vagas = filteredKitnets.filter(k => { const s = getEffStatus(k); return s !== "occupied" && s !== "maintenance"; }).length;
   const fechados = filteredEntries.length;
   const aguardando = ocupadas - fechados;
   const aluguelMedio = filteredKitnets.reduce((s, k) => s + (k.rent_value ?? 0), 0) / (filteredKitnets.length || 1);
@@ -456,11 +459,15 @@ export default function KitnetsReportPage() {
     return { mes: formatMonth(m).slice(0, 3), recebido: liq, meta: metaMensal };
   }), [yearEntries, yearMonths, complex, metaMensal]);
 
-  // ─── Ranking unidades ───
+  // ─── Ranking unidades (usa dados mensais para tenant e status) ───
   const ranking = useMemo(() => filteredKitnets.map(k => {
     const entry = (entries as any[]).find((e: any) => e.kitnet_id === k.id);
-    return { code: k.code, tenant: k.tenant_name || "—", receita: entry?.total_liquid ?? 0, status: entry ? "fechado" : k.status === "occupied" ? "aguardando" : "vaga" };
-  }).sort((a, b) => b.receita - a.receita), [filteredKitnets, entries]);
+    const monthData = (monthDataMap as Record<string, any>)[k.id];
+    const tenantName = monthData?.tenant_name || k.tenant_name || "—";
+    const effStatus = getEffStatus(k);
+    const isOccupied = effStatus === "occupied" || effStatus === "maintenance";
+    return { code: k.code, tenant: isOccupied ? tenantName : "—", receita: entry?.total_liquid ?? 0, status: entry ? "fechado" : isOccupied ? "aguardando" : "vaga" };
+  }).sort((a, b) => b.receita - a.receita), [filteredKitnets, entries, monthDataMap, monthStatusMap]);
 
   // ─── Projeção crescimento ───
   const lucroMedioUnidade = lucroLiquido / (ocupadas || 1);
@@ -621,7 +628,7 @@ export default function KitnetsReportPage() {
 
         {/* Comparativo RWT02 vs RWT03 (só no consolidado) — 100% dinâmico */}
         {complex === "total" ? (
-          <ComparativoCard dark={dark} t={t} kitnets={kitnets} entries={entries} energyReadings={energyReadings} celescMonth={celescMonth} INVESTIMENTO={INVESTIMENTO} META_MENSAL={META_MENSAL} LUCRO_HISTORICO={LUCRO_HISTORICO} CDI_TAXA={CDI_TAXA} />
+          <ComparativoCard dark={dark} t={t} kitnets={kitnets} entries={entries} energyReadings={energyReadings} celescMonth={celescMonth} INVESTIMENTO={INVESTIMENTO} META_MENSAL={META_MENSAL} LUCRO_HISTORICO={LUCRO_HISTORICO} CDI_TAXA={CDI_TAXA} monthStatusMap={monthStatusMap} />
 
         ) : (
           <CardWrap style={{ marginBottom: 0 }}>
