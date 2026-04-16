@@ -869,24 +869,42 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
       await matchMutation.mutateAsync({ id, category, intent, revenueId, expenseId });
       await recordClassification(tx.description, category, intent, label);
 
-      // ─── Auto-reconciliação de consórcio ───
+      // ─── Auto-reconciliação de consórcio (match por valor) ───
       if (category === "consorcio" && intent === "despesa") {
         try {
           const { data: consList } = await supabase
             .from("consortiums" as any)
-            .select("id, installments_paid, total_paid")
-            .eq("status", "ativo")
-            .limit(1);
-          const cons = (consList as any)?.[0];
-          if (cons) {
-            const newPaid = (cons.installments_paid ?? 0) + 1;
-            const newTotal = (parseFloat(cons.total_paid) || 0) + Math.abs(tx.amount);
-            await supabase.from("consortiums" as any).update({
-              installments_paid: newPaid,
-              total_paid: newTotal,
-            }).eq("id", cons.id);
-            queryClient.invalidateQueries({ queryKey: ["consortiums"] });
-            toast.success(`Consórcio atualizado: parcela ${newPaid}, total pago ${formatCurrency(newTotal)}`);
+            .select("id, name, installments_paid, total_paid, monthly_payment, ownership_pct")
+            .eq("status", "ativo");
+          const allCons = (consList as any[]) ?? [];
+          if (allCons.length > 0) {
+            const txAmt = Math.abs(tx.amount);
+            // Match: consórcio cuja parcela proporcional (monthly * ownership%) mais próxima do valor da transação (tolerância 15%)
+            let best: any = null;
+            let bestDiff = Infinity;
+            for (const cons of allCons) {
+              const own = (cons.ownership_pct ?? 100) / 100;
+              const expected = (cons.monthly_payment ?? 0) * own;
+              if (expected <= 0) continue;
+              const diff = Math.abs(txAmt - expected);
+              const pctDiff = diff / expected;
+              if (pctDiff < 0.15 && diff < bestDiff) {
+                best = cons;
+                bestDiff = diff;
+              }
+            }
+            // Fallback: se só tem 1 consórcio ativo, usa ele
+            if (!best && allCons.length === 1) best = allCons[0];
+            if (best) {
+              const newPaid = (best.installments_paid ?? 0) + 1;
+              const newTotal = (parseFloat(best.total_paid) || 0) + txAmt;
+              await supabase.from("consortiums" as any).update({
+                installments_paid: newPaid,
+                total_paid: newTotal,
+              }).eq("id", best.id);
+              queryClient.invalidateQueries({ queryKey: ["consortiums"] });
+              toast.success(`${best.name}: parcela ${newPaid}, total pago ${formatCurrency(newTotal)}`);
+            }
           }
         } catch (err) {
           console.error("Erro ao atualizar consórcio:", err);
@@ -941,20 +959,30 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
         const pLabel = ALL_CATEGORY_LABELS[category] || category;
         await recordClassification(tx.description, category, intent, pLabel);
 
-        // Auto-reconciliação consórcio em lote
+        // Auto-reconciliação consórcio em lote (match por valor)
         if (category === "consorcio" && intent === "despesa") {
           try {
             const { data: consList } = await supabase
               .from("consortiums" as any)
-              .select("id, installments_paid, total_paid")
-              .eq("status", "ativo")
-              .limit(1);
-            const cons = (consList as any)?.[0];
-            if (cons) {
+              .select("id, name, installments_paid, total_paid, monthly_payment, ownership_pct")
+              .eq("status", "ativo");
+            const allCons = (consList as any[]) ?? [];
+            const txAmt = Math.abs(tx.amount);
+            let best: any = null;
+            let bestDiff = Infinity;
+            for (const cons of allCons) {
+              const own = (cons.ownership_pct ?? 100) / 100;
+              const expected = (cons.monthly_payment ?? 0) * own;
+              if (expected <= 0) continue;
+              const diff = Math.abs(txAmt - expected);
+              if (diff / expected < 0.15 && diff < bestDiff) { best = cons; bestDiff = diff; }
+            }
+            if (!best && allCons.length === 1) best = allCons[0];
+            if (best) {
               await supabase.from("consortiums" as any).update({
-                installments_paid: (cons.installments_paid ?? 0) + 1,
-                total_paid: (parseFloat(cons.total_paid) || 0) + Math.abs(tx.amount),
-              }).eq("id", cons.id);
+                installments_paid: (best.installments_paid ?? 0) + 1,
+                total_paid: (parseFloat(best.total_paid) || 0) + txAmt,
+              }).eq("id", best.id);
             }
           } catch (err) { console.error("Erro ao atualizar consórcio:", err); }
         }

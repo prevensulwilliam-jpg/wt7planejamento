@@ -162,7 +162,7 @@ export default function AssetsPage() {
   const [invForm, setInvForm]     = useState(emptyInv);
 
   // ─── Consórcios state ─────────────────────────────────────────────────────
-  const emptyCons = { name: "", total_value: "", monthly_payment: "", installments_total: "", installments_paid: "", status: "ativo", group_number: "", quota: "", contract_number: "", admin_fee_pct: "", asset_type: "IMOVEIS", credit_value: "", adhesion_date: "", end_date: "", total_paid: "", fund_paid: "", admin_fee_paid: "", insurance_paid: "", total_pending: "", installments_remaining: "", notes: "" };
+  const emptyCons = { name: "", total_value: "", monthly_payment: "", installments_total: "", installments_paid: "", status: "ativo", group_number: "", quota: "", contract_number: "", admin_fee_pct: "", asset_type: "IMOVEIS", credit_value: "", adhesion_date: "", end_date: "", total_paid: "", fund_paid: "", admin_fee_paid: "", insurance_paid: "", total_pending: "", installments_remaining: "", notes: "", ownership_pct: "100", partner_name: "" };
   const [consOpen, setConsOpen]   = useState(false);
   const [editCons, setEditCons]   = useState<any | null>(null);
   const [delCons,  setDelCons]    = useState<any | null>(null);
@@ -269,6 +269,8 @@ export default function AssetsPage() {
     total_pending: parseFloat(consForm.total_pending) || 0,
     installments_remaining: parseInt(consForm.installments_remaining) || 0,
     notes: consForm.notes || null,
+    ownership_pct: parseFloat(consForm.ownership_pct) || 100,
+    partner_name: consForm.partner_name || null,
   });
   const handleCreateCons = async () => {
     if (!consForm.name) return;
@@ -535,14 +537,18 @@ export default function AssetsPage() {
               items={(consortiums ?? []) as any[]}
               columns="grid-cols-1 md:grid-cols-2"
               renderCard={(c: any) => {
+                const own = (c.ownership_pct ?? 100) / 100;
                 const pct  = c.installments_total ? ((c.installments_paid ?? 0) / c.installments_total) * 100 : 0;
-                const totalPaid = c.total_paid || ((c.installments_paid ?? 0) * (c.monthly_payment ?? 0));
+                const totalPaidFull = c.total_paid || ((c.installments_paid ?? 0) * (c.monthly_payment ?? 0));
                 const planTotal = c.total_value || (c.credit_value ? c.credit_value * (1 + (c.admin_fee_pct ?? 0) / 100) : 0);
-                const totalPending = c.total_pending > 0 ? c.total_pending : Math.max(0, planTotal - totalPaid);
-                const pctValor = c.total_value > 0 ? (totalPaid / c.total_value) * 100 : 0;
-                const fundPaid = c.fund_paid ?? 0;
-                const admPaid = c.admin_fee_paid ?? 0;
-                const insPaid = c.insurance_paid ?? 0;
+                const totalPendingFull = c.total_pending > 0 ? c.total_pending : Math.max(0, planTotal - totalPaidFull);
+                const totalPaid = totalPaidFull * own;
+                const totalPending = totalPendingFull * own;
+                const creditDisplay = (c.credit_value || c.total_value || 0) * own;
+                const monthlyDisplay = (c.monthly_payment ?? 0) * own;
+                const fundPaid = (c.fund_paid ?? 0) * own;
+                const admPaid = (c.admin_fee_paid ?? 0) * own;
+                const insPaid = (c.insurance_paid ?? 0) * own;
                 return (
                   <PremiumCard className="space-y-2 h-full">
                     <div className="flex items-start gap-2">
@@ -550,26 +556,27 @@ export default function AssetsPage() {
                         <p className="font-display font-bold" style={{ color: '#F0F4F8' }}>{c.name}</p>
                         <p className="text-xs" style={{ color: '#94A3B8' }}>
                           {c.group_number ? `Grupo ${c.group_number}` : ""}{c.quota ? ` · Cota ${c.quota}` : ""}{c.asset_type ? ` · ${c.asset_type}` : ""}
+                          {own < 1 && <span style={{ color: '#818CF8' }}> · {c.ownership_pct}% minha parte{c.partner_name ? ` · Sócio: ${c.partner_name}` : ""}</span>}
                         </p>
                       </div>
                       <WtBadge variant={c.status === "contemplado" ? "green" : c.status === "ativo" ? "gold" : "gray"}>{c.status === "ativo" ? "Ativo" : c.status === "contemplado" ? "Contemplado" : c.status === "encerrado" ? "Encerrado" : c.status}</WtBadge>
                       <CardActions
-                        onEdit={() => { setConsForm({ name: c.name ?? "", total_value: String(c.total_value ?? ""), monthly_payment: String(c.monthly_payment ?? ""), installments_total: String(c.installments_total ?? ""), installments_paid: String(c.installments_paid ?? ""), status: c.status ?? "ativo", group_number: c.group_number ?? "", quota: c.quota ?? "", contract_number: c.contract_number ?? "", admin_fee_pct: String(c.admin_fee_pct ?? ""), asset_type: c.asset_type ?? "IMOVEIS", credit_value: String(c.credit_value ?? ""), adhesion_date: c.adhesion_date ?? "", end_date: c.end_date ?? "", total_paid: String(c.total_paid ?? ""), fund_paid: String(c.fund_paid ?? ""), admin_fee_paid: String(c.admin_fee_paid ?? ""), insurance_paid: String(c.insurance_paid ?? ""), total_pending: String(c.total_pending ?? ""), installments_remaining: String(c.installments_remaining ?? ""), notes: c.notes ?? "" }); setEditCons(c); }}
+                        onEdit={() => { setConsForm({ name: c.name ?? "", total_value: String(c.total_value ?? ""), monthly_payment: String(c.monthly_payment ?? ""), installments_total: String(c.installments_total ?? ""), installments_paid: String(c.installments_paid ?? ""), status: c.status ?? "ativo", group_number: c.group_number ?? "", quota: c.quota ?? "", contract_number: c.contract_number ?? "", admin_fee_pct: String(c.admin_fee_pct ?? ""), asset_type: c.asset_type ?? "IMOVEIS", credit_value: String(c.credit_value ?? ""), adhesion_date: c.adhesion_date ?? "", end_date: c.end_date ?? "", total_paid: String(c.total_paid ?? ""), fund_paid: String(c.fund_paid ?? ""), admin_fee_paid: String(c.admin_fee_paid ?? ""), insurance_paid: String(c.insurance_paid ?? ""), total_pending: String(c.total_pending ?? ""), installments_remaining: String(c.installments_remaining ?? ""), notes: c.notes ?? "", ownership_pct: String(c.ownership_pct ?? "100"), partner_name: c.partner_name ?? "" }); setEditCons(c); }}
                         onDelete={() => setDelCons(c)}
                       />
                     </div>
 
                     {/* Crédito destaque dourado */}
                     <div className="rounded-lg px-3 py-2" style={{ background: 'rgba(232,201,122,0.05)', border: '1px solid rgba(232,201,122,0.15)' }}>
-                      <p className="text-xs mb-0.5" style={{ color: '#64748B' }}>Crédito Total</p>
-                      <p className="font-mono font-bold text-xl" style={{ color: '#E8C97A' }}>{formatCurrency(c.credit_value || c.total_value || 0)}</p>
+                      <p className="text-xs mb-0.5" style={{ color: '#64748B' }}>{own < 1 ? `Crédito (${c.ownership_pct}%)` : "Crédito Total"}</p>
+                      <p className="font-mono font-bold text-xl" style={{ color: '#E8C97A' }}>{formatCurrency(creditDisplay)}</p>
                     </div>
 
                     {/* Grid principal */}
                     <div className="grid grid-cols-3 gap-2">
                       <div>
                         <p className="text-xs" style={{ color: '#64748B' }}>Parcela Atual</p>
-                        <p className="font-mono font-bold text-sm" style={{ color: '#F0F4F8' }}>{formatCurrency(c.monthly_payment ?? 0)}</p>
+                        <p className="font-mono font-bold text-sm" style={{ color: '#F0F4F8' }}>{formatCurrency(monthlyDisplay)}</p>
                       </div>
                       <div>
                         <p className="text-xs" style={{ color: '#64748B' }}>Total Pago</p>
@@ -793,6 +800,15 @@ export default function AssetsPage() {
                       <SelectItem value="encerrado">Encerrado</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+              </div>
+
+              {/* Sociedade */}
+              <div className="rounded-lg p-3 space-y-2" style={{ background: 'rgba(129,140,248,0.06)', border: '1px solid rgba(129,140,248,0.2)' }}>
+                <p className="text-xs font-semibold" style={{ color: '#818CF8' }}>Participação</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div><Label style={{ color: '#94A3B8' }}>Minha parte %</Label><Input type="number" value={consForm.ownership_pct} onChange={e => setConsForm({ ...consForm, ownership_pct: e.target.value })} style={{ ...inputStyle, borderColor: 'rgba(129,140,248,0.3)' }} placeholder="100" /></div>
+                  <div><Label style={{ color: '#94A3B8' }}>Sócio</Label><Input value={consForm.partner_name} onChange={e => setConsForm({ ...consForm, partner_name: e.target.value })} style={inputStyle} placeholder="Nome do sócio (se houver)" /></div>
                 </div>
               </div>
 
