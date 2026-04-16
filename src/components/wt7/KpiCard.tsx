@@ -9,6 +9,7 @@ interface KpiCardProps {
   compact?: boolean;
   formatAs?: 'currency' | 'number';
   onClick?: () => void;
+  tooltip?: string;
 }
 
 const colorMap = {
@@ -19,7 +20,7 @@ const colorMap = {
   gray: { bg: 'rgba(74,85,104,0.08)', border: 'rgba(74,85,104,0.2)', text: '#94A3B8', badge: 'rgba(74,85,104,0.15)' },
 };
 
-export function KpiCard({ label, value, change, color, compact, formatAs = 'currency', onClick }: KpiCardProps) {
+export function KpiCard({ label, value, change, color, compact, formatAs = 'currency', onClick, tooltip }: KpiCardProps) {
   const c = colorMap[color];
   const isPositive = (change ?? 0) >= 0;
 
@@ -29,7 +30,7 @@ export function KpiCard({ label, value, change, color, compact, formatAs = 'curr
 
   return (
     <div
-      className={`rounded-2xl p-5 transition-all duration-200 hover:shadow-lg ${onClick ? 'cursor-pointer hover:scale-[1.02]' : ''}`}
+      className={`rounded-2xl p-5 transition-all duration-200 hover:shadow-lg group relative ${onClick ? 'cursor-pointer hover:scale-[1.02]' : ''}`}
       style={{
         background: `linear-gradient(135deg, ${c.bg}, #0D1318)`,
         border: `1px solid ${c.border}`,
@@ -40,8 +41,14 @@ export function KpiCard({ label, value, change, color, compact, formatAs = 'curr
       tabIndex={onClick ? 0 : undefined}
       onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}
     >
+      {tooltip && (
+        <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-3 py-2 rounded-lg text-xs font-mono whitespace-pre-line opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 max-w-xs"
+          style={{ background: '#1A2535', border: '1px solid #2A3A4E', color: '#E0E7EF', boxShadow: '0 8px 32px rgba(0,0,0,0.6)' }}>
+          {tooltip}
+        </div>
+      )}
       <p className="font-mono text-xs uppercase tracking-wider" style={{ color: '#94A3B8' }}>
-        {label}
+        {label} {tooltip && <span style={{ color: '#4A5568' }}>ⓘ</span>}
       </p>
       <p className="font-mono text-[28px] font-medium mt-1" style={{ color: c.text }}>
         {displayValue}

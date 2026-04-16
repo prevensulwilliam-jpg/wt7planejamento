@@ -171,7 +171,18 @@ export default function AssetsPage() {
   const totalPatrimonio  = (assets ?? []).reduce((s, a) => s + (a.estimated_value ?? 0), 0);
   const totalInvestido   = (investments ?? []).reduce((s, i) => s + (Number((i as any).initial_amount) || 0), 0);
   const totalAtualInv    = (investments ?? []).reduce((s, i) => s + (Number((i as any).current_amount) || 0), 0);
+  const totalResgate     = (investments ?? []).reduce((s, i) => s + (Number((i as any).rescue_amount) || Number((i as any).current_amount) || 0), 0);
   const rendimento       = totalAtualInv - totalInvestido;
+
+  // ─── Tooltips detalhados ──────────────────────────────────────────────────
+  const invList = (investments ?? []) as any[];
+  const tipInvestido = invList.map((i: any) => `${i.name}: ${formatCurrency(Number(i.initial_amount) || 0)}`).join('\n');
+  const tipAtual = invList.map((i: any) => `${i.name}: ${formatCurrency(Number(i.current_amount) || 0)}`).join('\n');
+  const tipResgate = invList.map((i: any) => {
+    const val = Number(i.rescue_amount) || Number(i.current_amount) || 0;
+    const src = i.rescue_amount ? 'resgate' : 'saldo atual';
+    return `${i.name}: ${formatCurrency(val)} (${src})`;
+  }).join('\n');
 
   // ─── Bens handlers ────────────────────────────────────────────────────────
   const assetPayload = () => ({
@@ -277,7 +288,7 @@ export default function AssetsPage() {
         Patrimônio
       </h1>
 
-      <KpiCard label="Patrimônio Líquido Total" value={totalPatrimonio + totalAtualInv} color="gold" />
+      <KpiCard label="Patrimônio Líquido Total" value={totalPatrimonio + totalAtualInv} color="gold" tooltip={`Bens: ${formatCurrency(totalPatrimonio)}\nInvestimentos: ${formatCurrency(totalAtualInv)}`} />
 
       <Tabs defaultValue={defaultTab}>
         <TabsList style={{ background: '#0D1318', border: '1px solid #1A2535' }}>
@@ -326,9 +337,9 @@ export default function AssetsPage() {
 
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <KpiCard label="Total Investido" value={totalInvestido} color="gold" />
-            <KpiCard label="Valor Atual" value={totalAtualInv} color="cyan" />
-            <KpiCard label="Rendimento" value={rendimento} color="green" />
+            <KpiCard label="Total Investido" value={totalInvestido} color="gold" tooltip={`Soma dos valores aplicados:\n${tipInvestido}`} />
+            <KpiCard label="Valor Atual" value={totalAtualInv} color="cyan" tooltip={`Saldo bruto por aplicação:\n${tipAtual}`} />
+            <KpiCard label="Saldo Líquido p/ Resgate" value={totalResgate} color="green" tooltip={`Valor disponível para saque:\n${tipResgate}\n\nRendimento: ${formatCurrency(rendimento)}`} />
           </div>
           <div className="flex justify-end"><GoldButton onClick={() => { setInvForm(emptyInv); setInvOpen(true); }}><Plus className="w-4 h-4" />Nova Aplicação</GoldButton></div>
           {invLoading ? <Skeleton className="h-32 rounded-2xl" /> : (investments ?? []).length === 0 ? (
