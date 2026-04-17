@@ -212,6 +212,65 @@ function ImportTab({ accounts }: { accounts: any[] }) {
   const uploadStatementMutation = useBankStatementUpload();
   const updateBankAccount = useUpdateBankAccount();
   const { data: allAccounts = [] } = useBankAccounts();
+  const autoMatchKitnetsMutation = useAutoMatchKitnets();
+  const queryClient = useQueryClient();
+
+  // Sync: cria receitas/despesas faltantes para transações matched sem IDs vinculados
+  const syncMutation = useMutation({
+    mutationFn: async () => {
+      const { data: txs } = await supabase
+        .from("bank_transactions" as any)
+        .select("*")
+        .eq("status", "matched")
+        .is("matched_revenue_id", null)
+        .is("matched_expense_id", null);
+
+      if (!txs?.length) return { revenues: 0, expenses: 0 };
+
+      let revenues = 0, expenses = 0;
+      for (const tx of txs as any[]) {
+        const intent = tx.category_intent;
+        const category = tx.category_confirmed || tx.category_suggestion;
+        if (!category || intent === "transferencia") continue;
+
+        if (intent === "receita") {
+          const { data, error } = await supabase.from("revenues").insert({
+            source: category,
+            description: tx.description,
+            amount: tx.amount,
+            type: "variable",
+            reference_month: tx.date?.slice(0, 7),
+            received_at: tx.date,
+          }).select("id").single();
+          if (!error && data) {
+            await supabase.from("bank_transactions" as any)
+              .update({ matched_revenue_id: data.id }).eq("id", tx.id);
+            revenues++;
+          }
+        } else if (intent === "despesa") {
+          const { data, error } = await supabase.from("expenses").insert({
+            category,
+            description: tx.description,
+            amount: tx.amount,
+            type: "variable",
+            reference_month: tx.date?.slice(0, 7),
+            paid_at: tx.date,
+          }).select("id").single();
+          if (!error && data) {
+            await supabase.from("bank_transactions" as any)
+              .update({ matched_expense_id: data.id }).eq("id", tx.id);
+            expenses++;
+          }
+        }
+      }
+      return { revenues, expenses };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bank_transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["revenues"] });
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
+    },
+  });
 
   const handleFile = useCallback(async (file: File) => {
     setFileName(file.name);
