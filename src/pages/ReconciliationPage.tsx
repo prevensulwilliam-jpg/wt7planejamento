@@ -426,9 +426,18 @@ function ImportTab({ accounts }: { accounts: any[] }) {
         await updateBankAccount.mutateAsync({ id: selectedAccount, balance: currentBalance + deltaCredits - deltaDebits, last_updated: today });
       }
 
+      // Auto-match kitnets após import
+      const refMonthForKitnets = rows[0]?.date?.slice(0, 7) || getCurrentMonth();
+      let kitnetMatches = 0;
+      try {
+        const kitnetResult = await autoMatchKitnetsMutation.mutateAsync(refMonthForKitnets);
+        kitnetMatches = kitnetResult?.matched ?? 0;
+      } catch { /* silent */ }
+
       toast.success(
         `✅ ${revenues} receitas e ${expenses} despesas criadas automaticamente · ` +
         `${transfers} transferências ignoradas · ` +
+        `${kitnetMatches > 0 ? `🏘️ ${kitnetMatches} kitnets conciliadas · ` : ""}` +
         `${doubts > 0 ? `${doubts} aguardam sua classificação` : "nenhuma dúvida"} · ` +
         `📁 Extrato salvo`
       );
@@ -1026,18 +1035,6 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
           className="text-xs px-4 py-2 rounded-lg font-medium flex items-center gap-1.5 transition-all"
           style={{ background: "rgba(201,168,76,0.15)", color: "#E8C97A", border: "1px solid rgba(201,168,76,0.3)" }}>
           {recategorizeMutation.isPending ? "..." : "🔄 Recategorizar"}
-        </button>
-        <button
-          onClick={() => autoMatchKitnetsMutation.mutate(month, {
-            onSuccess: (r) => toast.success(r.matched > 0
-              ? `🏘️ ${r.matched} repasse${r.matched > 1 ? "s" : ""} de kitnet conciliado${r.matched > 1 ? "s" : ""} pelo valor!`
-              : "Nenhum crédito casou com repasses de kitnets neste mês."),
-            onError: () => toast.error("Erro ao conciliar kitnets."),
-          })}
-          disabled={autoMatchKitnetsMutation.isPending}
-          className="text-xs px-4 py-2 rounded-lg font-medium flex items-center gap-1.5 transition-all"
-          style={{ background: "rgba(45,212,191,0.15)", color: "#2DD4BF", border: "1px solid rgba(45,212,191,0.3)" }}>
-          {autoMatchKitnetsMutation.isPending ? "..." : "🏘️ Conciliar Kitnets"}
         </button>
       </div>
 
