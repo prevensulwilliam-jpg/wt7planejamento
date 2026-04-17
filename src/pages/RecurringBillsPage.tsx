@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { useCategories } from "@/hooks/useCategories";
 import { CalendarClock, Plus, Pencil, Trash2, Check, Clock, AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -27,19 +28,10 @@ import {
 
 const inputStyle = { background: "#080C10", border: "1px solid #1A2535", color: "#F0F4F8" };
 
-const CATEGORIES = [
-  "moradia", "energia", "agua", "internet", "telefone", "seguro",
-  "consorcio", "financiamento", "educacao", "saude", "personal",
-  "alimentacao", "transporte", "lazer", "assinatura", "impostos", "outros",
-];
-
-const CAT_LABELS: Record<string, string> = {
-  moradia: "Moradia", energia: "Energia", agua: "Água/SEMASA", internet: "Internet",
-  telefone: "Telefone", seguro: "Seguro", consorcio: "Consórcio",
-  financiamento: "Financiamento", educacao: "Educação", saude: "Saúde",
-  personal: "Personal/Academia", alimentacao: "Alimentação", transporte: "Transporte",
-  lazer: "Lazer", assinatura: "Assinatura", impostos: "Impostos", outros: "Outros",
-};
+// Slug helper — mesmo padrão usado em ExpensesPage
+const slugify = (s: string) =>
+  s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+   .replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
 
 function navigateMonth(current: string, delta: number): string {
   const [y, m] = current.split("-").map(Number);
@@ -69,6 +61,24 @@ function ConfirmDelete({ name, onConfirm, onCancel }: { name: string; onConfirm:
 export default function RecurringBillsPage() {
   const [month, setMonth] = useState(getCurrentMonth());
   const { toast } = useToast();
+
+  // Categorias dinâmicas (mesma fonte que /expenses)
+  const { data: categories = [] } = useCategories("despesa");
+  const categoryOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const opts: { value: string; label: string; emoji: string }[] = [];
+    (categories as any[]).forEach((c) => {
+      const value = slugify(c.name);
+      if (seen.has(value)) return;
+      seen.add(value);
+      opts.push({ value, label: c.name, emoji: c.emoji ?? "" });
+    });
+    return opts;
+  }, [categories]);
+  const CAT_LABELS = useMemo(
+    () => Object.fromEntries(categoryOptions.map((o) => [o.value, o.label])) as Record<string, string>,
+    [categoryOptions],
+  );
 
   // Data
   const { data: bills, isLoading: billsLoading } = useRecurringBills();
@@ -397,8 +407,10 @@ export default function RecurringBillsPage() {
                   <Select value={form.category} onValueChange={(v) => setForm({ ...form, category: v })}>
                     <SelectTrigger style={inputStyle}><SelectValue /></SelectTrigger>
                     <SelectContent style={{ background: "#0D1318", border: "1px solid #1A2535" }}>
-                      {CATEGORIES.map((c) => (
-                        <SelectItem key={c} value={c}>{CAT_LABELS[c]}</SelectItem>
+                      {categoryOptions.map((c) => (
+                        <SelectItem key={c.value} value={c.value}>
+                          {c.emoji ? `${c.emoji} ` : ""}{c.label}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
