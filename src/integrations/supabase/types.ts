@@ -539,15 +539,19 @@ export type Database = {
           extrato_file_url: string | null
           extrato_updated_at: string | null
           fund_paid: number | null
+          fund_pct: number | null
           group_number: string | null
           id: string
           installments_paid: number | null
           installments_remaining: number | null
           installments_total: number | null
           insurance_paid: number | null
+          insurance_pct: number | null
           monthly_payment: number | null
           name: string | null
           notes: string | null
+          ownership_pct: number | null
+          partner_name: string | null
           quota: string | null
           status: string | null
           total_paid: number | null
@@ -567,15 +571,19 @@ export type Database = {
           extrato_file_url?: string | null
           extrato_updated_at?: string | null
           fund_paid?: number | null
+          fund_pct?: number | null
           group_number?: string | null
           id?: string
           installments_paid?: number | null
           installments_remaining?: number | null
           installments_total?: number | null
           insurance_paid?: number | null
+          insurance_pct?: number | null
           monthly_payment?: number | null
           name?: string | null
           notes?: string | null
+          ownership_pct?: number | null
+          partner_name?: string | null
           quota?: string | null
           status?: string | null
           total_paid?: number | null
@@ -595,15 +603,19 @@ export type Database = {
           extrato_file_url?: string | null
           extrato_updated_at?: string | null
           fund_paid?: number | null
+          fund_pct?: number | null
           group_number?: string | null
           id?: string
           installments_paid?: number | null
           installments_remaining?: number | null
           installments_total?: number | null
           insurance_paid?: number | null
+          insurance_pct?: number | null
           monthly_payment?: number | null
           name?: string | null
           notes?: string | null
+          ownership_pct?: number | null
+          partner_name?: string | null
           quota?: string | null
           status?: string | null
           total_paid?: number | null
@@ -1501,6 +1513,59 @@ export type Database = {
         }
         Relationships: []
       }
+      monthly_bill_instances: {
+        Row: {
+          actual_amount: number | null
+          created_at: string | null
+          due_date: string
+          expected_amount: number
+          id: string
+          matched_expense_id: string | null
+          matched_transaction_id: string | null
+          notes: string | null
+          paid_at: string | null
+          recurring_bill_id: string
+          reference_month: string
+          status: string
+        }
+        Insert: {
+          actual_amount?: number | null
+          created_at?: string | null
+          due_date: string
+          expected_amount?: number
+          id?: string
+          matched_expense_id?: string | null
+          matched_transaction_id?: string | null
+          notes?: string | null
+          paid_at?: string | null
+          recurring_bill_id: string
+          reference_month: string
+          status?: string
+        }
+        Update: {
+          actual_amount?: number | null
+          created_at?: string | null
+          due_date?: string
+          expected_amount?: number
+          id?: string
+          matched_expense_id?: string | null
+          matched_transaction_id?: string | null
+          notes?: string | null
+          paid_at?: string | null
+          recurring_bill_id?: string
+          reference_month?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "monthly_bill_instances_recurring_bill_id_fkey"
+            columns: ["recurring_bill_id"]
+            isOneToOne: false
+            referencedRelation: "recurring_bills"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       other_commissions: {
         Row: {
           amount: number
@@ -1711,6 +1776,60 @@ export type Database = {
           total_units_planned?: number | null
           total_units_rented?: number | null
           type?: string | null
+        }
+        Relationships: []
+      }
+      recurring_bills: {
+        Row: {
+          active: boolean
+          amount: number
+          auto_promoted: boolean
+          category: string | null
+          created_at: string | null
+          due_day: number
+          frequency: string
+          id: string
+          is_fixed: boolean
+          linked_consortium_id: string | null
+          linked_residencial_code: string | null
+          name: string
+          notes: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          active?: boolean
+          amount?: number
+          auto_promoted?: boolean
+          category?: string | null
+          created_at?: string | null
+          due_day: number
+          frequency?: string
+          id?: string
+          is_fixed?: boolean
+          linked_consortium_id?: string | null
+          linked_residencial_code?: string | null
+          name: string
+          notes?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          active?: boolean
+          amount?: number
+          auto_promoted?: boolean
+          category?: string | null
+          created_at?: string | null
+          due_day?: number
+          frequency?: string
+          id?: string
+          is_fixed?: boolean
+          linked_consortium_id?: string | null
+          linked_residencial_code?: string | null
+          name?: string
+          notes?: string | null
+          updated_at?: string | null
+          user_id?: string | null
         }
         Relationships: []
       }
