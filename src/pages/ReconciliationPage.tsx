@@ -426,6 +426,13 @@ function ImportTab({ accounts }: { accounts: any[] }) {
         await updateBankAccount.mutateAsync({ id: selectedAccount, balance: currentBalance + deltaCredits - deltaDebits, last_updated: today });
       }
 
+      // Auto-sync: vincular receitas/despesas faltantes em transações matched
+      let synced = 0;
+      try {
+        const syncResult = await syncMutation.mutateAsync();
+        synced = (syncResult?.revenues ?? 0) + (syncResult?.expenses ?? 0);
+      } catch { /* silent */ }
+
       // Auto-match kitnets após import
       const refMonthForKitnets = rows[0]?.date?.slice(0, 7) || getCurrentMonth();
       let kitnetMatches = 0;
@@ -438,6 +445,7 @@ function ImportTab({ accounts }: { accounts: any[] }) {
         `✅ ${revenues} receitas e ${expenses} despesas criadas automaticamente · ` +
         `${transfers} transferências ignoradas · ` +
         `${kitnetMatches > 0 ? `🏘️ ${kitnetMatches} kitnets conciliadas · ` : ""}` +
+        `${synced > 0 ? `🔗 ${synced} registros sincronizados · ` : ""}` +
         `${doubts > 0 ? `${doubts} aguardam sua classificação` : "nenhuma dúvida"} · ` +
         `📁 Extrato salvo`
       );
@@ -922,6 +930,15 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
 
       queryClient.invalidateQueries({ queryKey: ["revenues"] });
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
+
+      // Auto-recategorizar pendentes usando patterns aprendidos
+      try {
+        const recat = await recategorizeMutation.mutateAsync();
+        const recatTotal = (recat?.revenues ?? 0) + (recat?.expenses ?? 0);
+        if (recatTotal > 0) {
+          toast.success(`🔄 ${recatTotal} transações reclassificadas com novos padrões`);
+        }
+      } catch { /* silent */ }
     } catch (err: any) {
       toast.error(`Erro ao classificar: ${err.message || "erro desconhecido"}`);
     }
@@ -1021,20 +1038,6 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
           className="text-xs px-4 py-2 rounded-lg font-medium flex items-center gap-1.5"
           style={{ background: "rgba(244,63,94,0.15)", color: "#F43F5E", border: "1px solid rgba(244,63,94,0.3)" }}>
           + Nova Despesa
-        </button>
-        <button
-          onClick={() => syncMutation.mutate()}
-          disabled={syncMutation.isPending}
-          className="text-xs px-4 py-2 rounded-lg font-medium flex items-center gap-1.5 transition-all"
-          style={{ background: "rgba(99,102,241,0.15)", color: "#818CF8", border: "1px solid rgba(99,102,241,0.3)" }}>
-          {syncMutation.isPending ? "..." : "🔗 Sincronizar"}
-        </button>
-        <button
-          onClick={() => recategorizeMutation.mutate()}
-          disabled={recategorizeMutation.isPending}
-          className="text-xs px-4 py-2 rounded-lg font-medium flex items-center gap-1.5 transition-all"
-          style={{ background: "rgba(201,168,76,0.15)", color: "#E8C97A", border: "1px solid rgba(201,168,76,0.3)" }}>
-          {recategorizeMutation.isPending ? "..." : "🔄 Recategorizar"}
         </button>
       </div>
 
