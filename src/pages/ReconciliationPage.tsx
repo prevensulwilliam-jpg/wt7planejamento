@@ -20,6 +20,7 @@ import { useUpdateBankAccount, useBankAccounts } from "@/hooks/useFinances";
 import { parseOFX, parseCSV, type ParsedTransaction, type ParseResult } from "@/lib/parseOFX";
 import { categorizeTransaction, CATEGORY_LABELS, INTENT_CONFIG, detectTransactionType } from "@/lib/categorizeTransaction";
 import { getAllPatterns, normalizeDescription, recordClassification } from "@/lib/patternLearning";
+import { checkRecurrencePromotion } from "@/lib/autoPromoteRecurring";
 import { useCategories } from "@/hooks/useCategories";
 import { formatCurrency, formatDate, formatMonth, getCurrentMonth } from "@/lib/formatters";
 import { Upload, CheckCircle2, XCircle, ArrowLeftRight, FileText, Wifi, Download } from "lucide-react";
@@ -944,6 +945,17 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
 
       await matchMutation.mutateAsync({ id, category, intent, revenueId, expenseId });
       await recordClassification(tx.description, category, intent, label);
+
+      // ─── Auto-promoção: variável → recorrente (3+ meses) ───
+      if (intent === "despesa") {
+        try {
+          const promotion = await checkRecurrencePromotion(tx.description, category, tx.amount);
+          if (promotion?.promoted) {
+            queryClient.invalidateQueries({ queryKey: ["recurring_bills"] });
+            toast.success(`📅 "${promotion.name}" adicionado como despesa recorrente (dia ${promotion.dueDay}, ~${formatCurrency(promotion.avgAmount!)})`);
+          }
+        } catch { /* silent */ }
+      }
 
       // ─── Auto-reconciliação de consórcio (match por valor) ───
       if (category === "consorcio" && intent === "despesa") {
