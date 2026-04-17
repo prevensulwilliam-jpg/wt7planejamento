@@ -22,6 +22,8 @@ const navGroups = [
       { label: "Bancos & Caixas", icon: Landmark, href: "/banks" },
       { label: "Conciliação Bancária", icon: ArrowLeftRight, href: "/reconciliation" },
       { label: "Categorias", icon: Tag, href: "/categories" },
+      { label: "Aplicações", icon: BarChart3, href: "/assets?tab=investimentos" },
+      { label: "Consórcios", icon: RefreshCw, href: "/consortiums" },
     ],
   },
   {
@@ -32,13 +34,6 @@ const navGroups = [
       { label: "Portal Administrador", icon: KeyRound, href: "/manager/kitnets" },
       { label: "Obras & Terrenos", icon: HardHat, href: "/constructions" },
       { label: "Patrimônio", icon: Building2, href: "/assets?tab=bens" },
-    ],
-  },
-  {
-    label: "INVESTIMENTOS",
-    items: [
-      { label: "Aplicações", icon: BarChart3, href: "/assets?tab=investimentos" },
-      { label: "Consórcios", icon: RefreshCw, href: "/assets?tab=consorcios" },
     ],
   },
   {

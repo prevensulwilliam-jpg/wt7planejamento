@@ -26,6 +26,7 @@ import PartnerProjectsPage from "@/pages/PartnerProjectsPage";
 import WeddingPage from "@/pages/WeddingPage";
 import GoalsPage from "@/pages/GoalsPage";
 import AssetsPage from "@/pages/AssetsPage";
+import ConsortiumsPage from "@/pages/ConsortiumsPage";
 import ProjectionsPage from "@/pages/ProjectionsPage";
 import KitnetsReportPage from "@/pages/KitnetsReportPage";
 import TaxesPage from "@/pages/TaxesPage";
@@ -126,8 +127,7 @@ const App = () => (
             <Route path="/energy" element={<EnergyPage />} />
             <Route path="/constructions" element={<ConstructionsPage />} />
             <Route path="/assets" element={<AssetsPage />} />
-            <Route path="/investments" element={<Navigate to="/assets?tab=investimentos" replace />} />
-            <Route path="/consortiums" element={<Navigate to="/assets?tab=consorcios" replace />} />
+            <Route path="/consortiums" element={<ConsortiumsPage />} />
             <Route path="/wedding" element={<WeddingPage />} />
             <Route path="/goals" element={<GoalsPage />} />
             <Route path="/taxes" element={<TaxesPage />} />
