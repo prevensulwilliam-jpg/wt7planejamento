@@ -690,9 +690,40 @@ export default function BusinessesPage() {
             </div>
           </>
         ) : (
-          <div className="py-2 text-center text-xs" style={{ color: "#64748B" }}>
-            Sem meta mensal · {b.status === "incubado" ? "incubado" : "definir alvo"}
-          </div>
+          <>
+            <div className="flex items-baseline justify-between text-xs mb-1">
+              <span style={{ color: "#94A3B8" }}>
+                Realizado {month}
+                <span className="ml-1 text-[9px] px-1 rounded" style={{ background: "rgba(148,163,184,0.15)", color: "#94A3B8" }}>sem meta</span>
+              </span>
+              <span className="font-mono font-semibold" style={{ color: realized > 0 ? "#10B981" : "#64748B" }}>
+                {formatCurrency(realized)}
+              </span>
+            </div>
+            <div style={{ position: "relative", height: 8, background: "#1A2535", borderRadius: 99, overflow: "hidden" }}>
+              <div style={{
+                height: "100%",
+                width: realized > 0 ? "100%" : "0%",
+                background: "linear-gradient(90deg, #64748B, #94A3B8)",
+                transition: "width 0.3s",
+                borderRadius: 99,
+                opacity: 0.5,
+              }} />
+            </div>
+            <div className="flex justify-between text-xs mt-1.5">
+              <span style={{ color: "#64748B" }}>
+                {b.status === "incubado" ? "🌱 incubado" : "eventual · sem alvo definido"}
+              </span>
+              <button
+                onClick={() => openEdit(b)}
+                className="text-[10px] underline decoration-dotted"
+                style={{ color: "#64748B" }}
+                title="Definir meta mensal"
+              >
+                definir alvo
+              </button>
+            </div>
+          </>
         )}
 
         {b.target_12m > 0 && (
