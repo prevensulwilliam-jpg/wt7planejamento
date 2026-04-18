@@ -861,9 +861,38 @@ export default function BusinessesPage() {
         <PremiumCard className="p-4">
           <div className="flex justify-between items-baseline mb-2">
             <span className="text-sm" style={{ color: "#94A3B8" }}>Progresso consolidado do mês</span>
-            <span className="font-mono text-sm" style={{ color: "#C9A84C" }}>{totals.pct.toFixed(0)}%</span>
+            <span className="font-mono text-sm font-semibold" style={{ color: totals.pct >= 100 ? "#10B981" : "#C9A84C" }}>
+              {totals.pct.toFixed(0)}%
+            </span>
           </div>
-          <Progress value={Math.min(totals.pct, 200)} className="h-3" />
+          <div style={{ position: "relative", height: 12, background: "#1A2535", borderRadius: 99, overflow: "hidden" }}>
+            <div style={{
+              height: "100%",
+              width: `${Math.min(totals.pct, 100)}%`,
+              background: totals.pct >= 100
+                ? "linear-gradient(90deg, #10B981, #34D399)"
+                : "linear-gradient(90deg, #C9A84C, #E8C97A)",
+              transition: "width 0.4s ease",
+              borderRadius: 99,
+              boxShadow: totals.pct >= 100 ? "0 0 12px rgba(16,185,129,0.4)" : "0 0 8px rgba(201,168,76,0.3)",
+            }} />
+            {totals.pct > 100 && (
+              <div style={{
+                position: "absolute",
+                top: 0, left: 0,
+                height: "100%",
+                width: `${Math.min(totals.pct - 100, 100)}%`,
+                background: "linear-gradient(90deg, rgba(16,185,129,0.4), rgba(52,211,153,0.6))",
+                borderRadius: 99,
+                mixBlendMode: "screen",
+              }} />
+            )}
+          </div>
+          {totals.pct > 100 && (
+            <div className="text-xs mt-1.5 font-mono" style={{ color: "#10B981" }}>
+              ✓ meta batida · excedente de +{(totals.pct - 100).toFixed(0)}%
+            </div>
+          )}
         </PremiumCard>
 
         {/* Grupos */}
