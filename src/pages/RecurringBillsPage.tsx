@@ -22,6 +22,7 @@ import {
   useGenerateMonthInstances,
   useMarkBillPaid,
   useBillsSummary,
+  useAutoMatchBills,
   type RecurringBill,
   type BillInstance,
 } from "@/hooks/useRecurringBills";
@@ -89,10 +90,17 @@ export default function RecurringBillsPage() {
   const updateBill = useUpdateRecurringBill();
   const deleteBill = useDeleteRecurringBill();
   const markPaid = useMarkBillPaid();
+  const autoMatch = useAutoMatchBills();
 
-  // Auto-generate instances when month changes
+  // Auto-generate + auto-match (reconciliação com bank_transactions) ao trocar de mês
   useEffect(() => {
-    generateInstances.mutate(month);
+    (async () => {
+      await generateInstances.mutateAsync(month);
+      const result = await autoMatch.mutateAsync(month);
+      if (result.matched > 0) {
+        toast({ title: `✓ ${result.matched} pagamento${result.matched > 1 ? "s" : ""} conciliado${result.matched > 1 ? "s" : ""} automaticamente com extrato` });
+      }
+    })().catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [month]);
 

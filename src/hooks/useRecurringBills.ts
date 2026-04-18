@@ -204,6 +204,98 @@ export function useMarkBillPaid() {
   });
 }
 
+// ─── Auto-match com bank_transactions ──────────────────────────────────────
+const STOP_WORDS = new Set([
+  "plano","pacote","mensal","boletos","consolidados","total","valor","fixo",
+  "apartamento","apt","imovel","kitnet","conta","debito","credito","pagamento",
+  "recorrente","despesa","fatura","mes","com","dos","das","por","para","sem","ref",
+  "tarifa","cotas","msg",
+]);
+
+function extractKeywords(name: string): string[] {
+  return name.toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .split(/[^a-z0-9]+/)
+    .filter(w => w.length >= 4 && !STOP_WORDS.has(w));
+}
+
+export function useAutoMatchBills() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (month: string) => {
+      // 1. Instâncias pendentes/atrasadas do mês
+      const { data: instances, error: iErr } = await supabase
+        .from("monthly_bill_instances" as any)
+        .select("*, recurring_bill:recurring_bills(*)")
+        .eq("reference_month", month)
+        .in("status", ["pending", "overdue"]);
+      if (iErr) throw iErr;
+      if (!instances?.length) return { matched: 0 };
+
+      // 2. Transações bancárias do mês (despesas, amount < 0)
+      const [y, m] = month.split("-").map(Number);
+      const lastDay = new Date(y, m, 0).getDate();
+      const start = `${month}-01`;
+      const end = `${month}-${String(lastDay).padStart(2, "0")}`;
+      const { data: txs, error: tErr } = await supabase
+        .from("bank_transactions" as any)
+        .select("id, description, amount, date")
+        .gte("date", start).lte("date", end)
+        .lt("amount", 0);
+      if (tErr) throw tErr;
+      if (!txs?.length) return { matched: 0 };
+
+      const usedTxIds = new Set<string>();
+      let matched = 0;
+
+      for (const inst of instances as any[]) {
+        const bill = inst.recurring_bill;
+        if (!bill) continue;
+        const expected = Number(inst.expected_amount ?? bill.amount);
+        const tolerance = bill.is_fixed ? 0.10 : 0.35;
+        const keywords = extractKeywords(bill.name);
+
+        const candidates = (txs as any[])
+          .filter(t => !usedTxIds.has(t.id))
+          .filter(t => {
+            const absAmt = Math.abs(Number(t.amount));
+            if (expected <= 0) return false;
+            const deviation = Math.abs(absAmt - expected) / expected;
+            if (deviation > tolerance) return false;
+            const desc = (t.description ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            return keywords.some(w => desc.includes(w));
+          })
+          .sort((a, b) => {
+            const devA = Math.abs(Math.abs(Number(a.amount)) - expected);
+            const devB = Math.abs(Math.abs(Number(b.amount)) - expected);
+            return devA - devB;
+          });
+
+        if (candidates.length > 0) {
+          const best = candidates[0];
+          usedTxIds.add(best.id);
+          const { error } = await supabase
+            .from("monthly_bill_instances" as any)
+            .update({
+              status: "paid",
+              matched_transaction_id: best.id,
+              actual_amount: Math.abs(Number(best.amount)),
+              paid_at: best.date,
+            } as any)
+            .eq("id", inst.id);
+          if (!error) matched++;
+        }
+      }
+
+      return { matched };
+    },
+    onSuccess: (_, month) => {
+      qc.invalidateQueries({ queryKey: ["bill_instances", month] });
+      qc.invalidateQueries({ queryKey: ["bills_summary", month] });
+    },
+  });
+}
+
 // ─── Summary for Command Center ─────────────────────────────────────────────
 export function useBillsSummary(month: string) {
   return useQuery({
