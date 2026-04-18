@@ -344,9 +344,12 @@ export function useBillsSummary(month: string) {
       const instances = deriveInstances({ bills, txs, month, today });
 
       const totalExpected = instances.reduce((s, i) => s + i.expected_amount, 0);
-      const totalPaid = instances
-        .filter(i => i.status === "paid")
+      const paidInstances = instances.filter(i => i.status === "paid");
+      const totalPaid = paidInstances
         .reduce((s, i) => s + (i.actual_amount ?? i.expected_amount), 0);
+      // Delta = soma (pago real - esperado) só das pagas
+      const totalDelta = paidInstances
+        .reduce((s, i) => s + ((i.actual_amount ?? i.expected_amount) - i.expected_amount), 0);
       const pending = instances.filter(i => i.status === "pending");
       const overdue = instances.filter(i => i.status === "overdue");
       const totalPending = pending.reduce((s, i) => s + i.expected_amount, 0);
@@ -360,13 +363,14 @@ export function useBillsSummary(month: string) {
       return {
         totalExpected,
         totalPaid,
+        totalDelta, // negativo = economia, positivo = excesso
         totalPending: totalPending + totalOverdue,
         overdueCount: overdue.length,
         overdueAmount: totalOverdue,
         upcoming7dCount: upcoming7d.length,
         upcoming7dAmount: upcoming7d.reduce((s, i) => s + i.expected_amount, 0),
         totalCount: instances.length,
-        paidCount: instances.filter(i => i.status === "paid").length,
+        paidCount: paidInstances.length,
       };
     },
   });

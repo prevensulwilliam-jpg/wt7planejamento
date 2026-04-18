@@ -191,16 +191,47 @@ export default function RecurringBillsPage() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard label="Comprometido" value={summary?.totalExpected ?? 0} color="gold" />
-        <KpiCard label="Pago" value={summary?.totalPaid ?? 0} color="green" />
-        <KpiCard label="A Pagar" value={summary?.totalPending ?? 0} color="red" />
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <KpiCard
+          label="Orçado"
+          value={summary?.totalExpected ?? 0}
+          color="gold"
+          tooltip="Soma do que você esperava gastar (valor cadastrado em cada card)"
+        />
+        <KpiCard
+          label="Realizado"
+          value={summary?.totalPaid ?? 0}
+          color="green"
+          tooltip="Soma efetivamente debitada nas contas (valor real do extrato)"
+        />
+        <KpiCard
+          label={(summary?.totalDelta ?? 0) < 0 ? "Economia" : "Excesso"}
+          value={Math.abs(summary?.totalDelta ?? 0)}
+          color={(summary?.totalDelta ?? 0) <= 0 ? "green" : "red"}
+          tooltip={
+            (summary?.totalDelta ?? 0) === 0
+              ? "Tudo saiu exato como orçado"
+              : (summary?.totalDelta ?? 0) < 0
+              ? "Gastou menos que o orçado (bom)"
+              : "Gastou mais que o orçado (atenção)"
+          }
+        />
+        <KpiCard
+          label="A Pagar"
+          value={summary?.totalPending ?? 0}
+          color="red"
+          tooltip={
+            (summary?.overdueCount ?? 0) > 0
+              ? `${summary?.overdueCount} vencido${(summary?.overdueCount ?? 0) > 1 ? "s" : ""}: ${formatCurrency(summary?.overdueAmount ?? 0)}`
+              : "Nenhum vencido"
+          }
+        />
         <KpiCard
           label="Vencidos"
           value={summary?.overdueCount ?? 0}
           color="red"
           formatAs="number"
-          tooltip={summary?.overdueAmount ? `Total: ${formatCurrency(summary.overdueAmount)}` : undefined}
+          tooltip={summary?.overdueAmount ? `Total: ${formatCurrency(summary.overdueAmount)}` : "Nenhum"}
         />
       </div>
 
