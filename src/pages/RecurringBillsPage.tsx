@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useCategories } from "@/hooks/useCategories";
-import { CalendarClock, Plus, Pencil, Trash2, Check, Clock, AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarClock, Plus, Pencil, Trash2, Clock, AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,13 +19,11 @@ import {
   useUpdateRecurringBill,
   useDeleteRecurringBill,
   useBillInstances,
-  useGenerateMonthInstances,
-  useMarkBillPaid,
   useBillsSummary,
-  useAutoMatchBills,
   type RecurringBill,
   type BillInstance,
 } from "@/hooks/useRecurringBills";
+import { useQueryClient } from "@tanstack/react-query";
 
 const inputStyle = { background: "#080C10", border: "1px solid #1A2535", color: "#F0F4F8" };
 
@@ -85,24 +83,10 @@ export default function RecurringBillsPage() {
   const { data: bills, isLoading: billsLoading } = useRecurringBills();
   const { data: instances, isLoading: instancesLoading } = useBillInstances(month);
   const { data: summary } = useBillsSummary(month);
-  const generateInstances = useGenerateMonthInstances();
   const createBill = useCreateRecurringBill();
   const updateBill = useUpdateRecurringBill();
   const deleteBill = useDeleteRecurringBill();
-  const markPaid = useMarkBillPaid();
-  const autoMatch = useAutoMatchBills();
-
-  // Auto-generate + auto-match (reconciliação com bank_transactions) ao trocar de mês
-  useEffect(() => {
-    (async () => {
-      await generateInstances.mutateAsync(month);
-      const result = await autoMatch.mutateAsync(month);
-      if (result.matched > 0) {
-        toast({ title: `✓ ${result.matched} pagamento${result.matched > 1 ? "s" : ""} conciliado${result.matched > 1 ? "s" : ""} automaticamente com extrato` });
-      }
-    })().catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [month]);
+  const queryClient = useQueryClient();
 
   // ─── Bill form state ────────────────────────────────────────────────────
   const emptyForm = { name: "", alias: "", category: "outros", amount: "", due_day: "", is_fixed: "true", notes: "" };
@@ -126,8 +110,6 @@ export default function RecurringBillsPage() {
       toast({ title: "Despesa recorrente criada!" });
       setFormOpen(false);
       setForm(emptyForm);
-      // Re-generate instances para incluir a nova
-      generateInstances.mutate(month);
     } catch {
       toast({ title: "Erro ao criar", variant: "destructive" });
     }
@@ -164,16 +146,13 @@ export default function RecurringBillsPage() {
     }
   };
 
-  const handleMarkPaid = async (inst: BillInstance) => {
-    try {
-      await markPaid.mutateAsync({ id: inst.id, actual_amount: inst.expected_amount });
-      toast({ title: `✅ ${(inst.recurring_bill as any)?.name ?? "Conta"} paga!` });
-    } catch {
-      toast({ title: "Erro", variant: "destructive" });
-    }
-  };
-
   const today = new Date().toISOString().split("T")[0];
+
+  const handleRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: ["bill_instances", month] });
+    queryClient.invalidateQueries({ queryKey: ["bills_summary", month] });
+    toast({ title: "↻ Atualizado a partir do extrato" });
+  };
 
   return (
     <div className="space-y-6">
@@ -184,15 +163,12 @@ export default function RecurringBillsPage() {
         </h1>
         <div className="flex items-center gap-3">
           <button
-            onClick={async () => {
-              const r = await autoMatch.mutateAsync(month);
-              toast({ title: r.matched > 0 ? `✓ ${r.matched} conciliado${r.matched > 1 ? "s" : ""}` : "Nenhum match novo encontrado" });
-            }}
-            disabled={autoMatch.isPending}
+            onClick={handleRefresh}
             className="text-xs px-3 py-1.5 rounded-lg border"
             style={{ borderColor: "#C9A84C40", color: "#E8C97A" }}
+            title="Recarregar status a partir do extrato"
           >
-            {autoMatch.isPending ? "Conciliando…" : "↻ Conciliar extrato"}
+            ↻ Atualizar
           </button>
           <button onClick={() => setMonth((m) => navigateMonth(m, -1))} className="text-wt-text-muted hover:text-wt-text-secondary">
             <ChevronLeft className="w-5 h-5" />
@@ -317,25 +293,14 @@ export default function RecurringBillsPage() {
                       )}
                     </div>
 
-                    {/* Status / Action */}
+                    {/* Status derivado do extrato */}
                     <div className="shrink-0">
                       {isPaid ? (
                         <WtBadge variant="green">Pago</WtBadge>
-                      ) : inst.status === "skipped" ? (
-                        <WtBadge variant="gold">Pulado</WtBadge>
+                      ) : isOverdue ? (
+                        <WtBadge variant="red">Atrasado</WtBadge>
                       ) : (
-                        <button
-                          onClick={() => handleMarkPaid(inst)}
-                          className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:brightness-110"
-                          style={{
-                            background: isOverdue ? "rgba(244,63,94,0.15)" : "rgba(16,185,129,0.15)",
-                            color: isOverdue ? "#F43F5E" : "#10B981",
-                            border: `1px solid ${isOverdue ? "rgba(244,63,94,0.3)" : "rgba(16,185,129,0.3)"}`,
-                          }}
-                        >
-                          <Check className="w-3 h-3" />
-                          {isOverdue ? "Pagar (atrasado)" : "Pagar"}
-                        </button>
+                        <WtBadge variant="gold">A pagar</WtBadge>
                       )}
                     </div>
                   </div>

@@ -16,22 +16,22 @@ export interface RecurringBill {
   notes: string | null;
   linked_consortium_id: string | null;
   linked_residencial_code: string | null;
+  linked_pattern_id: string | null;
   created_at: string;
   updated_at: string;
 }
 
+// BillInstance agora é um objeto DERIVADO em tempo de query — não existe mais tabela
 export interface BillInstance {
-  id: string;
+  id: string; // sintético: `${bill.id}-${month}`
   recurring_bill_id: string;
   reference_month: string;
   expected_amount: number;
   actual_amount: number | null;
   due_date: string;
-  status: "pending" | "paid" | "overdue" | "skipped";
-  matched_expense_id: string | null;
+  status: "pending" | "paid" | "overdue";
   matched_transaction_id: string | null;
   paid_at: string | null;
-  notes: string | null;
   recurring_bill?: RecurringBill;
 }
 
@@ -74,7 +74,11 @@ export function useCreateRecurringBill() {
         .insert(bill as any);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["recurring_bills"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["recurring_bills"] });
+      qc.invalidateQueries({ queryKey: ["bill_instances"] });
+      qc.invalidateQueries({ queryKey: ["bills_summary"] });
+    },
   });
 }
 
@@ -88,7 +92,11 @@ export function useUpdateRecurringBill() {
         .eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["recurring_bills"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["recurring_bills"] });
+      qc.invalidateQueries({ queryKey: ["bill_instances"] });
+      qc.invalidateQueries({ queryKey: ["bills_summary"] });
+    },
   });
 }
 
@@ -102,249 +110,167 @@ export function useDeleteRecurringBill() {
         .eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["recurring_bills"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["recurring_bills"] });
+      qc.invalidateQueries({ queryKey: ["bill_instances"] });
+      qc.invalidateQueries({ queryKey: ["bills_summary"] });
+    },
   });
 }
 
-// ─── Monthly Bill Instances ─────────────────────────────────────────────────
+// ─── Derivação de status (core do refactor) ────────────────────────────────
+interface DeriveArgs {
+  bills: RecurringBill[];
+  txs: any[];
+  month: string;
+  today: string;
+}
+
+function deriveInstances({ bills, txs, month, today }: DeriveArgs): BillInstance[] {
+  const [y, m] = month.split("-").map(Number);
+  const lastDay = new Date(y, m, 0).getDate();
+  const usedTxIds = new Set<string>();
+
+  // Ordenar bills por especificidade (fixo primeiro, depois por valor decrescente)
+  // — bills mais específicas têm prioridade no claim de uma transação
+  const sortedBills = [...bills].sort((a, b) => {
+    if (a.is_fixed !== b.is_fixed) return a.is_fixed ? -1 : 1;
+    return Number(b.amount) - Number(a.amount);
+  });
+
+  const results: BillInstance[] = [];
+
+  for (const bill of sortedBills) {
+    const dueDay = Math.min(bill.due_day, lastDay);
+    const dueDate = `${month}-${String(dueDay).padStart(2, "0")}`;
+    const expected = Number(bill.amount);
+    const tolerance = bill.is_fixed ? 0.10 : 0.35;
+    const dueDateObj = new Date(y, m - 1, dueDay);
+
+    const candidates = txs
+      .filter(t => !usedTxIds.has(t.id))
+      .filter(t => {
+        // 1. Filtro de categoria (se ambos têm, precisam bater)
+        if (bill.category && t.category_confirmed && t.category_confirmed !== bill.category) {
+          return false;
+        }
+        // 2. Filtro de valor
+        const absAmt = Math.abs(Number(t.amount));
+        if (expected <= 0) return false;
+        const dev = Math.abs(absAmt - expected) / expected;
+        return dev <= tolerance;
+      })
+      .map(t => {
+        const absAmt = Math.abs(Number(t.amount));
+        const dev = Math.abs(absAmt - expected) / expected;
+        const txDate = new Date(t.date);
+        const daysDiff = Math.abs((txDate.getTime() - dueDateObj.getTime()) / (1000 * 60 * 60 * 24));
+        return { t, dev, daysDiff };
+      })
+      .sort((a, b) => {
+        // Ordena por desvio de valor + distância temporal
+        const scoreA = a.dev + a.daysDiff / 100;
+        const scoreB = b.dev + b.daysDiff / 100;
+        return scoreA - scoreB;
+      });
+
+    const match = candidates[0]?.t;
+    if (match) usedTxIds.add(match.id);
+
+    const status: BillInstance["status"] = match
+      ? "paid"
+      : dueDate < today
+      ? "overdue"
+      : "pending";
+
+    results.push({
+      id: `${bill.id}-${month}`,
+      recurring_bill_id: bill.id,
+      reference_month: month,
+      expected_amount: expected,
+      actual_amount: match ? Math.abs(Number(match.amount)) : null,
+      due_date: dueDate,
+      status,
+      matched_transaction_id: match?.id ?? null,
+      paid_at: match?.date ?? null,
+      recurring_bill: bill,
+    });
+  }
+
+  // Restaurar ordem por due_day
+  return results.sort((a, b) =>
+    a.due_date.localeCompare(b.due_date)
+  );
+}
+
+async function fetchBillsAndTxs(month: string) {
+  const [y, m] = month.split("-").map(Number);
+  const lastDay = new Date(y, m, 0).getDate();
+  const start = `${month}-01`;
+  const end = `${month}-${String(lastDay).padStart(2, "0")}`;
+
+  const [billsRes, txsRes] = await Promise.all([
+    supabase.from("recurring_bills" as any).select("*").eq("active", true),
+    supabase
+      .from("bank_transactions" as any)
+      .select("id, description, amount, date, type, category_intent, category_confirmed, status")
+      .gte("date", start)
+      .lte("date", end)
+      .eq("type", "debit"),
+  ]);
+
+  if (billsRes.error) throw billsRes.error;
+  if (txsRes.error) throw txsRes.error;
+
+  return {
+    bills: ((billsRes.data ?? []) as unknown) as RecurringBill[],
+    txs: (txsRes.data ?? []) as any[],
+  };
+}
+
+// ─── Instâncias derivadas ──────────────────────────────────────────────────
 export function useBillInstances(month: string) {
   return useQuery({
     queryKey: ["bill_instances", month],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("monthly_bill_instances" as any)
-        .select("*, recurring_bill:recurring_bills(*)")
-        .eq("reference_month", month)
-        .order("due_date", { ascending: true });
-      if (error) throw error;
-      return (data ?? []) as unknown as BillInstance[];
+      const { bills, txs } = await fetchBillsAndTxs(month);
+      const today = new Date().toISOString().slice(0, 10);
+      return deriveInstances({ bills, txs, month, today });
     },
   });
 }
 
-export function useGenerateMonthInstances() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (month: string) => {
-      // 1. Buscar bills ativas
-      const { data: bills, error: bErr } = await supabase
-        .from("recurring_bills" as any)
-        .select("*")
-        .eq("active", true);
-      if (bErr) throw bErr;
-      if (!bills?.length) return { created: 0 };
-
-      // 2. Buscar instâncias já existentes do mês
-      const { data: existing } = await supabase
-        .from("monthly_bill_instances" as any)
-        .select("recurring_bill_id")
-        .eq("reference_month", month);
-      const existingIds = new Set((existing ?? []).map((e: any) => e.recurring_bill_id));
-
-      // 3. Criar instâncias faltantes
-      const [y, m] = month.split("-").map(Number);
-      const lastDay = new Date(y, m, 0).getDate();
-      const toInsert = (bills as any[])
-        .filter(b => !existingIds.has(b.id))
-        .map(b => {
-          const day = Math.min(b.due_day, lastDay);
-          const dueDate = `${y}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-          return {
-            recurring_bill_id: b.id,
-            reference_month: month,
-            expected_amount: b.amount,
-            due_date: dueDate,
-            status: "pending",
-          };
-        });
-
-      if (toInsert.length > 0) {
-        const { error } = await supabase
-          .from("monthly_bill_instances" as any)
-          .insert(toInsert as any);
-        if (error) throw error;
-      }
-
-      return { created: toInsert.length };
-    },
-    onSuccess: (_, month) => {
-      qc.invalidateQueries({ queryKey: ["bill_instances", month] });
-    },
-  });
-}
-
-export function useUpdateBillInstance() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, ...updates }: Partial<BillInstance> & { id: string }) => {
-      const { error } = await supabase
-        .from("monthly_bill_instances" as any)
-        .update(updates as any)
-        .eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["bill_instances"] }),
-  });
-}
-
-export function useMarkBillPaid() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, actual_amount, paid_at }: { id: string; actual_amount?: number; paid_at?: string }) => {
-      const { error } = await supabase
-        .from("monthly_bill_instances" as any)
-        .update({
-          status: "paid",
-          actual_amount: actual_amount ?? null,
-          paid_at: paid_at ?? new Date().toISOString().split("T")[0],
-        } as any)
-        .eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["bill_instances"] }),
-  });
-}
-
-// ─── Auto-match com bank_transactions ──────────────────────────────────────
-const STOP_WORDS = new Set([
-  "plano","pacote","mensal","boletos","consolidados","total","valor","fixo",
-  "apartamento","apt","imovel","kitnet","conta","debito","credito","pagamento",
-  "recorrente","despesa","fatura","mes","com","dos","das","por","para","sem","ref",
-  "tarifa","cotas","msg",
-]);
-
-function extractKeywords(name: string): string[] {
-  return name.toLowerCase()
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-    .split(/[^a-z0-9]+/)
-    .filter(w => w.length >= 4 && !STOP_WORDS.has(w));
-}
-
-export function useAutoMatchBills() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (month: string) => {
-      // 1. Instâncias pendentes/atrasadas do mês
-      const { data: instances, error: iErr } = await supabase
-        .from("monthly_bill_instances" as any)
-        .select("*, recurring_bill:recurring_bills(*)")
-        .eq("reference_month", month)
-        .in("status", ["pending", "overdue"]);
-      if (iErr) throw iErr;
-      if (!instances?.length) return { matched: 0 };
-
-      // 2. Transações bancárias do mês (despesas, amount < 0)
-      const [y, m] = month.split("-").map(Number);
-      const lastDay = new Date(y, m, 0).getDate();
-      const start = `${month}-01`;
-      const end = `${month}-${String(lastDay).padStart(2, "0")}`;
-      const { data: txs, error: tErr } = await supabase
-        .from("bank_transactions" as any)
-        .select("id, description, amount, date, type, category_intent")
-        .gte("date", start).lte("date", end)
-        .eq("type", "debit");
-      if (tErr) throw tErr;
-      if (!txs?.length) return { matched: 0 };
-
-      const usedTxIds = new Set<string>();
-      let matched = 0;
-
-      // Due date helper: calcula data esperada de pagamento
-      const monthLastDay = lastDay;
-      const dueDateOf = (dueDay: number) =>
-        new Date(y, m - 1, Math.min(dueDay, monthLastDay));
-
-      for (const inst of instances as any[]) {
-        const bill = inst.recurring_bill;
-        if (!bill) continue;
-        const expected = Number(inst.expected_amount ?? bill.amount);
-        const tolerance = bill.is_fixed ? 0.10 : 0.35;
-        const keywords = extractKeywords(bill.name);
-        const dueDate = dueDateOf(Number(bill.due_day ?? 1));
-
-        const candidates = (txs as any[])
-          .filter(t => !usedTxIds.has(t.id))
-          .filter(t => {
-            const absAmt = Math.abs(Number(t.amount));
-            if (expected <= 0) return false;
-            const deviation = Math.abs(absAmt - expected) / expected;
-            if (deviation > tolerance) return false;
-
-            const desc = (t.description ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-            const keywordMatch = keywords.length > 0 && keywords.some(w => desc.includes(w));
-
-            // Fallback: valor quase exato (≤ 2%) + data próxima (±5 dias) do vencimento
-            // Resolve casos como "Tarifa MSG BB", "TIM" onde keywords são curtas/stop-words
-            const txDate = new Date(t.date);
-            const daysDiff = Math.abs((txDate.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
-            const valueDateMatch = deviation <= 0.02 && daysDiff <= 5;
-
-            return keywordMatch || valueDateMatch;
-          })
-          .sort((a, b) => {
-            const devA = Math.abs(Math.abs(Number(a.amount)) - expected);
-            const devB = Math.abs(Math.abs(Number(b.amount)) - expected);
-            return devA - devB;
-          });
-
-        if (candidates.length > 0) {
-          const best = candidates[0];
-          usedTxIds.add(best.id);
-          const { error } = await supabase
-            .from("monthly_bill_instances" as any)
-            .update({
-              status: "paid",
-              matched_transaction_id: best.id,
-              actual_amount: Math.abs(Number(best.amount)),
-              paid_at: best.date,
-            } as any)
-            .eq("id", inst.id);
-          if (!error) matched++;
-        }
-      }
-
-      return { matched };
-    },
-    onSuccess: (_, month) => {
-      qc.invalidateQueries({ queryKey: ["bill_instances", month] });
-      qc.invalidateQueries({ queryKey: ["bills_summary", month] });
-    },
-  });
-}
-
-// ─── Summary for Command Center ─────────────────────────────────────────────
+// ─── Summary derivado ──────────────────────────────────────────────────────
 export function useBillsSummary(month: string) {
   return useQuery({
     queryKey: ["bills_summary", month],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("monthly_bill_instances" as any)
-        .select("expected_amount, actual_amount, status, due_date")
-        .eq("reference_month", month);
-      if (error) throw error;
+      const { bills, txs } = await fetchBillsAndTxs(month);
+      const today = new Date().toISOString().slice(0, 10);
+      const instances = deriveInstances({ bills, txs, month, today });
 
-      const instances = (data ?? []) as any[];
-      const today = new Date().toISOString().split("T")[0];
-      const totalExpected = instances.reduce((s, i) => s + (i.expected_amount ?? 0), 0);
-      const totalPaid = instances.filter(i => i.status === "paid").reduce((s, i) => s + (i.actual_amount ?? i.expected_amount ?? 0), 0);
-      const totalPending = instances.filter(i => i.status === "pending").reduce((s, i) => s + (i.expected_amount ?? 0), 0);
-      const overdue = instances.filter(i => i.status === "pending" && i.due_date < today);
-      const upcoming7d = instances.filter(i => {
-        if (i.status !== "pending") return false;
-        const due = new Date(i.due_date);
-        const in7 = new Date();
-        in7.setDate(in7.getDate() + 7);
-        return due >= new Date(today) && due <= in7;
-      });
+      const totalExpected = instances.reduce((s, i) => s + i.expected_amount, 0);
+      const totalPaid = instances
+        .filter(i => i.status === "paid")
+        .reduce((s, i) => s + (i.actual_amount ?? i.expected_amount), 0);
+      const pending = instances.filter(i => i.status === "pending");
+      const overdue = instances.filter(i => i.status === "overdue");
+      const totalPending = pending.reduce((s, i) => s + i.expected_amount, 0);
+      const totalOverdue = overdue.reduce((s, i) => s + i.expected_amount, 0);
+
+      const in7 = new Date();
+      in7.setDate(in7.getDate() + 7);
+      const in7Str = in7.toISOString().slice(0, 10);
+      const upcoming7d = pending.filter(i => i.due_date >= today && i.due_date <= in7Str);
 
       return {
         totalExpected,
         totalPaid,
-        totalPending,
+        totalPending: totalPending + totalOverdue,
         overdueCount: overdue.length,
-        overdueAmount: overdue.reduce((s: number, i: any) => s + (i.expected_amount ?? 0), 0),
+        overdueAmount: totalOverdue,
         upcoming7dCount: upcoming7d.length,
-        upcoming7dAmount: upcoming7d.reduce((s: number, i: any) => s + (i.expected_amount ?? 0), 0),
+        upcoming7dAmount: upcoming7d.reduce((s, i) => s + i.expected_amount, 0),
         totalCount: instances.length,
         paidCount: instances.filter(i => i.status === "paid").length,
       };

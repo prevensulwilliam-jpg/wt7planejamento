@@ -16,7 +16,6 @@ import { WtBadge } from "@/components/wt7/WtBadge";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useBankTransactions, useImportTransactions, useMatchTransaction, useIgnoreTransaction, useReconciliationSummary, useAutoMatchKitnets } from "@/hooks/useBankReconciliation";
-import { useAutoMatchBills, useGenerateMonthInstances } from "@/hooks/useRecurringBills";
 import { useUpdateBankAccount, useBankAccounts } from "@/hooks/useFinances";
 import { parseOFX, parseCSV, type ParsedTransaction, type ParseResult } from "@/lib/parseOFX";
 import { categorizeTransaction, CATEGORY_LABELS, INTENT_CONFIG, detectTransactionType } from "@/lib/categorizeTransaction";
@@ -215,8 +214,6 @@ function ImportTab({ accounts }: { accounts: any[] }) {
   const updateBankAccount = useUpdateBankAccount();
   const { data: allAccounts = [] } = useBankAccounts();
   const autoMatchKitnetsMutation = useAutoMatchKitnets();
-  const autoMatchBillsMutation = useAutoMatchBills();
-  const generateInstancesMutation = useGenerateMonthInstances();
   const queryClient = useQueryClient();
 
   // Sync: cria receitas/despesas faltantes para transações matched sem IDs vinculados
@@ -504,19 +501,15 @@ function ImportTab({ accounts }: { accounts: any[] }) {
         kitnetMatches = kitnetResult?.matched ?? 0;
       } catch { /* silent */ }
 
-      // Auto-match despesas recorrentes após import
-      let billMatches = 0;
-      try {
-        await generateInstancesMutation.mutateAsync(refMonthForKitnets);
-        const billResult = await autoMatchBillsMutation.mutateAsync(refMonthForKitnets);
-        billMatches = billResult?.matched ?? 0;
-      } catch { /* silent */ }
+      // Despesas recorrentes: status é derivado on-the-fly de bank_transactions,
+      // basta invalidar a cache pra recalcular
+      queryClient.invalidateQueries({ queryKey: ["bill_instances"] });
+      queryClient.invalidateQueries({ queryKey: ["bills_summary"] });
 
       toast.success(
         `✅ ${revenues} receitas e ${expenses} despesas criadas automaticamente · ` +
         `${transfers} transferências ignoradas · ` +
         `${kitnetMatches > 0 ? `🏘️ ${kitnetMatches} kitnets conciliadas · ` : ""}` +
-        `${billMatches > 0 ? `📅 ${billMatches} recorrentes quitadas · ` : ""}` +
         `${synced > 0 ? `🔗 ${synced} registros sincronizados · ` : ""}` +
         `${doubts > 0 ? `${doubts} aguardam sua classificação` : "nenhuma dúvida"} · ` +
         `📁 Extrato salvo`
