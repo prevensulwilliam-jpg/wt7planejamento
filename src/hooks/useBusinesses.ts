@@ -152,22 +152,26 @@ export function useBusinessBreakdown(businessId: string | null, businessCode: st
         });
       }
 
-      const { data: revs } = await (supabase as any)
-        .from("revenues")
-        .select("id, description, source, amount, received_at, business_id")
-        .eq("reference_month", month)
-        .eq("business_id", businessId);
-      (revs ?? []).forEach((r: any) => {
-        rows.push({
-          id: r.id,
-          kind: "revenue",
-          description: r.description ?? r.source ?? "(sem descrição)",
-          amount: Number(r.amount ?? 0),
-          date: r.received_at,
-          source: r.source,
-          business_id: r.business_id,
+      // KITNETS usa kitnet_entries como fonte canônica (evita duplicação com revenues auto-criadas)
+      // Mesma regra aplicada em useBusinessRealized
+      if (businessCode !== "KITNETS") {
+        const { data: revs } = await (supabase as any)
+          .from("revenues")
+          .select("id, description, source, amount, received_at, business_id")
+          .eq("reference_month", month)
+          .eq("business_id", businessId);
+        (revs ?? []).forEach((r: any) => {
+          rows.push({
+            id: r.id,
+            kind: "revenue",
+            description: r.description ?? r.source ?? "(sem descrição)",
+            amount: Number(r.amount ?? 0),
+            date: r.received_at,
+            source: r.source,
+            business_id: r.business_id,
+          });
         });
-      });
+      }
 
       const { data: manual } = await (supabase as any)
         .from("business_revenue_entries")
