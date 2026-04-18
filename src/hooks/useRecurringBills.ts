@@ -249,12 +249,18 @@ export function useAutoMatchBills() {
       const usedTxIds = new Set<string>();
       let matched = 0;
 
+      // Due date helper: calcula data esperada de pagamento
+      const monthLastDay = lastDay;
+      const dueDateOf = (dueDay: number) =>
+        new Date(y, m - 1, Math.min(dueDay, monthLastDay));
+
       for (const inst of instances as any[]) {
         const bill = inst.recurring_bill;
         if (!bill) continue;
         const expected = Number(inst.expected_amount ?? bill.amount);
         const tolerance = bill.is_fixed ? 0.10 : 0.35;
         const keywords = extractKeywords(bill.name);
+        const dueDate = dueDateOf(Number(bill.due_day ?? 1));
 
         const candidates = (txs as any[])
           .filter(t => !usedTxIds.has(t.id))
@@ -263,8 +269,17 @@ export function useAutoMatchBills() {
             if (expected <= 0) return false;
             const deviation = Math.abs(absAmt - expected) / expected;
             if (deviation > tolerance) return false;
+
             const desc = (t.description ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-            return keywords.some(w => desc.includes(w));
+            const keywordMatch = keywords.length > 0 && keywords.some(w => desc.includes(w));
+
+            // Fallback: valor quase exato (≤ 2%) + data próxima (±5 dias) do vencimento
+            // Resolve casos como "Tarifa MSG BB", "TIM" onde keywords são curtas/stop-words
+            const txDate = new Date(t.date);
+            const daysDiff = Math.abs((txDate.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
+            const valueDateMatch = deviation <= 0.02 && daysDiff <= 5;
+
+            return keywordMatch || valueDateMatch;
           })
           .sort((a, b) => {
             const devA = Math.abs(Math.abs(Number(a.amount)) - expected);

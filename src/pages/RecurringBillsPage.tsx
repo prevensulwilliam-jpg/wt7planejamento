@@ -183,6 +183,17 @@ export default function RecurringBillsPage() {
           Despesas Recorrentes
         </h1>
         <div className="flex items-center gap-3">
+          <button
+            onClick={async () => {
+              const r = await autoMatch.mutateAsync(month);
+              toast({ title: r.matched > 0 ? `✓ ${r.matched} conciliado${r.matched > 1 ? "s" : ""}` : "Nenhum match novo encontrado" });
+            }}
+            disabled={autoMatch.isPending}
+            className="text-xs px-3 py-1.5 rounded-lg border"
+            style={{ borderColor: "#C9A84C40", color: "#E8C97A" }}
+          >
+            {autoMatch.isPending ? "Conciliando…" : "↻ Conciliar extrato"}
+          </button>
           <button onClick={() => setMonth((m) => navigateMonth(m, -1))} className="text-wt-text-muted hover:text-wt-text-secondary">
             <ChevronLeft className="w-5 h-5" />
           </button>
