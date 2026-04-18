@@ -546,12 +546,42 @@ function LinkTransactionDialog({
   onConfirm: (txId: string) => void;
 }) {
   const { data: debits, isLoading } = useMonthDebits(month);
+  const { data: instances } = useBillInstances(month);
+  const { data: manualMatches } = useManualMatchesForMonth(month);
+  const { data: allBills } = useRecurringBills();
   const [search, setSearch] = useState("");
+
+  // Mapa tx_id → { billId, billName, isManual } das txs já usadas em OUTROS bills
+  const txUsage = useMemo(() => {
+    const map: Record<string, { billId: string; billName: string; isManual: boolean }> = {};
+    // 1. Manual matches (exceto deste bill)
+    Object.entries(manualMatches || {}).forEach(([billId, txId]) => {
+      if (billId === bill.id) return;
+      const b = allBills?.find((x) => x.id === billId);
+      map[txId as string] = {
+        billId,
+        billName: b?.alias || b?.name || "desconhecido",
+        isManual: true,
+      };
+    });
+    // 2. Auto-matches vindos de deriveInstances (exceto deste bill)
+    instances?.forEach((inst) => {
+      if (inst.recurring_bill_id === bill.id) return;
+      if (!inst.matched_transaction_id) return;
+      if (map[inst.matched_transaction_id]) return; // já é manual
+      const b = allBills?.find((x) => x.id === inst.recurring_bill_id);
+      map[inst.matched_transaction_id] = {
+        billId: inst.recurring_bill_id,
+        billName: b?.alias || b?.name || "desconhecido",
+        isManual: false,
+      };
+    });
+    return map;
+  }, [manualMatches, instances, allBills, bill.id]);
 
   const filtered = useMemo(() => {
     if (!debits) return [];
     const q = search.trim().toLowerCase();
-    // Ordena: primeiro por proximidade de valor, depois por data
     const expected = Number(bill.amount);
     return debits
       .filter((t: any) => {
@@ -561,9 +591,28 @@ function LinkTransactionDialog({
       .map((t: any) => ({
         ...t,
         _dev: expected > 0 ? Math.abs(Math.abs(Number(t.amount)) - expected) / expected : 999,
+        _used: txUsage[t.id],
       }))
-      .sort((a: any, b: any) => a._dev - b._dev);
-  }, [debits, search, bill.amount]);
+      .sort((a: any, b: any) => {
+        // Não-usadas primeiro, depois por proximidade de valor
+        if (!!a._used !== !!b._used) return a._used ? 1 : -1;
+        return a._dev - b._dev;
+      });
+  }, [debits, search, bill.amount, txUsage]);
+
+  const handleClick = (tx: any) => {
+    const used = txUsage[tx.id];
+    if (used) {
+      const kind = used.isManual ? "manualmente" : "automaticamente";
+      const ok = window.confirm(
+        `⚠️ Essa transação já está vinculada ${kind} a "${used.billName}".\n\n` +
+          `Se continuar, ${used.isManual ? "o vínculo anterior será substituído" : "o matcher automático vai buscar outra tx para " + used.billName}.\n\n` +
+          `Deseja continuar?`
+      );
+      if (!ok) return;
+    }
+    onConfirm(tx.id);
+  };
 
   return (
     <Dialog open onOpenChange={(o) => !o && onCancel()}>
@@ -597,17 +646,36 @@ function LinkTransactionDialog({
               const expected = Number(bill.amount);
               const devPct = expected > 0 ? (t._dev * 100).toFixed(1) : "—";
               const devColor = t._dev <= 0.1 ? "#10B981" : t._dev <= 0.5 ? "#E8C97A" : "#64748B";
+              const used = t._used as { billName: string; isManual: boolean } | undefined;
               return (
                 <button
                   key={t.id}
-                  onClick={() => onConfirm(t.id)}
-                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition hover:bg-amber-500/5"
-                  style={{ background: "#080C10", border: "1px solid #1A2535" }}
+                  onClick={() => handleClick(t)}
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition"
+                  style={{
+                    background: used ? "rgba(244,63,94,0.04)" : "#080C10",
+                    border: `1px solid ${used ? "rgba(244,63,94,0.25)" : "#1A2535"}`,
+                    opacity: used ? 0.7 : 1,
+                  }}
                 >
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs truncate" style={{ color: "#F0F4F8" }}>
-                      {t.description}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs truncate" style={{ color: "#F0F4F8" }}>
+                        {t.description}
+                      </p>
+                      {used && (
+                        <span
+                          className="text-[9px] px-1.5 py-0.5 rounded shrink-0"
+                          style={{
+                            background: "rgba(244,63,94,0.15)",
+                            color: "#F87171",
+                            border: "1px solid rgba(244,63,94,0.3)",
+                          }}
+                        >
+                          já em: {used.billName}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-[10px]" style={{ color: "#64748B" }}>
                       {t.date}
                     </p>

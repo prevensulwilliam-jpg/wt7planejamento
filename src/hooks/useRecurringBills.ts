@@ -400,6 +400,7 @@ export function useLinkTransactionManually() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["bill_instances"] });
       qc.invalidateQueries({ queryKey: ["bills_summary"] });
+      qc.invalidateQueries({ queryKey: ["manual_matches"] });
     },
   });
 }
@@ -424,6 +425,7 @@ export function useUnlinkTransactionManually() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["bill_instances"] });
       qc.invalidateQueries({ queryKey: ["bills_summary"] });
+      qc.invalidateQueries({ queryKey: ["manual_matches"] });
     },
   });
 }
