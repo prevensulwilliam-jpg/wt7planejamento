@@ -103,13 +103,15 @@ async function fetchPageContext(pathname: string): Promise<{ label: string; data
 type Message = { role: "user" | "assistant"; content: string; loading?: boolean };
 
 const SUGGESTIONS: Record<string, string[]> = {
+  "/hoje": ["Como está meu Índice de Autonomia?", "Qual negócio está abaixo da meta?", "Onde alocar o excedente este mês?", "O que fazer pra chegar em 50% de autonomia?"],
+  "/businesses": ["Qual negócio tem maior potencial de crescimento?", "Qual está mais longe da meta?", "Qual deveria ser meu próximo vetor?", "Como reduzir dependência da Prevensul?"],
   "/expenses": ["Quais meus 5 maiores custos?", "Onde posso cortar despesas?", "Qual categoria cresceu mais?", "Minha margem está saudável?"],
-  "/revenues": ["Qual fonte de receita tem mais potencial?", "Como está minha diversificação de renda?", "O que preciso fazer para chegar a R$100k?", "Qual receita cresceu mais?"],
+  "/revenues": ["Qual fonte de receita tem mais potencial?", "Como está minha diversificação de renda?", "Quanto é passiva vs ativa este mês?", "Qual receita cresceu mais?"],
   "/kitnets": ["Os repasses estão de acordo com os contratos?", "Qual kitnet me dá mais retorno?", "Tenho risco de inadimplência?", "Vale a pena expandir as kitnets?"],
   "/reconciliation": ["Tem alguma transação suspeita?", "Qual meu maior gasto recorrente?", "Como estão minhas transferências?", "Tem algum padrão de gasto que devo revisar?"],
   "/constructions": ["Qual obra está consumindo mais capital?", "Qual projeto tem melhor ROI esperado?", "Como está o ritmo de investimento?", "Quando devo esperar retorno das obras?"],
-  "/dashboard": ["Como estou em relação à meta de R$100k?", "Qual área devo priorizar agora?", "Minha situação financeira está saudável?", "O que está me impedindo de crescer mais rápido?"],
-  "default": ["Analise minha situação atual", "Onde devo focar agora?", "O que está me custando mais?", "Como posso aumentar minha renda?"],
+  "/dashboard": ["Como está meu Índice de Autonomia?", "Qual área devo priorizar agora?", "Minha situação financeira está saudável?", "O que está me impedindo de crescer mais rápido?"],
+  "default": ["Analise minha situação atual", "Onde devo focar agora?", "O que está me custando mais?", "Como aumentar renda passiva?"],
 };
 
 function getSuggestions(pathname: string): string[] {
