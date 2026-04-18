@@ -607,6 +607,39 @@ export default function BusinessesPage() {
     } catch { toast({ title: "Erro ao excluir", variant: "destructive" }); }
   };
 
+  // Sub-componente: top 3 itens que compõem o realizado (pra cards sem meta)
+  const BusinessTopItems = ({ business, month, onSeeAll }: { business: Business; month: string; onSeeAll: () => void }) => {
+    const { data: rows = [] } = useBusinessBreakdown(business.id, business.code, month);
+    const sorted = [...rows].sort((a: any, b: any) => Number(b.amount ?? 0) - Number(a.amount ?? 0));
+    if (sorted.length === 0) return null;
+    const top = sorted.slice(0, 3);
+    const extra = sorted.length - top.length;
+    return (
+      <div className="mt-2 pt-2" style={{ borderTop: "1px solid #1A2535" }}>
+        <div className="text-[10px] uppercase tracking-wider font-mono mb-1.5" style={{ color: "#4A5568" }}>
+          Composição {sorted.length > 3 ? `(top 3 de ${sorted.length})` : `(${sorted.length})`}
+        </div>
+        <div className="space-y-0.5">
+          {top.map((r: any) => (
+            <div key={r.id} className="flex justify-between items-center text-xs py-0.5">
+              <span className="flex-1 truncate" style={{ color: "#94A3B8" }}>{r.description}</span>
+              <span className="font-mono font-medium ml-2" style={{ color: "#10B981" }}>{formatCurrency(r.amount)}</span>
+            </div>
+          ))}
+        </div>
+        {extra > 0 && (
+          <button
+            onClick={onSeeAll}
+            className="w-full text-[10px] mt-1.5 py-1 rounded text-center transition-colors hover:opacity-80"
+            style={{ color: "#3B82F6", background: "rgba(59,130,246,0.05)" }}
+          >
+            + {extra} {extra === 1 ? "outra" : "outras"} → ver todas
+          </button>
+        )}
+      </div>
+    );
+  };
+
   const renderCard = (b: Business) => {
     const realized = revenueByBiz.get(b.id) ?? 0;
     const target = b.monthly_target;
@@ -723,6 +756,9 @@ export default function BusinessesPage() {
                 definir alvo
               </button>
             </div>
+            {realized > 0 && (
+              <BusinessTopItems business={b} month={month} onSeeAll={() => setBreakdownTarget(b)} />
+            )}
           </>
         )}
 
