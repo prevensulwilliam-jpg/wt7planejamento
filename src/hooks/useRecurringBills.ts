@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 export interface RecurringBill {
   id: string;
   name: string;
+  alias: string | null;
   category: string | null;
   amount: number;
   due_day: number;

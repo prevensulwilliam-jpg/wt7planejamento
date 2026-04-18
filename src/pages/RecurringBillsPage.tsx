@@ -105,7 +105,7 @@ export default function RecurringBillsPage() {
   }, [month]);
 
   // ─── Bill form state ────────────────────────────────────────────────────
-  const emptyForm = { name: "", category: "outros", amount: "", due_day: "", is_fixed: "true", notes: "" };
+  const emptyForm = { name: "", alias: "", category: "outros", amount: "", due_day: "", is_fixed: "true", notes: "" };
   const [formOpen, setFormOpen] = useState(false);
   const [editBill, setEditBill] = useState<RecurringBill | null>(null);
   const [delBill, setDelBill] = useState<RecurringBill | null>(null);
@@ -116,6 +116,7 @@ export default function RecurringBillsPage() {
     try {
       await createBill.mutateAsync({
         name: form.name,
+        alias: form.alias?.trim() || null,
         category: form.category,
         amount: parseFloat(form.amount) || 0,
         due_day: parseInt(form.due_day) || 1,
@@ -138,6 +139,7 @@ export default function RecurringBillsPage() {
       await updateBill.mutateAsync({
         id: editBill.id,
         name: form.name,
+        alias: form.alias?.trim() || null,
         category: form.category,
         amount: parseFloat(form.amount) || 0,
         due_day: parseInt(form.due_day) || 1,
@@ -278,7 +280,7 @@ export default function RecurringBillsPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="font-display font-bold text-sm truncate" style={{ color: "#F0F4F8" }}>
-                          {bill?.name ?? "—"}
+                          {bill?.alias || bill?.name || "—"}
                         </p>
                         {bill?.auto_promoted && (
                           <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(139,92,246,0.15)", color: "#A78BFA", border: "1px solid rgba(139,92,246,0.3)" }}>
@@ -352,7 +354,10 @@ export default function RecurringBillsPage() {
                 <PremiumCard key={b.id} className="space-y-2">
                   <div className="flex items-start gap-2">
                     <div className="flex-1 min-w-0">
-                      <p className="font-display font-bold" style={{ color: "#F0F4F8" }}>{b.name}</p>
+                      <p className="font-display font-bold" style={{ color: "#F0F4F8" }}>{b.alias || b.name}</p>
+                      {b.alias && (
+                        <p className="text-[10px] italic" style={{ color: "#4A5568" }}>extrato: {b.name}</p>
+                      )}
                       <p className="text-xs" style={{ color: "#94A3B8" }}>
                         Dia {b.due_day} · {CAT_LABELS[b.category ?? ""] ?? b.category}
                         {b.auto_promoted && <span style={{ color: "#A78BFA" }}> · Auto-promovido</span>}
@@ -366,6 +371,7 @@ export default function RecurringBillsPage() {
                         onClick={() => {
                           setForm({
                             name: b.name,
+                            alias: b.alias ?? "",
                             category: b.category ?? "outros",
                             amount: String(b.amount),
                             due_day: String(b.due_day),
@@ -406,8 +412,14 @@ export default function RecurringBillsPage() {
             </DialogHeader>
             <div className="space-y-3">
               <div>
-                <Label style={{ color: "#94A3B8" }}>Nome</Label>
-                <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} style={inputStyle} placeholder="ex: CELESC RWT02" />
+                <Label style={{ color: "#94A3B8" }}>Nome (como aparece no extrato)</Label>
+                <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} style={inputStyle} placeholder="ex: PJBank" />
+                <p className="text-[10px] mt-1" style={{ color: "#4A5568" }}>Usado pra casar com transações do banco. Use palavra-chave que aparece no extrato.</p>
+              </div>
+              <div>
+                <Label style={{ color: "#94A3B8" }}>Apelido (opcional)</Label>
+                <Input value={form.alias} onChange={(e) => setForm({ ...form, alias: e.target.value })} style={inputStyle} placeholder="ex: Aluguel Apt Aloha" />
+                <p className="text-[10px] mt-1" style={{ color: "#4A5568" }}>Nome exibido pra você. Se vazio, mostra o nome real.</p>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
