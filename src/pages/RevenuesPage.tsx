@@ -6,6 +6,7 @@ import { GoldButton } from "@/components/wt7/GoldButton";
 import { WtBadge } from "@/components/wt7/WtBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRevenues, useCreateRevenue, useDeleteRevenue, useUpdateRevenue, exportCSV } from "@/hooks/useFinances";
+import { useBusinesses } from "@/hooks/useBusinesses";
 import { useCategories } from "@/hooks/useCategories";
 import { formatCurrency, formatDate, formatMonth, getCurrentMonth } from "@/lib/formatters";
 import { detectTransactionType } from "@/lib/categorizeTransaction";
@@ -42,7 +43,8 @@ export default function RevenuesPage() {
   const { data: categories = [] } = useCategories("receita");
   const { toast } = useToast();
 
-  const [form, setForm] = useState({ source: "", description: "", amount: "", type: "variable", received_at: "", reference_month: month });
+  const [form, setForm] = useState({ source: "", description: "", amount: "", type: "variable", received_at: "", reference_month: month, business_id: "" as string | "" });
+  const { data: businessList = [] } = useBusinesses();
 
   // Sort & filter state
   const [sortField, setSortField] = useState<SortField>(null);
@@ -168,10 +170,11 @@ export default function RevenuesPage() {
         type: form.type,
         received_at: form.received_at || null,
         reference_month: form.reference_month,
-      });
+        business_id: form.business_id || null,
+      } as any);
       toast({ title: "Receita registrada com sucesso" });
       setDialogOpen(false);
-      setForm({ source: "", description: "", amount: "", type: "variable", received_at: "", reference_month: month });
+      setForm({ source: "", description: "", amount: "", type: "variable", received_at: "", reference_month: month, business_id: "" });
     } catch {
       toast({ title: "Erro ao registrar receita", variant: "destructive" });
     }
@@ -274,6 +277,21 @@ export default function RevenuesPage() {
               <div>
                 <Label style={{ color: '#94A3B8' }}>Mês Referência</Label>
                 <MonthPicker value={form.reference_month} onChange={v => setForm(f => ({ ...f, reference_month: v }))} />
+              </div>
+              <div>
+                <Label style={{ color: '#C9A84C' }}>Negócio (cockpit estratégico)</Label>
+                <Select value={form.business_id || "__none__"} onValueChange={v => setForm(f => ({ ...f, business_id: v === "__none__" ? "" : v }))}>
+                  <SelectTrigger style={{ background: '#080C10', borderColor: 'rgba(201,168,76,0.4)', color: '#F0F4F8' }}><SelectValue placeholder="Sem vínculo" /></SelectTrigger>
+                  <SelectContent style={{ background: '#0D1318', borderColor: '#1A2535' }}>
+                    <SelectItem value="__none__">— sem vínculo —</SelectItem>
+                    {businessList.filter(b => b.status !== 'encerrado').map(b => (
+                      <SelectItem key={b.id} value={b.id}>{b.icon} {b.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[10px] mt-1" style={{ color: '#64748B' }}>
+                  Vincular a um negócio soma esta receita automaticamente na meta mensal em /businesses.
+                </p>
               </div>
               <GoldButton onClick={handleSubmit} disabled={createRevenue.isPending} className="w-full justify-center">
                 {createRevenue.isPending ? "Salvando..." : "Registrar Receita"}

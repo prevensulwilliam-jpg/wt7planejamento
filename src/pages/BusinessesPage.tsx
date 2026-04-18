@@ -22,6 +22,7 @@ import {
   useBusinessRevenueEntries,
   useUpsertRevenueEntry,
   useDeleteRevenueEntry,
+  useBusinessRealized,
   type Business,
 } from "@/hooks/useBusinesses";
 
@@ -288,22 +289,24 @@ export default function BusinessesPage() {
   const [form, setForm] = useState<FormData>(emptyForm());
 
   const { data: businesses = [], isLoading } = useBusinesses();
-  const { data: allEntries = [] } = useBusinessRevenueEntries();
+  const { data: realizedMap = new Map() } = useBusinessRealized(month);
   const createBiz = useCreateBusiness();
   const updateBiz = useUpdateBusiness();
   const deleteBiz = useDeleteBusiness();
   const { toast } = useToast();
 
-  // Lookup de receita do mês selecionado por negócio
+  // Lookup de receita do mês: valor + fonte (auto/manual/kitnet)
   const revenueByBiz = useMemo(() => {
     const map = new Map<string, number>();
-    allEntries.forEach(e => {
-      if (e.reference_month === month) {
-        map.set(e.business_id, (map.get(e.business_id) ?? 0) + Number(e.amount_william));
-      }
-    });
+    realizedMap.forEach((v: any, k: string) => map.set(k, v.amount));
     return map;
-  }, [allEntries, month]);
+  }, [realizedMap]);
+
+  const sourceByBiz = useMemo(() => {
+    const map = new Map<string, string>();
+    realizedMap.forEach((v: any, k: string) => map.set(k, v.source));
+    return map;
+  }, [realizedMap]);
 
   // Agregados globais
   const totals = useMemo(() => {
@@ -410,7 +413,18 @@ export default function BusinessesPage() {
         {target > 0 ? (
           <>
             <div className="flex items-baseline justify-between text-xs mb-1">
-              <span style={{ color: "#94A3B8" }}>Meta {month}</span>
+              <span style={{ color: "#94A3B8" }}>
+                Meta {month}
+                {sourceByBiz.get(b.id) === "manual" && (
+                  <span className="ml-1 text-[9px] px-1 rounded" style={{ background: "rgba(167,139,250,0.15)", color: "#A78BFA" }}>manual</span>
+                )}
+                {sourceByBiz.get(b.id) === "kitnet" && (
+                  <span className="ml-1 text-[9px] px-1 rounded" style={{ background: "rgba(16,185,129,0.15)", color: "#10B981" }}>auto: kitnets</span>
+                )}
+                {sourceByBiz.get(b.id) === "auto" && (
+                  <span className="ml-1 text-[9px] px-1 rounded" style={{ background: "rgba(59,130,246,0.15)", color: "#3B82F6" }}>auto: receitas</span>
+                )}
+              </span>
               <span className="font-mono" style={{ color }}>
                 {formatCurrency(realized)} / {formatCurrency(target)}
               </span>
