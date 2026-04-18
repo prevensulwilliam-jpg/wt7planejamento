@@ -129,13 +129,19 @@ export function useReconcileMonth() {
         businessLinked++;
       }
 
-      // ═══ 5) Identificar depósitos aluguel_kitnets sem kitnet_entry ═══
+      // ═══ 5) Identificar depósitos de kitnets sem kitnet_entry ═══
       // (gap silencioso = ADM ainda não fechou)
-      const { data: kitnetRevs } = await supabase
+      // Filtra por business_id=KITNETS (robusto) OU source=aluguel_kitnets/kitnets (fallback legado)
+      const kitnetsBizId = bizByCode.get("KITNETS") ?? null;
+      let kitnetRevsQuery = supabase
         .from("revenues")
-        .select("id, amount")
-        .eq("reference_month", month)
-        .in("source", ["aluguel_kitnets", "kitnets"]);
+        .select("id, amount, business_id, source")
+        .eq("reference_month", month);
+      const { data: allMonthRevs } = await kitnetRevsQuery;
+      const kitnetRevs = ((allMonthRevs as any[]) ?? []).filter(r =>
+        (kitnetsBizId && r.business_id === kitnetsBizId) ||
+        ["aluguel_kitnets", "kitnets"].includes(r.source)
+      );
 
       const { data: kitnetEntries } = await supabase
         .from("kitnet_entries")
@@ -148,7 +154,7 @@ export function useReconcileMonth() {
 
       let kitnetOrphans = 0;
       let kitnetOrphansTotal = 0;
-      ((kitnetRevs as any[]) ?? []).forEach(r => {
+      kitnetRevs.forEach(r => {
         const cents = Math.round(Number(r.amount ?? 0) * 100);
         if (!entryAmounts.has(cents)) {
           kitnetOrphans++;
@@ -188,11 +194,24 @@ export function useKitnetOrphans(month: string) {
   return useQuery({
     queryKey: ["kitnet_orphans", month],
     queryFn: async () => {
-      const { data: revs } = await supabase
+      // Resolver id do business KITNETS
+      const { data: biz } = await supabase
+        .from("businesses" as any)
+        .select("id")
+        .eq("code", "KITNETS")
+        .maybeSingle();
+      const kitnetsBizId = (biz as any)?.id ?? null;
+
+      // Buscar TODAS as revenues do mês e filtrar por business_id=KITNETS OU source
+      const { data: allRevs } = await supabase
         .from("revenues")
-        .select("id, amount, description, received_at")
-        .eq("reference_month", month)
-        .in("source", ["aluguel_kitnets", "kitnets"]);
+        .select("id, amount, description, received_at, business_id, source")
+        .eq("reference_month", month);
+
+      const revs = ((allRevs as any[]) ?? []).filter(r =>
+        (kitnetsBizId && r.business_id === kitnetsBizId) ||
+        ["aluguel_kitnets", "kitnets"].includes(r.source)
+      );
 
       const { data: entries } = await supabase
         .from("kitnet_entries")
@@ -203,7 +222,7 @@ export function useKitnetOrphans(month: string) {
         ((entries as any[]) ?? []).map(e => Math.round(Number(e.total_liquid ?? 0) * 100))
       );
 
-      const orphans = ((revs as any[]) ?? []).filter(r => {
+      const orphans = revs.filter(r => {
         const cents = Math.round(Number(r.amount ?? 0) * 100);
         return !entryAmounts.has(cents);
       });
