@@ -126,13 +126,47 @@ interface DeriveArgs {
   today: string;
 }
 
+// Normaliza string: lowercase, sem acentos, sem pontuação
+function norm(s: string): string {
+  return (s || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// Stopwords de descrições bancárias (não são palavras-chave úteis)
+const STOPWORDS = new Set([
+  "pg", "p", "internet", "debito", "credito", "pix", "transf", "intern", "interc",
+  "cr", "tr", "db", "de", "do", "da", "dos", "das", "e", "a", "o", "os", "as",
+  "s", "sa", "ltda", "eireli", "me", "adm", "s.a", "s/a",
+  "cobranca", "referente", "mes", "anterior",
+  "coop", "trab", "medico", "servicos", "servico", "pagamento", "pagamentos",
+]);
+
+// Extrai tokens significativos (>= 3 chars, não stopwords)
+function keywords(name: string): string[] {
+  return norm(name)
+    .split(" ")
+    .filter(w => w.length >= 3 && !STOPWORDS.has(w));
+}
+
 function deriveInstances({ bills, txs, month, today }: DeriveArgs): BillInstance[] {
   const [y, m] = month.split("-").map(Number);
   const lastDay = new Date(y, m, 0).getDate();
   const usedTxIds = new Set<string>();
 
-  // Ordenar bills por especificidade (fixo primeiro, depois por valor decrescente)
-  // — bills mais específicas têm prioridade no claim de uma transação
+  // Pré-normaliza descrições das txs (uma vez só)
+  const normTxs = txs.map(t => ({
+    ...t,
+    _normDesc: norm(String(t.description || "")),
+    _abs: Math.abs(Number(t.amount)),
+  }));
+
+  // Ordenar bills por especificidade: fixo primeiro, depois valor decrescente.
+  // Bills com nome mais específico ganham prioridade no claim.
   const sortedBills = [...bills].sort((a, b) => {
     if (a.is_fixed !== b.is_fixed) return a.is_fixed ? -1 : 1;
     return Number(b.amount) - Number(a.amount);
@@ -144,34 +178,40 @@ function deriveInstances({ bills, txs, month, today }: DeriveArgs): BillInstance
     const dueDay = Math.min(bill.due_day, lastDay);
     const dueDate = `${month}-${String(dueDay).padStart(2, "0")}`;
     const expected = Number(bill.amount);
-    const tolerance = bill.is_fixed ? 0.10 : 0.35;
     const dueDateObj = new Date(y, m - 1, dueDay);
+    const billKeywords = keywords(bill.name);
 
-    const candidates = txs
+    const candidates = normTxs
       .filter(t => !usedTxIds.has(t.id))
-      .filter(t => {
-        // 1. Filtro de categoria (se ambos têm, precisam bater)
-        if (bill.category && t.category_confirmed && t.category_confirmed !== bill.category) {
-          return false;
-        }
-        // 2. Filtro de valor
-        const absAmt = Math.abs(Number(t.amount));
-        if (expected <= 0) return false;
-        const dev = Math.abs(absAmt - expected) / expected;
-        return dev <= tolerance;
-      })
+      .filter(t => t.type === "debit")               // só débitos
       .map(t => {
-        const absAmt = Math.abs(Number(t.amount));
-        const dev = Math.abs(absAmt - expected) / expected;
+        if (expected <= 0) return null;
+        const dev = Math.abs(t._abs - expected) / expected;
+
+        // Score de match de nome: fração de keywords do bill que aparecem na tx
+        const matched = billKeywords.filter(k => t._normDesc.includes(k)).length;
+        const nameScore = billKeywords.length > 0 ? matched / billKeywords.length : 0;
+
         const txDate = new Date(t.date);
         const daysDiff = Math.abs((txDate.getTime() - dueDateObj.getTime()) / (1000 * 60 * 60 * 24));
-        return { t, dev, daysDiff };
+
+        return { t, dev, daysDiff, nameScore, matched };
+      })
+      .filter((c): c is NonNullable<typeof c> => c !== null)
+      .filter(c => {
+        // Regra A: nome casa forte (>= 50% keywords) E valor em faixa ampla (±50%)
+        if (c.nameScore >= 0.5 && c.dev <= 0.50) return true;
+        // Regra B: valor casa muito preciso (±5%) E alguma keyword bate
+        if (c.dev <= 0.05 && c.matched >= 1) return true;
+        // Regra C: nome casa perfeito (100%) — aceita qualquer valor dentro de 80%
+        if (c.nameScore >= 1.0 && c.dev <= 0.80) return true;
+        return false;
       })
       .sort((a, b) => {
-        // Ordena por desvio de valor + distância temporal
-        const scoreA = a.dev + a.daysDiff / 100;
-        const scoreB = b.dev + b.daysDiff / 100;
-        return scoreA - scoreB;
+        // Prioriza: mais keywords casadas → menor desvio de valor → menor distância de data
+        if (b.matched !== a.matched) return b.matched - a.matched;
+        if (a.dev !== b.dev) return a.dev - b.dev;
+        return a.daysDiff - b.daysDiff;
       });
 
     const match = candidates[0]?.t;
