@@ -270,6 +270,9 @@ export function useBusinessRealized(month: string) {
       }
 
       // 2. Revenues agregados por business_id
+      // IMPORTANTE: pula revenues linkadas a KITNETS pra evitar dupla contagem
+      // (KITNETS é agregado por kitnet_entries — revenues são apenas classificação)
+      const kitnetBizId = kitnetBiz?.id ?? null;
       const { data: revs, error: revErr } = await (supabase as any)
         .from("revenues")
         .select("business_id, amount")
@@ -278,7 +281,7 @@ export function useBusinessRealized(month: string) {
       if (revErr) throw revErr;
       (revs ?? []).forEach((r: any) => {
         if (!r.business_id) return;
-        // Kitnets já preenchido via kitnet_entries — se também tiver revenue ligada, soma
+        if (r.business_id === kitnetBizId) return; // skip — kitnet_entries é fonte da verdade
         const existing = result.get(r.business_id);
         if (existing) {
           result.set(r.business_id, { amount: existing.amount + Number(r.amount), source: existing.source });

@@ -161,11 +161,26 @@ function BusinessForm({ form, setForm, onSave, onCancel, isPending }: {
   );
 }
 
+// Sugere negócio provável com base em keywords/padrões na descrição
+function suggestBusiness(r: { description: string | null; source: string | null }, businesses: Business[]): Business | null {
+  const txt = `${r.description ?? ""} ${r.source ?? ""}`.toLowerCase();
+  const find = (code: string) => businesses.find(b => b.code === code) ?? null;
+
+  if (/\brwt\s?0\d|repasse\s?rwt|kitnet|aluguel|residencial\s?w/i.test(txt)) return find("KITNETS");
+  if (/prevensul|salario|salário|comiss|adianta|pluxee|reembolso|13o|decimo|décimo|férias|ferias|ppr|thiago\s+sergio\s+maba|thiago\s+maba|claudio\s+sergio\s+maba|cláudio\s+sergio\s+maba|claudio\s+maba|cláudio\s+maba/i.test(txt)) return find("PREVENSUL");
+  if (/\bcw7\b|q7\s?solar|q7energia|energia\s?solar/i.test(txt)) return find("CW7");
+  if (/\bt7\b|t7\s?sales|t7service/i.test(txt)) return find("T7");
+  if (/\bhr7\b|henrique\s?rial|consultoria\s?fitness/i.test(txt)) return find("HR7");
+  if (/promax|mercado\s?livre/i.test(txt)) return find("PROMAX");
+  return find("OUTROS"); // fallback seguro
+}
+
 // ─── Reconciliation Dialog — mostra todas as receitas sem vínculo ────────────
 function ReconciliationDialog({ month, businesses, onClose }: { month: string; businesses: Business[]; onClose: () => void }) {
   const { data: unlinked = [], isLoading } = useUnlinkedRevenuesForMonth(month);
   const linkRev = useLinkRevenueToBusiness();
   const { toast } = useToast();
+  const [bulkPending, setBulkPending] = useState(false);
 
   const link = async (revenueId: string, businessId: string) => {
     try {
@@ -177,6 +192,19 @@ function ReconciliationDialog({ month, businesses, onClose }: { month: string; b
   const total = unlinked.reduce((s, r) => s + Number(r.amount), 0);
   const activeBizs = businesses.filter(b => b.status !== "encerrado");
 
+  // Aplica sugestão a todas de uma vez
+  const applyAllSuggestions = async () => {
+    setBulkPending(true);
+    try {
+      for (const r of unlinked) {
+        const sug = suggestBusiness(r, businesses);
+        if (sug) await linkRev.mutateAsync({ revenueId: r.id, businessId: sug.id });
+      }
+      toast({ title: "Sugestões aplicadas em lote" });
+    } catch { toast({ title: "Erro no lote", variant: "destructive" }); }
+    finally { setBulkPending(false); }
+  };
+
   return (
     <Dialog open onOpenChange={o => !o && onClose()}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" style={{ background: "#0D1318", border: "1px solid #1A2535" }}>
@@ -187,9 +215,13 @@ function ReconciliationDialog({ month, businesses, onClose }: { month: string; b
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex items-baseline justify-between border-b pb-2" style={{ borderColor: "#1A2535" }}>
-          <span className="text-sm" style={{ color: "#94A3B8" }}>{unlinked.length} receita{unlinked.length !== 1 ? "s" : ""} sem negócio</span>
-          <span className="text-lg font-bold font-mono" style={{ color: "#F59E0B" }}>{formatCurrency(total)}</span>
+        <div className="flex items-center justify-between border-b pb-2 gap-3" style={{ borderColor: "#1A2535" }}>
+          <span className="text-sm" style={{ color: "#94A3B8" }}>{unlinked.length} receita{unlinked.length !== 1 ? "s" : ""} sem negócio · <span className="font-mono" style={{ color: "#F59E0B" }}>{formatCurrency(total)}</span></span>
+          {unlinked.length > 0 && (
+            <button onClick={applyAllSuggestions} disabled={bulkPending} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ background: "rgba(201,168,76,0.15)", color: "#C9A84C", border: "1px solid rgba(201,168,76,0.5)" }}>
+              {bulkPending ? "Aplicando..." : "✨ Aplicar sugestões em lote"}
+            </button>
+          )}
         </div>
 
         {isLoading ? (
