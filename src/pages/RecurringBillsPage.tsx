@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useCategories } from "@/hooks/useCategories";
-import { CalendarClock, Plus, Pencil, Trash2, Clock, AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarClock, Plus, Pencil, Trash2, Clock, AlertTriangle, ChevronLeft, ChevronRight, Link2, Unlink } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,6 +20,10 @@ import {
   useDeleteRecurringBill,
   useBillInstances,
   useBillsSummary,
+  useLinkTransactionManually,
+  useUnlinkTransactionManually,
+  useMonthDebits,
+  useManualMatchesForMonth,
   type RecurringBill,
   type BillInstance,
 } from "@/hooks/useRecurringBills";
@@ -94,6 +98,12 @@ export default function RecurringBillsPage() {
   const [editBill, setEditBill] = useState<RecurringBill | null>(null);
   const [delBill, setDelBill] = useState<RecurringBill | null>(null);
   const [form, setForm] = useState(emptyForm);
+
+  // ─── Manual Match state ─────────────────────────────────────────────────
+  const [linkBill, setLinkBill] = useState<RecurringBill | null>(null);
+  const { data: manualMatches } = useManualMatchesForMonth(month);
+  const linkTx = useLinkTransactionManually();
+  const unlinkTx = useUnlinkTransactionManually();
 
   const handleCreate = async () => {
     if (!form.name || !form.due_day) return;
@@ -274,6 +284,11 @@ export default function RecurringBillsPage() {
                             auto
                           </span>
                         )}
+                        {bill && manualMatches?.[bill.id] && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(232,201,122,0.15)", color: "#E8C97A", border: "1px solid rgba(232,201,122,0.3)" }}>
+                            manual
+                          </span>
+                        )}
                       </div>
                       <p className="text-xs" style={{ color: "#64748B" }}>
                         {CAT_LABELS[bill?.category ?? ""] ?? bill?.category ?? ""}
@@ -324,8 +339,8 @@ export default function RecurringBillsPage() {
                       })()}
                     </div>
 
-                    {/* Status derivado do extrato */}
-                    <div className="shrink-0">
+                    {/* Status + ações manuais */}
+                    <div className="shrink-0 flex items-center gap-2">
                       {isPaid ? (
                         <WtBadge variant="green">Pago</WtBadge>
                       ) : isOverdue ? (
@@ -333,6 +348,27 @@ export default function RecurringBillsPage() {
                       ) : (
                         <WtBadge variant="gold">A pagar</WtBadge>
                       )}
+                      {bill && manualMatches?.[bill.id] ? (
+                        <button
+                          title="Desvincular transação manual"
+                          className="p-1.5 rounded hover:bg-violet-500/10 transition"
+                          style={{ color: "#A78BFA" }}
+                          onClick={() =>
+                            unlinkTx.mutate({ billId: bill.id, referenceMonth: month })
+                          }
+                        >
+                          <Unlink className="w-3.5 h-3.5" />
+                        </button>
+                      ) : bill && !isPaid ? (
+                        <button
+                          title="Vincular transação manualmente"
+                          className="p-1.5 rounded hover:bg-amber-500/10 transition"
+                          style={{ color: "#E8C97A" }}
+                          onClick={() => setLinkBill(bill)}
+                        >
+                          <Link2 className="w-3.5 h-3.5" />
+                        </button>
+                      ) : null}
                     </div>
                   </div>
                 );
@@ -479,6 +515,127 @@ export default function RecurringBillsPage() {
 
       {/* Confirm delete */}
       {delBill && <ConfirmDelete name={delBill.name} onConfirm={handleDelete} onCancel={() => setDelBill(null)} />}
+
+      {/* Link transação manual */}
+      {linkBill && (
+        <LinkTransactionDialog
+          bill={linkBill}
+          month={month}
+          onCancel={() => setLinkBill(null)}
+          onConfirm={async (txId) => {
+            await linkTx.mutateAsync({ billId: linkBill.id, referenceMonth: month, transactionId: txId });
+            toast({ title: "Transação vinculada", description: `${linkBill.alias || linkBill.name}` });
+            setLinkBill(null);
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+// ─── Dialog: vincular transação manual ────────────────────────────────────
+function LinkTransactionDialog({
+  bill,
+  month,
+  onCancel,
+  onConfirm,
+}: {
+  bill: RecurringBill;
+  month: string;
+  onCancel: () => void;
+  onConfirm: (txId: string) => void;
+}) {
+  const { data: debits, isLoading } = useMonthDebits(month);
+  const [search, setSearch] = useState("");
+
+  const filtered = useMemo(() => {
+    if (!debits) return [];
+    const q = search.trim().toLowerCase();
+    // Ordena: primeiro por proximidade de valor, depois por data
+    const expected = Number(bill.amount);
+    return debits
+      .filter((t: any) => {
+        if (!q) return true;
+        return (t.description || "").toLowerCase().includes(q);
+      })
+      .map((t: any) => ({
+        ...t,
+        _dev: expected > 0 ? Math.abs(Math.abs(Number(t.amount)) - expected) / expected : 999,
+      }))
+      .sort((a: any, b: any) => a._dev - b._dev);
+  }, [debits, search, bill.amount]);
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onCancel()}>
+      <DialogContent className="max-w-2xl" style={{ background: "#0D1318", border: "1px solid #1A2535" }}>
+        <DialogHeader>
+          <DialogTitle style={{ color: "#E8C97A" }}>
+            Vincular transação — {bill.alias || bill.name}
+          </DialogTitle>
+          <p className="text-xs" style={{ color: "#64748B" }}>
+            Esperado: {formatCurrency(Number(bill.amount))} · {formatMonth(month)}
+          </p>
+        </DialogHeader>
+
+        <Input
+          placeholder="Buscar por descrição..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={inputStyle}
+          className="mb-2"
+        />
+
+        {isLoading ? (
+          <Skeleton className="h-40 rounded" />
+        ) : !filtered.length ? (
+          <p className="text-center py-8 text-sm" style={{ color: "#64748B" }}>
+            Nenhuma transação encontrada
+          </p>
+        ) : (
+          <div className="max-h-96 overflow-y-auto space-y-1.5">
+            {filtered.slice(0, 50).map((t: any) => {
+              const expected = Number(bill.amount);
+              const devPct = expected > 0 ? (t._dev * 100).toFixed(1) : "—";
+              const devColor = t._dev <= 0.1 ? "#10B981" : t._dev <= 0.5 ? "#E8C97A" : "#64748B";
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => onConfirm(t.id)}
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition hover:bg-amber-500/5"
+                  style={{ background: "#080C10", border: "1px solid #1A2535" }}
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs truncate" style={{ color: "#F0F4F8" }}>
+                      {t.description}
+                    </p>
+                    <p className="text-[10px]" style={{ color: "#64748B" }}>
+                      {t.date}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="font-mono text-sm font-bold" style={{ color: "#F0F4F8" }}>
+                      {formatCurrency(Math.abs(Number(t.amount)))}
+                    </p>
+                    <p className="text-[10px] font-mono" style={{ color: devColor }}>
+                      Δ {devPct}%
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        <DialogFooter>
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 rounded text-sm"
+            style={{ background: "#1A2535", color: "#F0F4F8" }}
+          >
+            Cancelar
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

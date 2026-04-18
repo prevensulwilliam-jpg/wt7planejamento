@@ -124,6 +124,7 @@ interface DeriveArgs {
   txs: any[];
   month: string;
   today: string;
+  manualMatches?: Record<string, string>; // bill_id → transaction_id
 }
 
 // Normaliza string: lowercase, sem acentos, sem pontuação
@@ -154,10 +155,13 @@ function keywords(name: string): string[] {
     .filter(w => w.length >= 2 && !STOPWORDS.has(w));
 }
 
-function deriveInstances({ bills, txs, month, today }: DeriveArgs): BillInstance[] {
+function deriveInstances({ bills, txs, month, today, manualMatches = {} }: DeriveArgs): BillInstance[] {
   const [y, m] = month.split("-").map(Number);
   const lastDay = new Date(y, m, 0).getDate();
   const usedTxIds = new Set<string>();
+
+  // Reserva as txs vinculadas manualmente — não podem ser usadas pelo matcher automático
+  Object.values(manualMatches).forEach(txId => usedTxIds.add(txId));
 
   // Pré-normaliza descrições das txs (uma vez só)
   const normTxs = txs.map(t => ({
@@ -181,6 +185,27 @@ function deriveInstances({ bills, txs, month, today }: DeriveArgs): BillInstance
     const expected = Number(bill.amount);
     const dueDateObj = new Date(y, m - 1, dueDay);
     const billKeywords = keywords(bill.name);
+
+    // Se há manual match pra este bill neste mês, usa ele e pula matcher automático
+    const manualTxId = manualMatches[bill.id];
+    if (manualTxId) {
+      const manualTx = normTxs.find(t => t.id === manualTxId);
+      if (manualTx) {
+        results.push({
+          id: `${bill.id}-${month}`,
+          recurring_bill_id: bill.id,
+          reference_month: month,
+          expected_amount: expected,
+          actual_amount: Math.abs(Number(manualTx.amount)),
+          due_date: dueDate,
+          status: "paid",
+          matched_transaction_id: manualTx.id,
+          paid_at: manualTx.date,
+          recurring_bill: bill,
+        });
+        continue;
+      }
+    }
 
     const candidates = normTxs
       .filter(t => !usedTxIds.has(t.id))
@@ -255,7 +280,7 @@ async function fetchBillsAndTxs(month: string) {
   const start = startDate.toISOString().slice(0, 10);
   const end = endDate.toISOString().slice(0, 10);
 
-  const [billsRes, txsRes] = await Promise.all([
+  const [billsRes, txsRes, manualRes] = await Promise.all([
     supabase.from("recurring_bills" as any).select("*").eq("active", true),
     supabase
       .from("bank_transactions" as any)
@@ -263,14 +288,37 @@ async function fetchBillsAndTxs(month: string) {
       .gte("date", start)
       .lte("date", end)
       .eq("type", "debit"),
+    supabase
+      .from("recurring_bill_manual_matches" as any)
+      .select("recurring_bill_id, transaction_id")
+      .eq("reference_month", month),
   ]);
 
   if (billsRes.error) throw billsRes.error;
   if (txsRes.error) throw txsRes.error;
+  if (manualRes.error) throw manualRes.error;
+
+  const manualMatches: Record<string, string> = {};
+  for (const row of (manualRes.data ?? []) as any[]) {
+    manualMatches[row.recurring_bill_id] = row.transaction_id;
+  }
+
+  // Se a tx manual-matched está fora da janela, busca ela separadamente
+  const txIds = new Set(((txsRes.data ?? []) as any[]).map(t => t.id));
+  const missingManualTxIds = Object.values(manualMatches).filter(id => !txIds.has(id));
+  let extraTxs: any[] = [];
+  if (missingManualTxIds.length > 0) {
+    const { data: extra } = await supabase
+      .from("bank_transactions" as any)
+      .select("id, description, amount, date, type, category_intent, category_confirmed, status")
+      .in("id", missingManualTxIds);
+    extraTxs = (extra ?? []) as any[];
+  }
 
   return {
     bills: ((billsRes.data ?? []) as unknown) as RecurringBill[],
-    txs: (txsRes.data ?? []) as any[],
+    txs: [...((txsRes.data ?? []) as any[]), ...extraTxs],
+    manualMatches,
   };
 }
 
@@ -279,9 +327,9 @@ export function useBillInstances(month: string) {
   return useQuery({
     queryKey: ["bill_instances", month],
     queryFn: async () => {
-      const { bills, txs } = await fetchBillsAndTxs(month);
+      const { bills, txs, manualMatches } = await fetchBillsAndTxs(month);
       const today = new Date().toISOString().slice(0, 10);
-      return deriveInstances({ bills, txs, month, today });
+      return deriveInstances({ bills, txs, month, today, manualMatches });
     },
   });
 }
@@ -320,6 +368,106 @@ export function useBillsSummary(month: string) {
         totalCount: instances.length,
         paidCount: instances.filter(i => i.status === "paid").length,
       };
+    },
+  });
+}
+
+// ─── Manual Matches (override do matcher automático) ───────────────────────
+export function useLinkTransactionManually() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      billId,
+      referenceMonth,
+      transactionId,
+    }: {
+      billId: string;
+      referenceMonth: string;
+      transactionId: string;
+    }) => {
+      const { error } = await supabase
+        .from("recurring_bill_manual_matches" as any)
+        .upsert(
+          {
+            recurring_bill_id: billId,
+            reference_month: referenceMonth,
+            transaction_id: transactionId,
+          } as any,
+          { onConflict: "recurring_bill_id,reference_month" }
+        );
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["bill_instances"] });
+      qc.invalidateQueries({ queryKey: ["bills_summary"] });
+    },
+  });
+}
+
+export function useUnlinkTransactionManually() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      billId,
+      referenceMonth,
+    }: {
+      billId: string;
+      referenceMonth: string;
+    }) => {
+      const { error } = await supabase
+        .from("recurring_bill_manual_matches" as any)
+        .delete()
+        .eq("recurring_bill_id", billId)
+        .eq("reference_month", referenceMonth);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["bill_instances"] });
+      qc.invalidateQueries({ queryKey: ["bills_summary"] });
+    },
+  });
+}
+
+// Lista debits do mês disponíveis pra vincular (com janela ±10 dias)
+export function useMonthDebits(month: string) {
+  return useQuery({
+    queryKey: ["month_debits", month],
+    queryFn: async () => {
+      const [y, m] = month.split("-").map(Number);
+      const lastDay = new Date(y, m, 0).getDate();
+      const startDate = new Date(y, m - 1, 1 - 10);
+      const endDate = new Date(y, m - 1, lastDay + 10);
+      const start = startDate.toISOString().slice(0, 10);
+      const end = endDate.toISOString().slice(0, 10);
+
+      const { data, error } = await supabase
+        .from("bank_transactions" as any)
+        .select("id, description, amount, date")
+        .gte("date", start)
+        .lte("date", end)
+        .eq("type", "debit")
+        .order("date", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as any[];
+    },
+  });
+}
+
+// Verifica se uma instância está matched manualmente
+export function useManualMatchesForMonth(month: string) {
+  return useQuery({
+    queryKey: ["manual_matches", month],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("recurring_bill_manual_matches" as any)
+        .select("recurring_bill_id, transaction_id")
+        .eq("reference_month", month);
+      if (error) throw error;
+      const map: Record<string, string> = {};
+      for (const row of (data ?? []) as any[]) {
+        map[row.recurring_bill_id] = row.transaction_id;
+      }
+      return map;
     },
   });
 }
