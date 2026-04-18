@@ -338,10 +338,22 @@ function StagesModal({ construction, onClose }: { construction: any; onClose: ()
                         {(() => {
                           const pct = getStagePct(s, expenses);
                           const isManual = s.pct_complete_auto === false;
+                          const budget = Number(s.budget_estimated ?? 0);
+                          const spent = (expenses ?? []).filter((e: any) => e.stage_id === s.id).reduce((acc: number, e: any) => acc + Number(e.total_amount ?? 0), 0);
+                          const autoSemBudget = !isManual && budget <= 0 && spent > 0;
                           return (
                             <span className="text-xs font-mono ml-auto flex items-center gap-1" style={{ color: '#C9A84C' }}>
                               {isManual && (
                                 <span className="text-[9px] px-1 rounded" style={{ background: 'rgba(167,139,250,0.15)', color: '#A78BFA', border: '1px solid rgba(167,139,250,0.3)' }}>manual</span>
+                              )}
+                              {autoSemBudget && (
+                                <span
+                                  className="text-[9px] px-1 rounded"
+                                  style={{ background: 'rgba(245,158,11,0.15)', color: '#F59E0B', border: '1px solid rgba(245,158,11,0.4)' }}
+                                  title={`R$ ${spent.toFixed(2)} gasto sem orçamento definido. Clique ✏ e preencha "Orçamento previsto" para calcular %.`}
+                                >
+                                  ⚠ sem orçamento
+                                </span>
                               )}
                               {pct}%
                             </span>
