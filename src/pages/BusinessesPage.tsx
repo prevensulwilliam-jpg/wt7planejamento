@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Briefcase, Plus, Pencil, Trash2, TrendingUp, TrendingDown, Target } from "lucide-react";
+import { Briefcase, Plus, Pencil, Trash2, TrendingUp, TrendingDown, Target, Search, Link2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -23,6 +23,9 @@ import {
   useUpsertRevenueEntry,
   useDeleteRevenueEntry,
   useBusinessRealized,
+  useBusinessBreakdown,
+  useUnlinkedRevenuesForMonth,
+  useLinkRevenueToBusiness,
   type Business,
 } from "@/hooks/useBusinesses";
 
@@ -156,6 +159,121 @@ function BusinessForm({ form, setForm, onSave, onCancel, isPending }: {
   );
 }
 
+// ─── Breakdown Modal — detalha quais receitas compõem o valor ───────────────
+function BreakdownModal({ business, month, onClose }: { business: Business; month: string; onClose: () => void }) {
+  const { data: rows = [], isLoading } = useBusinessBreakdown(business.id, business.code, month);
+  const { data: unlinked = [] } = useUnlinkedRevenuesForMonth(month);
+  const linkRev = useLinkRevenueToBusiness();
+  const { toast } = useToast();
+  const [showUnlinked, setShowUnlinked] = useState(false);
+
+  const total = rows.reduce((s, r) => s + r.amount, 0);
+
+  const link = async (revenueId: string) => {
+    try {
+      await linkRev.mutateAsync({ revenueId, businessId: business.id });
+      toast({ title: "Receita vinculada" });
+    } catch { toast({ title: "Erro ao vincular", variant: "destructive" }); }
+  };
+
+  const unlink = async (revenueId: string) => {
+    try {
+      await linkRev.mutateAsync({ revenueId, businessId: null });
+      toast({ title: "Receita desvinculada" });
+    } catch { toast({ title: "Erro", variant: "destructive" }); }
+  };
+
+  return (
+    <Dialog open onOpenChange={o => !o && onClose()}>
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" style={{ background: "#0D1318", border: "1px solid #1A2535" }}>
+        <DialogHeader>
+          <DialogTitle style={{ color: "#F0F4F8" }}>
+            <Search className="inline w-4 h-4 mr-2" style={{ color: "#C9A84C" }} />
+            Detalhes — {business.icon} {business.name} · {month}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="flex items-baseline justify-between border-b pb-2" style={{ borderColor: "#1A2535" }}>
+          <span className="text-sm" style={{ color: "#94A3B8" }}>Total computado</span>
+          <span className="text-lg font-bold font-mono" style={{ color: "#C9A84C" }}>{formatCurrency(total)}</span>
+        </div>
+
+        {isLoading ? (
+          <Skeleton className="h-32 rounded-xl" />
+        ) : rows.length === 0 ? (
+          <p className="text-center py-6 text-sm" style={{ color: "#64748B" }}>Nenhuma entrada registrada para este mês.</p>
+        ) : (
+          <div className="space-y-1.5">
+            {rows.map((r, i) => (
+              <div key={i} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg" style={{ background: "#080C10", border: "1px solid #1A2535" }}>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-medium truncate" style={{ color: "#F0F4F8" }}>{r.description}</span>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded" style={{
+                      background: r.kind === "kitnet" ? "rgba(16,185,129,0.15)" : r.kind === "manual" ? "rgba(167,139,250,0.15)" : "rgba(59,130,246,0.15)",
+                      color: r.kind === "kitnet" ? "#10B981" : r.kind === "manual" ? "#A78BFA" : "#3B82F6",
+                    }}>
+                      {r.kind === "kitnet" ? "kitnet_entries" : r.kind === "manual" ? "override" : "revenues"}
+                    </span>
+                  </div>
+                  {(r.date || r.source) && (
+                    <p className="text-[10px] mt-0.5" style={{ color: "#64748B" }}>
+                      {r.date ? r.date : ""} {r.source ? ` · fonte: ${r.source}` : ""}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="font-mono text-sm" style={{ color: "#10B981" }}>{formatCurrency(r.amount)}</span>
+                  {r.kind === "revenue" && (
+                    <button onClick={() => unlink(r.id)} title="Desvincular deste negócio" className="p-1 rounded" style={{ background: "rgba(244,63,94,0.1)", color: "#F43F5E", border: "1px solid rgba(244,63,94,0.2)" }}>
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Receitas sem vínculo */}
+        <div className="pt-3 border-t" style={{ borderColor: "#1A2535" }}>
+          <button onClick={() => setShowUnlinked(s => !s)} className="flex items-center gap-2 text-xs" style={{ color: "#C9A84C" }}>
+            <Link2 className="w-3 h-3" />
+            Receitas sem vínculo neste mês ({unlinked.length}) {showUnlinked ? "▲" : "▼"}
+          </button>
+
+          {showUnlinked && (
+            <div className="space-y-1.5 mt-2">
+              {unlinked.length === 0 ? (
+                <p className="text-xs" style={{ color: "#64748B" }}>Todas as receitas do mês já estão vinculadas a algum negócio.</p>
+              ) : (
+                unlinked.map(r => (
+                  <div key={r.id} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg" style={{ background: "#080C10", border: "1px dashed #1A2535" }}>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium truncate" style={{ color: "#F0F4F8" }}>
+                        {r.description ?? r.source ?? "(sem descrição)"}
+                      </p>
+                      <p className="text-[10px] mt-0.5" style={{ color: "#64748B" }}>
+                        {r.received_at ?? "—"} · fonte: {r.source ?? "—"}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="font-mono text-xs" style={{ color: "#94A3B8" }}>{formatCurrency(r.amount)}</span>
+                      <button onClick={() => link(r.id)} title={`Vincular a ${business.name}`} className="px-2 py-1 rounded text-[10px] font-medium" style={{ background: "rgba(200,168,76,0.15)", color: "#C9A84C", border: "1px solid rgba(200,168,76,0.4)" }}>
+                        + vincular
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Revenue Entry Modal ─────────────────────────────────────────────────────
 function RevenueModal({ business, month, onClose }: { business: Business; month: string; onClose: () => void }) {
   const { data: entries = [] } = useBusinessRevenueEntries(business.id);
@@ -286,6 +404,7 @@ export default function BusinessesPage() {
   const [editing, setEditing] = useState<Business | null>(null);
   const [deleting, setDeleting] = useState<Business | null>(null);
   const [revenueTarget, setRevenueTarget] = useState<Business | null>(null);
+  const [breakdownTarget, setBreakdownTarget] = useState<Business | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm());
 
   const { data: businesses = [], isLoading } = useBusinesses();
@@ -398,7 +517,10 @@ export default function BusinessesPage() {
             </div>
           </div>
           <div className="flex gap-1 shrink-0">
-            <button onClick={() => setRevenueTarget(b)} className="p-1.5 rounded-lg" style={{ background: "rgba(16,185,129,0.1)", color: "#10B981", border: "1px solid rgba(16,185,129,0.2)" }} title="Receitas">
+            <button onClick={() => setBreakdownTarget(b)} className="p-1.5 rounded-lg" style={{ background: "rgba(59,130,246,0.1)", color: "#3B82F6", border: "1px solid rgba(59,130,246,0.2)" }} title="Ver detalhes / de onde vieram os valores">
+              <Search className="w-3 h-3" />
+            </button>
+            <button onClick={() => setRevenueTarget(b)} className="p-1.5 rounded-lg" style={{ background: "rgba(16,185,129,0.1)", color: "#10B981", border: "1px solid rgba(16,185,129,0.2)" }} title="Ajuste manual (override)">
               <TrendingUp className="w-3 h-3" />
             </button>
             <button onClick={() => openEdit(b)} className="p-1.5 rounded-lg" style={{ background: "rgba(200,168,76,0.1)", color: "#C9A84C", border: "1px solid rgba(200,168,76,0.2)" }}>
@@ -429,9 +551,18 @@ export default function BusinessesPage() {
                 {formatCurrency(realized)} / {formatCurrency(target)}
               </span>
             </div>
-            <Progress value={pct} className="h-2" />
+            <div style={{ position: "relative", height: 8, background: "#1A2535", borderRadius: 99, overflow: "hidden" }}>
+              <div style={{
+                height: "100%",
+                width: `${Math.min(pctDisplay, 100)}%`,
+                background: pctDisplay >= 100 ? "linear-gradient(90deg, #10B981, #34D399)" : "linear-gradient(90deg, #C9A84C, #E8C97A)",
+                transition: "width 0.3s",
+                borderRadius: 99,
+              }} />
+            </div>
             <div className="flex justify-between text-xs mt-1.5">
               <span style={{ color: pctDisplay >= 100 ? "#10B981" : "#94A3B8" }}>
+                {pctDisplay >= 100 ? "✓ meta batida " : ""}
                 {pctDisplay.toFixed(0)}% da meta
               </span>
               <span style={{ color: delta >= 0 ? "#10B981" : "#F43F5E", fontFamily: "monospace" }}>
@@ -566,7 +697,12 @@ export default function BusinessesPage() {
         </Dialog>
       )}
 
-      {/* Revenue modal */}
+      {/* Breakdown modal */}
+      {breakdownTarget && (
+        <BreakdownModal business={breakdownTarget} month={month} onClose={() => setBreakdownTarget(null)} />
+      )}
+
+      {/* Revenue manual override modal */}
       {revenueTarget && (
         <RevenueModal business={revenueTarget} month={month} onClose={() => setRevenueTarget(null)} />
       )}

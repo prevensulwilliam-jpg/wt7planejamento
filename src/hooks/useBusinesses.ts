@@ -116,6 +116,117 @@ export function useDeleteRevenueEntry() {
   });
 }
 
+// ─── Detalhamento: quais receitas compõem o valor de um negócio em um mês ───
+export type BusinessBreakdownEntry = {
+  id: string;
+  kind: "kitnet" | "revenue" | "manual";
+  description: string;
+  amount: number;
+  date: string | null;
+  source: string | null;
+  business_id: string | null;
+};
+
+export function useBusinessBreakdown(businessId: string | null, businessCode: string | null, month: string) {
+  return useQuery({
+    queryKey: ["business_breakdown", businessId, month],
+    enabled: !!businessId,
+    queryFn: async () => {
+      const rows: BusinessBreakdownEntry[] = [];
+
+      if (businessCode === "KITNETS") {
+        const { data } = await (supabase as any)
+          .from("kitnet_entries")
+          .select("id, reference_month, rent_gross, total_liquid, kitnets(code, tenant_name, residencial_code)")
+          .eq("reference_month", month);
+        (data ?? []).forEach((e: any) => {
+          rows.push({
+            id: e.id,
+            kind: "kitnet",
+            description: `${e.kitnets?.residencial_code ?? ""} ${e.kitnets?.code ?? ""} — ${e.kitnets?.tenant_name ?? "(vago)"}`,
+            amount: Number(e.total_liquid ?? 0),
+            date: null,
+            source: "kitnet_entries",
+            business_id: businessId,
+          });
+        });
+      }
+
+      const { data: revs } = await (supabase as any)
+        .from("revenues")
+        .select("id, description, source, amount, received_at, business_id")
+        .eq("reference_month", month)
+        .eq("business_id", businessId);
+      (revs ?? []).forEach((r: any) => {
+        rows.push({
+          id: r.id,
+          kind: "revenue",
+          description: r.description ?? r.source ?? "(sem descrição)",
+          amount: Number(r.amount ?? 0),
+          date: r.received_at,
+          source: r.source,
+          business_id: r.business_id,
+        });
+      });
+
+      const { data: manual } = await (supabase as any)
+        .from("business_revenue_entries")
+        .select("id, amount_william, notes")
+        .eq("business_id", businessId)
+        .eq("reference_month", month);
+      (manual ?? []).forEach((m: any) => {
+        rows.push({
+          id: m.id,
+          kind: "manual",
+          description: m.notes ?? "Ajuste manual",
+          amount: Number(m.amount_william),
+          date: null,
+          source: "manual_override",
+          business_id: businessId,
+        });
+      });
+
+      return rows;
+    },
+  });
+}
+
+// Receitas do mês SEM negócio vinculado — pra oferecer reconciliação rápida
+export function useUnlinkedRevenuesForMonth(month: string) {
+  return useQuery({
+    queryKey: ["revenues_unlinked", month],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("revenues")
+        .select("id, description, source, amount, received_at, business_id")
+        .eq("reference_month", month)
+        .is("business_id", null)
+        .order("received_at", { ascending: false });
+      if (error) throw error;
+      return data as Array<{ id: string; description: string | null; source: string | null; amount: number; received_at: string | null; business_id: string | null }>;
+    },
+  });
+}
+
+export function useLinkRevenueToBusiness() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ revenueId, businessId }: { revenueId: string; businessId: string | null }) => {
+      const { error } = await (supabase as any)
+        .from("revenues")
+        .update({ business_id: businessId })
+        .eq("id", revenueId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["business_realized"] });
+      qc.invalidateQueries({ queryKey: ["business_breakdown"] });
+      qc.invalidateQueries({ queryKey: ["revenues_unlinked"] });
+      qc.invalidateQueries({ queryKey: ["revenues"] });
+    },
+  });
+}
+
 // ─── Agregação automática por negócio ────────────────────────────────────────
 // Kitnets: soma kitnet_entries.total_liquid do mês
 // Demais: soma revenues WHERE business_id = X do mês
