@@ -247,8 +247,13 @@ function deriveInstances({ bills, txs, month, today }: DeriveArgs): BillInstance
 async function fetchBillsAndTxs(month: string) {
   const [y, m] = month.split("-").map(Number);
   const lastDay = new Date(y, m, 0).getDate();
-  const start = `${month}-01`;
-  const end = `${month}-${String(lastDay).padStart(2, "0")}`;
+
+  // Janela expandida: ±10 dias fora do mês pra capturar pagamentos antecipados
+  // (ex: fatura de Abril paga em 30/03) ou pagos com atraso (01/05)
+  const startDate = new Date(y, m - 1, 1 - 10);
+  const endDate = new Date(y, m - 1, lastDay + 10);
+  const start = startDate.toISOString().slice(0, 10);
+  const end = endDate.toISOString().slice(0, 10);
 
   const [billsRes, txsRes] = await Promise.all([
     supabase.from("recurring_bills" as any).select("*").eq("active", true),
