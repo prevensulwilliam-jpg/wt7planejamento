@@ -3,13 +3,14 @@ import { WT7Logo } from "@/components/wt7/WT7Logo";
 import {
   LayoutDashboard, Bot, TrendingUp, TrendingDown, Landmark,
   Home, Zap, HardHat, Building2, BarChart3, RefreshCw, Heart,
-  Target, Receipt, Radio, ClipboardList, Coins, Users, ArrowLeftRight, Brain, Tag, KeyRound, Banknote, CalendarClock, Briefcase
+  Target, Receipt, Radio, ClipboardList, Coins, Users, ArrowLeftRight, Brain, Tag, KeyRound, Banknote, CalendarClock, Briefcase, Compass
 } from "lucide-react";
 
 const navGroups = [
   {
     label: "VISÃO GERAL",
     items: [
+      { label: "Hoje", icon: Compass, href: "/hoje" },
       { label: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
       { label: "Naval", icon: Bot, href: "/naval" },
     ],

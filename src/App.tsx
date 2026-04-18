@@ -37,6 +37,7 @@ import CategoriesPage from "@/pages/CategoriesPage";
 import WeddingPortalPage from "@/pages/WeddingPortalPage";
 import RecurringBillsPage from "@/pages/RecurringBillsPage";
 import BusinessesPage from "@/pages/BusinessesPage";
+import HojePage from "@/pages/HojePage";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -118,6 +119,7 @@ const App = () => (
           {/* Admin routes */}
           <Route element={<AuthGuard><AdminLayout /></AuthGuard>}>
             <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/hoje" element={<HojePage />} />
             <Route path="/naval" element={<NavalPage />} />
             <Route path="/revenues" element={<RevenuesPage />} />
             <Route path="/expenses" element={<ExpensesPage />} />
