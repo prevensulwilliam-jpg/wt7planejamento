@@ -146,11 +146,12 @@ const STOPWORDS = new Set([
   "coop", "trab", "medico", "servicos", "servico", "pagamento", "pagamentos",
 ]);
 
-// Extrai tokens significativos (>= 3 chars, não stopwords)
+// Extrai tokens significativos (>= 2 chars, não stopwords)
+// 2 chars inclui siglas relevantes: XP, BB, TIM
 function keywords(name: string): string[] {
   return norm(name)
     .split(" ")
-    .filter(w => w.length >= 3 && !STOPWORDS.has(w));
+    .filter(w => w.length >= 2 && !STOPWORDS.has(w));
 }
 
 function deriveInstances({ bills, txs, month, today }: DeriveArgs): BillInstance[] {
