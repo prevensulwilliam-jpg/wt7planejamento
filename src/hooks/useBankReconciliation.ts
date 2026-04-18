@@ -153,10 +153,11 @@ export function useAutoMatchKitnets() {
       if (!kitnetEntries?.length) return { matched: 0 };
 
       // 3. Receitas de kitnets do mês (para manter matched_revenue_id)
+      // Aceita tanto "kitnets" quanto "aluguel_kitnets" (padrão atual do sistema)
       const { data: kitnetRevenues } = await supabase
         .from("revenues")
         .select("id, amount")
-        .eq("source", "kitnets")
+        .in("source", ["kitnets", "aluguel_kitnets"])
         .eq("reference_month", month);
 
       // 4. Já vinculados — evitar duplo match

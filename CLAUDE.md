@@ -1,7 +1,30 @@
 # CLAUDE.md — Projeto WT7
 > Contexto completo para novas sessões Claude Code.
-> Última atualização: 06/04/2026
+> Última atualização: 18/04/2026
 > Gerado a partir do estado real do repositório.
+
+---
+
+## 🚨 REGRA INVIOLÁVEL — Categorias e sources
+
+**NUNCA inventar valores de `category` ou `source` ao inserir receitas ou despesas.**
+Usar APENAS os valores já existentes nas tabelas/dicionários do sistema (mesma nomenclatura usada em `revenues.source`, `revenues.category_id`, `expenses.category_id`). Exemplo real: source de kitnet é `aluguel_kitnets`, não `kitnet_avulso`, `kitnet`, `aluguel` ou qualquer variação.
+
+Antes de gerar qualquer INSERT/UPDATE nessas tabelas, consultar as categorias/sources existentes e reutilizar. Se faltar uma categoria que faz sentido, avisar o William para criar antes — não forjar.
+
+## 🚨 REGRA INVIOLÁVEL — Git automático
+
+**Sempre que alterar arquivo de código, fazer `git add` + `commit` + `pull --rebase` + `push origin main` automaticamente, sem pedir confirmação.** Deploy no Lovable é acionado pelo push — se não empurrar, a mudança não vira produção e o William não consegue testar.
+
+Fluxo padrão após editar:
+```bash
+git add <arquivos-alterados>
+git commit -m "tipo: descrição curta"
+git pull --rebase origin main
+git push origin main
+```
+
+Exceções (continuam valendo): nunca usar `--force`, `--no-verify`, nem destruir histórico. Nunca fazer `git add .` — listar arquivos específicos.
 
 ---
 

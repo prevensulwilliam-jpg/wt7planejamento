@@ -1101,10 +1101,42 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
   const [newExpenseOpen, setNewExpenseOpen] = useState(false);
   const [newRevenueOpen, setNewRevenueOpen] = useState(false);
 
+  // Reconcilia TUDO do mês vigente (kitnets + recategorização por keywords + sync de revenues/expenses faltantes)
+  const handleReconcileAll = async () => {
+    try {
+      toast.loading("🔄 Reconciliando valores do mês...", { id: "recon-all" });
+
+      const kit = await autoMatchKitnetsMutation.mutateAsync(month);
+      const recat = await recategorizeMutation.mutateAsync();
+      const sync = await syncMutation.mutateAsync();
+
+      const kitMatches = kit?.matched ?? 0;
+      const recatTotal = (recat?.revenues ?? 0) + (recat?.expenses ?? 0);
+      const syncTotal = (sync?.revenues ?? 0) + (sync?.expenses ?? 0);
+
+      toast.success(
+        `${kitMatches > 0 ? `🏘️ ${kitMatches} kitnets · ` : ""}` +
+        `${recatTotal > 0 ? `🔁 ${recatTotal} reclassificadas · ` : ""}` +
+        `${syncTotal > 0 ? `🔗 ${syncTotal} sincronizadas · ` : ""}` +
+        `${kitMatches + recatTotal + syncTotal === 0 ? "✅ Tudo já estava em dia" : "concluído"}`,
+        { id: "recon-all", duration: 6000 }
+      );
+    } catch (err: any) {
+      toast.error(`Erro ao reconciliar: ${err?.message ?? "desconhecido"}`, { id: "recon-all" });
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Action buttons */}
-      <div className="flex gap-2 justify-end">
+      <div className="flex gap-2 justify-end flex-wrap">
+        <button
+          onClick={handleReconcileAll}
+          disabled={autoMatchKitnetsMutation.isPending || recategorizeMutation.isPending || syncMutation.isPending}
+          className="text-xs px-4 py-2 rounded-lg font-medium flex items-center gap-1.5 disabled:opacity-50"
+          style={{ background: "rgba(201,168,76,0.18)", color: "#C9A84C", border: "1px solid rgba(201,168,76,0.4)" }}>
+          🔄 Reconciliar valores
+        </button>
         <button onClick={() => setNewRevenueOpen(true)}
           className="text-xs px-4 py-2 rounded-lg font-medium flex items-center gap-1.5"
           style={{ background: "rgba(16,185,129,0.15)", color: "#10B981", border: "1px solid rgba(16,185,129,0.3)" }}>
