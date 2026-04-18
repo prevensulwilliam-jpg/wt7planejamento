@@ -239,9 +239,9 @@ export function useAutoMatchBills() {
       const end = `${month}-${String(lastDay).padStart(2, "0")}`;
       const { data: txs, error: tErr } = await supabase
         .from("bank_transactions" as any)
-        .select("id, description, amount, date")
+        .select("id, description, amount, date, type, category_intent")
         .gte("date", start).lte("date", end)
-        .lt("amount", 0);
+        .eq("type", "debit");
       if (tErr) throw tErr;
       if (!txs?.length) return { matched: 0 };
 
