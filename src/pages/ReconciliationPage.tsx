@@ -16,6 +16,7 @@ import { WtBadge } from "@/components/wt7/WtBadge";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useBankTransactions, useImportTransactions, useMatchTransaction, useIgnoreTransaction, useReconciliationSummary, useAutoMatchKitnets } from "@/hooks/useBankReconciliation";
+import { useReconcileMonth } from "@/hooks/useReconcileMonth";
 import { useUpdateBankAccount, useBankAccounts } from "@/hooks/useFinances";
 import { parseOFX, parseCSV, type ParsedTransaction, type ParseResult } from "@/lib/parseOFX";
 import { categorizeTransaction, CATEGORY_LABELS, INTENT_CONFIG, detectTransactionType } from "@/lib/categorizeTransaction";
@@ -1101,25 +1102,26 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
   const [newExpenseOpen, setNewExpenseOpen] = useState(false);
   const [newRevenueOpen, setNewRevenueOpen] = useState(false);
 
-  // Reconcilia TUDO do mês vigente (kitnets + recategorização por keywords + sync de revenues/expenses faltantes)
+  // Reconciliação unificada (mesmo hook que o banner do /businesses usa)
+  const reconcileMonth = useReconcileMonth();
   const handleReconcileAll = async () => {
     try {
       toast.loading("🔄 Reconciliando valores do mês...", { id: "recon-all" });
+      const r = await reconcileMonth.mutateAsync(month);
 
-      const kit = await autoMatchKitnetsMutation.mutateAsync(month);
-      const recat = await recategorizeMutation.mutateAsync();
-      const sync = await syncMutation.mutateAsync();
+      const bits: string[] = [];
+      if (r.kitnetMatches > 0) bits.push(`🏘️ ${r.kitnetMatches} kitnets`);
+      if (r.revenuesCreated > 0) bits.push(`💰 ${r.revenuesCreated} receitas`);
+      if (r.expensesCreated > 0) bits.push(`💸 ${r.expensesCreated} despesas`);
+      if (r.businessLinked > 0) bits.push(`🎯 ${r.businessLinked} vinculadas a negócios`);
 
-      const kitMatches = kit?.matched ?? 0;
-      const recatTotal = (recat?.revenues ?? 0) + (recat?.expenses ?? 0);
-      const syncTotal = (sync?.revenues ?? 0) + (sync?.expenses ?? 0);
+      const warn = r.kitnetOrphans > 0
+        ? ` · ⚠️ ${r.kitnetOrphans} depósito(s) de kitnet aguardando fechamento do ADM`
+        : "";
 
       toast.success(
-        `${kitMatches > 0 ? `🏘️ ${kitMatches} kitnets · ` : ""}` +
-        `${recatTotal > 0 ? `🔁 ${recatTotal} reclassificadas · ` : ""}` +
-        `${syncTotal > 0 ? `🔗 ${syncTotal} sincronizadas · ` : ""}` +
-        `${kitMatches + recatTotal + syncTotal === 0 ? "✅ Tudo já estava em dia" : "concluído"}`,
-        { id: "recon-all", duration: 6000 }
+        (bits.length ? bits.join(" · ") : "✅ Tudo já estava em dia") + warn,
+        { id: "recon-all", duration: 7000 }
       );
     } catch (err: any) {
       toast.error(`Erro ao reconciliar: ${err?.message ?? "desconhecido"}`, { id: "recon-all" });
@@ -1132,7 +1134,7 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
       <div className="flex gap-2 justify-end flex-wrap">
         <button
           onClick={handleReconcileAll}
-          disabled={autoMatchKitnetsMutation.isPending || recategorizeMutation.isPending || syncMutation.isPending}
+          disabled={reconcileMonth.isPending}
           className="text-xs px-4 py-2 rounded-lg font-medium flex items-center gap-1.5 disabled:opacity-50"
           style={{ background: "rgba(201,168,76,0.18)", color: "#C9A84C", border: "1px solid rgba(201,168,76,0.4)" }}>
           🔄 Reconciliar valores

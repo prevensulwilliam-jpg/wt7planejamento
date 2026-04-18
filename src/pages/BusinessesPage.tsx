@@ -29,7 +29,10 @@ import {
   useMonthRevenueReconciliation,
   type Business,
 } from "@/hooks/useBusinesses";
+import { useReconcileMonth, useKitnetOrphans } from "@/hooks/useReconcileMonth";
+import { suggestBusiness as suggestBusinessShared } from "@/lib/suggestBusiness";
 import { AlertTriangle } from "lucide-react";
+import { toast as sonnerToast } from "sonner";
 
 const inputStyle = { background: "#080C10", border: "1px solid #1A2535", color: "#F0F4F8" };
 
@@ -161,19 +164,9 @@ function BusinessForm({ form, setForm, onSave, onCancel, isPending }: {
   );
 }
 
-// Sugere negócio provável com base em keywords/padrões na descrição
-function suggestBusiness(r: { description: string | null; source: string | null }, businesses: Business[]): Business | null {
-  const txt = `${r.description ?? ""} ${r.source ?? ""}`.toLowerCase();
-  const find = (code: string) => businesses.find(b => b.code === code) ?? null;
-
-  if (/\brwt\s?0\d|repasse\s?rwt|kitnet|aluguel|residencial\s?w/i.test(txt)) return find("KITNETS");
-  if (/prevensul|salario|salário|comiss|adianta|pluxee|reembolso|13o|decimo|décimo|férias|ferias|ppr|thiago\s+sergio\s+maba|thiago\s+maba|claudio\s+sergio\s+maba|cláudio\s+sergio\s+maba|claudio\s+maba|cláudio\s+maba/i.test(txt)) return find("PREVENSUL");
-  if (/\bcw7\b|q7\s?solar|q7energia|energia\s?solar/i.test(txt)) return find("CW7");
-  if (/\bt7\b|t7\s?sales|t7service/i.test(txt)) return find("T7");
-  if (/\bhr7\b|henrique\s?rial|consultoria\s?fitness/i.test(txt)) return find("HR7");
-  if (/promax|mercado\s?livre/i.test(txt)) return find("PROMAX");
-  return find("OUTROS"); // fallback seguro
-}
+// Wrapper do suggestBusiness compartilhado com tipagem Business
+const suggestBusiness = (r: { description: string | null; source: string | null }, businesses: Business[]): Business | null =>
+  suggestBusinessShared(r, businesses);
 
 // ─── Reconciliation Dialog — mostra todas as receitas sem vínculo ────────────
 function ReconciliationDialog({ month, businesses, onClose }: { month: string; businesses: Business[]; onClose: () => void }) {
@@ -512,10 +505,33 @@ export default function BusinessesPage() {
   const { data: businesses = [], isLoading } = useBusinesses();
   const { data: realizedMap = new Map() } = useBusinessRealized(month);
   const { data: recon } = useMonthRevenueReconciliation(month);
+  const { data: kitnetOrphans } = useKitnetOrphans(month);
   const createBiz = useCreateBusiness();
   const updateBiz = useUpdateBusiness();
   const deleteBiz = useDeleteBusiness();
+  const reconcileMonth = useReconcileMonth();
   const { toast } = useToast();
+
+  // Roda pipeline completo de reconciliação (mesmo hook que o /reconciliation usa)
+  const handleReconcileMonth = async () => {
+    try {
+      sonnerToast.loading("🔄 Reconciliando valores do mês...", { id: "recon-biz" });
+      const r = await reconcileMonth.mutateAsync(month);
+      const bits: string[] = [];
+      if (r.kitnetMatches > 0) bits.push(`🏘️ ${r.kitnetMatches} kitnets`);
+      if (r.revenuesCreated > 0) bits.push(`💰 ${r.revenuesCreated} receitas`);
+      if (r.businessLinked > 0) bits.push(`🎯 ${r.businessLinked} vinculadas`);
+      const warn = r.kitnetOrphans > 0
+        ? ` · ⚠️ ${r.kitnetOrphans} depósito(s) kitnet aguardando fechamento`
+        : "";
+      sonnerToast.success(
+        (bits.length ? bits.join(" · ") : "✅ Tudo em dia") + warn,
+        { id: "recon-biz", duration: 7000 }
+      );
+    } catch (err: any) {
+      sonnerToast.error(`Erro: ${err?.message ?? "desconhecido"}`, { id: "recon-biz" });
+    }
+  };
 
   // Lookup de receita do mês: valor + fonte (auto/manual/kitnet)
   const revenueByBiz = useMemo(() => {
@@ -723,7 +739,7 @@ export default function BusinessesPage() {
           <KpiCard label="Meta 12 meses (anual)" value={totals.target12m} color="gold" />
         </div>
 
-        {/* Banner de reconciliação — receitas sem vínculo */}
+        {/* Banner de reconciliação — receitas sem vínculo (Gap 1) */}
         {recon && recon.unlinkedCount > 0 && (
           <PremiumCard className="p-3" style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.4)" }}>
             <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -734,14 +750,42 @@ export default function BusinessesPage() {
                   <strong className="font-mono" style={{ color: "#F59E0B" }}>{formatCurrency(recon.unlinked)}</strong> não está somando em nenhum card.
                 </span>
               </div>
-              <button onClick={() => setReconOpen(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ background: "rgba(245,158,11,0.2)", color: "#F59E0B", border: "1px solid rgba(245,158,11,0.5)" }}>
-                Reconciliar agora →
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleReconcileMonth}
+                  disabled={reconcileMonth.isPending}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50"
+                  style={{ background: "rgba(201,168,76,0.2)", color: "#C9A84C", border: "1px solid rgba(201,168,76,0.5)" }}
+                >
+                  🔄 Reconciliar automático
+                </button>
+                <button onClick={() => setReconOpen(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ background: "rgba(245,158,11,0.2)", color: "#F59E0B", border: "1px solid rgba(245,158,11,0.5)" }}>
+                  Vincular manual →
+                </button>
+              </div>
             </div>
             <div className="mt-2 grid grid-cols-3 gap-3 text-xs">
               <div><span style={{ color: "#64748B" }}>Total do mês</span> <span className="font-mono" style={{ color: "#F0F4F8" }}>{formatCurrency(recon.total)}</span></div>
               <div><span style={{ color: "#64748B" }}>Já vinculado</span> <span className="font-mono" style={{ color: "#10B981" }}>{formatCurrency(recon.linked)}</span></div>
               <div><span style={{ color: "#64748B" }}>Gap</span> <span className="font-mono" style={{ color: "#F59E0B" }}>{formatCurrency(recon.unlinked)}</span></div>
+            </div>
+          </PremiumCard>
+        )}
+
+        {/* Banner de Kitnets sem fechamento — Gap 2 silencioso */}
+        {kitnetOrphans && kitnetOrphans.count > 0 && (
+          <PremiumCard className="p-3" style={{ background: "rgba(59,130,246,0.08)", border: "1px solid rgba(59,130,246,0.4)" }}>
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4" style={{ color: "#60A5FA" }} />
+                <span className="text-sm" style={{ color: "#F0F4F8" }}>
+                  <strong style={{ color: "#60A5FA" }}>{kitnetOrphans.count}</strong> depósito{kitnetOrphans.count !== 1 ? "s" : ""} de kitnet aguardando fechamento do ADM —{" "}
+                  <strong className="font-mono" style={{ color: "#60A5FA" }}>{formatCurrency(kitnetOrphans.total)}</strong> não entra no Realizado até o fechamento.
+                </span>
+              </div>
+              <a href={`/kitnets?tab=entries&month=${month}`} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ background: "rgba(59,130,246,0.2)", color: "#60A5FA", border: "1px solid rgba(59,130,246,0.5)" }}>
+                Ir para fechamentos →
+              </a>
             </div>
           </PremiumCard>
         )}
