@@ -283,14 +283,45 @@ export default function RecurringBillsPage() {
 
                     {/* Valor */}
                     <div className="text-right">
-                      <p className="font-mono font-bold text-sm" style={{ color: isPaid ? "#10B981" : "#F0F4F8" }}>
-                        {formatCurrency(isPaid ? inst.actual_amount ?? inst.expected_amount : inst.expected_amount)}
-                      </p>
-                      {isPaid && inst.paid_at && (
-                        <p className="text-[10px]" style={{ color: "#4A5568" }}>
-                          Pago {inst.paid_at.split("-")[2]}/{inst.paid_at.split("-")[1]}
-                        </p>
-                      )}
+                      {(() => {
+                        const expected = inst.expected_amount;
+                        const actual = inst.actual_amount;
+                        const hasDiff = isPaid && actual != null && Math.abs(actual - expected) >= 0.01;
+                        const diff = hasDiff ? (actual as number) - expected : 0;
+                        const diffPct = hasDiff && expected > 0 ? (diff / expected) * 100 : 0;
+
+                        if (hasDiff) {
+                          return (
+                            <>
+                              <p className="font-mono font-bold text-sm" style={{ color: "#10B981" }}>
+                                {formatCurrency(actual as number)}
+                              </p>
+                              <p className="text-[10px] font-mono" style={{ color: "#64748B" }}>
+                                esperado: <span className="line-through">{formatCurrency(expected)}</span>
+                              </p>
+                              <p
+                                className="text-[10px] font-mono font-semibold"
+                                style={{ color: diff < 0 ? "#10B981" : "#EF4444" }}
+                              >
+                                {diff > 0 ? "+" : ""}{formatCurrency(diff)} ({diffPct > 0 ? "+" : ""}{diffPct.toFixed(1)}%)
+                              </p>
+                            </>
+                          );
+                        }
+
+                        return (
+                          <>
+                            <p className="font-mono font-bold text-sm" style={{ color: isPaid ? "#10B981" : "#F0F4F8" }}>
+                              {formatCurrency(isPaid ? actual ?? expected : expected)}
+                            </p>
+                            {isPaid && inst.paid_at && (
+                              <p className="text-[10px]" style={{ color: "#4A5568" }}>
+                                Pago {inst.paid_at.split("-")[2]}/{inst.paid_at.split("-")[1]}
+                              </p>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
 
                     {/* Status derivado do extrato */}
