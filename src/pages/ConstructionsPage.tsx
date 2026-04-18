@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
 import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
 import { KpiCard } from "@/components/wt7/KpiCard";
 import { GoldButton } from "@/components/wt7/GoldButton";
@@ -71,9 +72,27 @@ function assetAddress(asset: any) {
   return parts.length > 0 ? parts.join(", ") : null;
 }
 
+// ─── Stage helpers ────────────────────────────────────────────────────────────
+
+/**
+ * Retorna o percentual efetivo de conclusão de uma etapa:
+ * - Se pct_complete_auto = true (padrão): calcula spent/budget × 100 (clamp 0-100)
+ * - Se pct_complete_auto = false: usa o valor manual em pct_complete
+ * - Sem budget → sempre manual (auto não faz sentido)
+ */
+function getStagePct(stage: any, expenses: any[]): number {
+  const budget = Number(stage.budget_estimated ?? 0);
+  const auto = stage.pct_complete_auto ?? true;
+  if (!auto || budget <= 0) return Math.round(Number(stage.pct_complete ?? 0));
+  const spent = (expenses ?? [])
+    .filter((e: any) => e.stage_id === stage.id)
+    .reduce((acc: number, e: any) => acc + Number(e.total_amount ?? 0), 0);
+  return Math.min(100, Math.max(0, Math.round((spent / budget) * 100)));
+}
+
 // ─── Stage Form (nível de módulo — evita remount) ────────────────────────────
 
-type StageFormData = { name: string; status: string; pct_complete: number; budget_estimated: number; start_date: string; end_date: string; notes: string };
+type StageFormData = { name: string; status: string; pct_complete: number; pct_complete_auto: boolean; budget_estimated: number; start_date: string; end_date: string; notes: string };
 
 function StageForm({ form, setForm, onSave, onCancel, isPending }: {
   form: StageFormData;
@@ -107,10 +126,27 @@ function StageForm({ form, setForm, onSave, onCancel, isPending }: {
           </Select>
         </div>
         <div>
-          <Label style={{ color: '#94A3B8' }}>Conclusão: {Math.round(form.pct_complete)}%</Label>
-          <div className="pt-3">
-            <Slider min={0} max={100} step={5} value={[form.pct_complete]} onValueChange={([v]) => setForm({ ...form, pct_complete: v })} />
+          <div className="flex items-center justify-between">
+            <Label style={{ color: '#94A3B8' }}>
+              Conclusão{form.pct_complete_auto ? ' (auto)' : ': ' + Math.round(form.pct_complete) + '%'}
+            </Label>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs" style={{ color: form.pct_complete_auto ? '#C9A84C' : '#64748B' }}>auto</span>
+              <Switch
+                checked={form.pct_complete_auto}
+                onCheckedChange={(v) => setForm({ ...form, pct_complete_auto: v })}
+              />
+            </div>
           </div>
+          {form.pct_complete_auto ? (
+            <p className="text-xs pt-2" style={{ color: '#64748B' }}>
+              Calculado automaticamente por gasto ÷ orçamento.
+            </p>
+          ) : (
+            <div className="pt-3">
+              <Slider min={0} max={100} step={5} value={[form.pct_complete]} onValueChange={([v]) => setForm({ ...form, pct_complete: v })} />
+            </div>
+          )}
         </div>
       </div>
       <div>
@@ -151,7 +187,7 @@ function StagesModal({ construction, onClose }: { construction: any; onClose: ()
 
   const [addOpen, setAddOpen]   = useState(false);
   const [editStage, setEditStage] = useState<any>(null);
-  const [form, setForm] = useState({ name: "", status: "pendente", pct_complete: 0, budget_estimated: 0, start_date: "", end_date: "", notes: "" });
+  const [form, setForm] = useState({ name: "", status: "pendente", pct_complete: 0, pct_complete_auto: true, budget_estimated: 0, start_date: "", end_date: "", notes: "" });
   const [localOrder, setLocalOrder] = useState<string[]>([]);
   const dragId   = useRef<string | null>(null);
   const overIdRef= useRef<string | null>(null);
@@ -204,7 +240,7 @@ function StagesModal({ construction, onClose }: { construction: any; onClose: ()
     catch { toast({ title: "Erro ao reorganizar", variant: "destructive" }); }
   };
 
-  const resetForm = () => setForm({ name: "", status: "pendente", pct_complete: 0, budget_estimated: 0, start_date: "", end_date: "", notes: "" });
+  const resetForm = () => setForm({ name: "", status: "pendente", pct_complete: 0, pct_complete_auto: true, budget_estimated: 0, start_date: "", end_date: "", notes: "" });
 
   const handleAdd = async () => {
     if (!form.name) return;
@@ -238,11 +274,11 @@ function StagesModal({ construction, onClose }: { construction: any; onClose: ()
   };
 
   const openEdit = (s: any) => {
-    setForm({ name: s.name, status: s.status, pct_complete: s.pct_complete ?? 0, budget_estimated: s.budget_estimated ?? 0, start_date: s.start_date ?? "", end_date: s.end_date ?? "", notes: s.notes ?? "" });
+    setForm({ name: s.name, status: s.status, pct_complete: s.pct_complete ?? 0, pct_complete_auto: s.pct_complete_auto ?? true, budget_estimated: s.budget_estimated ?? 0, start_date: s.start_date ?? "", end_date: s.end_date ?? "", notes: s.notes ?? "" });
     setEditStage(s);
   };
 
-  const overallPct = stages.length > 0 ? stages.reduce((acc: number, s: any) => acc + (s.pct_complete ?? 0), 0) / stages.length : 0;
+  const overallPct = stages.length > 0 ? stages.reduce((acc: number, s: any) => acc + getStagePct(s, expenses), 0) / stages.length : 0;
 
   return (
     <Dialog open onOpenChange={o => !o && onClose()}>
@@ -299,9 +335,20 @@ function StagesModal({ construction, onClose }: { construction: any; onClose: ()
                         <span style={{ color: '#1A2535', fontSize: 12, userSelect: 'none' }}>⠿</span>
                         <span style={{ color: st.color }}>{st.icon}</span>
                         <span className="font-medium text-sm" style={{ color: '#F0F4F8' }}>{s.name}</span>
-                        <span className="text-xs font-mono ml-auto" style={{ color: '#C9A84C' }}>{s.pct_complete ?? 0}%</span>
+                        {(() => {
+                          const pct = getStagePct(s, expenses);
+                          const isManual = s.pct_complete_auto === false;
+                          return (
+                            <span className="text-xs font-mono ml-auto flex items-center gap-1" style={{ color: '#C9A84C' }}>
+                              {isManual && (
+                                <span className="text-[9px] px-1 rounded" style={{ background: 'rgba(167,139,250,0.15)', color: '#A78BFA', border: '1px solid rgba(167,139,250,0.3)' }}>manual</span>
+                              )}
+                              {pct}%
+                            </span>
+                          );
+                        })()}
                       </div>
-                      <Progress value={s.pct_complete ?? 0} className="h-1 mt-1.5" />
+                      <Progress value={getStagePct(s, expenses)} className="h-1 mt-1.5" />
                       {(s.budget_estimated ?? 0) > 0 && (() => {
                         const est = s.budget_estimated ?? 0;
                         const spent = (expenses ?? []).filter((e: any) => e.stage_id === s.id).reduce((acc: number, e: any) => acc + (e.total_amount ?? 0), 0);
