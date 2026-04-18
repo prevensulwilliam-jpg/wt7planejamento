@@ -545,10 +545,14 @@ function ConciliacaoDialog({ open, onClose, month }: { open: boolean; onClose: (
                         <SelectTrigger className="w-full text-xs bg-background border-border text-muted-foreground h-8 border-dashed">
                           <SelectValue placeholder="+ Adicionar transação do extrato..." />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className="max-h-[60vh] min-w-[480px]">
                           {availableTx.map((t: any) => (
-                            <SelectItem key={t.id} value={t.id}>
-                              {t.date ? formatDate(t.date) : "?"} · {formatCurrency(t.amount)} · {t.description?.slice(0, 40)}
+                            <SelectItem key={t.id} value={t.id} className="py-2">
+                              <div className="flex items-center gap-3 w-full">
+                                <span className="text-xs text-muted-foreground whitespace-nowrap w-20">{t.date ? formatDate(t.date) : "?"}</span>
+                                <span className="font-mono text-xs font-semibold whitespace-nowrap w-24 text-right" style={{ color: '#10B981' }}>{formatCurrency(t.amount)}</span>
+                                <span className="text-xs text-muted-foreground flex-1 truncate">{t.description}</span>
+                              </div>
                             </SelectItem>
                           ))}
                         </SelectContent>
