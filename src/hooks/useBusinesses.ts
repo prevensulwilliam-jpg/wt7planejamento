@@ -191,6 +191,28 @@ export function useBusinessBreakdown(businessId: string | null, businessCode: st
   });
 }
 
+// Totais do mês: todas as receitas + só as vinculadas — pra calcular gap
+export function useMonthRevenueReconciliation(month: string) {
+  return useQuery({
+    queryKey: ["revenues_reconciliation", month],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("revenues")
+        .select("amount, business_id")
+        .eq("reference_month", month);
+      if (error) throw error;
+      let total = 0, linked = 0, unlinked = 0, unlinkedCount = 0;
+      (data ?? []).forEach((r: any) => {
+        const a = Number(r.amount ?? 0);
+        total += a;
+        if (r.business_id) linked += a;
+        else { unlinked += a; unlinkedCount++; }
+      });
+      return { total, linked, unlinked, unlinkedCount };
+    },
+  });
+}
+
 // Receitas do mês SEM negócio vinculado — pra oferecer reconciliação rápida
 export function useUnlinkedRevenuesForMonth(month: string) {
   return useQuery({

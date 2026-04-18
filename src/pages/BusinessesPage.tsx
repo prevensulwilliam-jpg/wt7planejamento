@@ -26,8 +26,10 @@ import {
   useBusinessBreakdown,
   useUnlinkedRevenuesForMonth,
   useLinkRevenueToBusiness,
+  useMonthRevenueReconciliation,
   type Business,
 } from "@/hooks/useBusinesses";
+import { AlertTriangle } from "lucide-react";
 
 const inputStyle = { background: "#080C10", border: "1px solid #1A2535", color: "#F0F4F8" };
 
@@ -156,6 +158,73 @@ function BusinessForm({ form, setForm, onSave, onCancel, isPending }: {
         <GoldButton onClick={onSave} disabled={isPending}>Salvar</GoldButton>
       </div>
     </div>
+  );
+}
+
+// ─── Reconciliation Dialog — mostra todas as receitas sem vínculo ────────────
+function ReconciliationDialog({ month, businesses, onClose }: { month: string; businesses: Business[]; onClose: () => void }) {
+  const { data: unlinked = [], isLoading } = useUnlinkedRevenuesForMonth(month);
+  const linkRev = useLinkRevenueToBusiness();
+  const { toast } = useToast();
+
+  const link = async (revenueId: string, businessId: string) => {
+    try {
+      await linkRev.mutateAsync({ revenueId, businessId });
+      toast({ title: "Vinculado" });
+    } catch { toast({ title: "Erro", variant: "destructive" }); }
+  };
+
+  const total = unlinked.reduce((s, r) => s + Number(r.amount), 0);
+  const activeBizs = businesses.filter(b => b.status !== "encerrado");
+
+  return (
+    <Dialog open onOpenChange={o => !o && onClose()}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" style={{ background: "#0D1318", border: "1px solid #1A2535" }}>
+        <DialogHeader>
+          <DialogTitle style={{ color: "#F0F4F8" }}>
+            <AlertTriangle className="inline w-4 h-4 mr-2" style={{ color: "#F59E0B" }} />
+            Reconciliar receitas sem vínculo — {month}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="flex items-baseline justify-between border-b pb-2" style={{ borderColor: "#1A2535" }}>
+          <span className="text-sm" style={{ color: "#94A3B8" }}>{unlinked.length} receita{unlinked.length !== 1 ? "s" : ""} sem negócio</span>
+          <span className="text-lg font-bold font-mono" style={{ color: "#F59E0B" }}>{formatCurrency(total)}</span>
+        </div>
+
+        {isLoading ? (
+          <Skeleton className="h-48 rounded-xl" />
+        ) : unlinked.length === 0 ? (
+          <p className="text-center py-8 text-sm" style={{ color: "#10B981" }}>
+            ✓ Todas as receitas do mês estão vinculadas a algum negócio.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {unlinked.map(r => (
+              <div key={r.id} className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg" style={{ background: "#080C10", border: "1px solid #1A2535" }}>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate" style={{ color: "#F0F4F8" }}>
+                    {r.description ?? r.source ?? "(sem descrição)"}
+                  </p>
+                  <p className="text-[10px] mt-0.5" style={{ color: "#64748B" }}>
+                    {r.received_at ?? "—"} · fonte: {r.source ?? "—"}
+                  </p>
+                </div>
+                <span className="font-mono text-sm shrink-0" style={{ color: "#C9A84C" }}>{formatCurrency(Number(r.amount))}</span>
+                <Select value="" onValueChange={(bid) => link(r.id, bid)}>
+                  <SelectTrigger className="w-48 shrink-0" style={inputStyle}><SelectValue placeholder="Vincular a..." /></SelectTrigger>
+                  <SelectContent style={{ background: "#0D1318", border: "1px solid #1A2535" }}>
+                    {activeBizs.map(b => (
+                      <SelectItem key={b.id} value={b.id}>{b.icon} {b.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ))}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -405,10 +474,12 @@ export default function BusinessesPage() {
   const [deleting, setDeleting] = useState<Business | null>(null);
   const [revenueTarget, setRevenueTarget] = useState<Business | null>(null);
   const [breakdownTarget, setBreakdownTarget] = useState<Business | null>(null);
+  const [reconOpen, setReconOpen] = useState(false);
   const [form, setForm] = useState<FormData>(emptyForm());
 
   const { data: businesses = [], isLoading } = useBusinesses();
   const { data: realizedMap = new Map() } = useBusinessRealized(month);
+  const { data: recon } = useMonthRevenueReconciliation(month);
   const createBiz = useCreateBusiness();
   const updateBiz = useUpdateBusiness();
   const deleteBiz = useDeleteBusiness();
@@ -620,6 +691,29 @@ export default function BusinessesPage() {
           <KpiCard label="Meta 12 meses (anual)" value={totals.target12m} color="gold" />
         </div>
 
+        {/* Banner de reconciliação — receitas sem vínculo */}
+        {recon && recon.unlinkedCount > 0 && (
+          <PremiumCard className="p-3" style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.4)" }}>
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4" style={{ color: "#F59E0B" }} />
+                <span className="text-sm" style={{ color: "#F0F4F8" }}>
+                  <strong style={{ color: "#F59E0B" }}>{recon.unlinkedCount}</strong> receita{recon.unlinkedCount !== 1 ? "s" : ""} sem negócio vinculado —{" "}
+                  <strong className="font-mono" style={{ color: "#F59E0B" }}>{formatCurrency(recon.unlinked)}</strong> não está somando em nenhum card.
+                </span>
+              </div>
+              <button onClick={() => setReconOpen(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ background: "rgba(245,158,11,0.2)", color: "#F59E0B", border: "1px solid rgba(245,158,11,0.5)" }}>
+                Reconciliar agora →
+              </button>
+            </div>
+            <div className="mt-2 grid grid-cols-3 gap-3 text-xs">
+              <div><span style={{ color: "#64748B" }}>Total do mês</span> <span className="font-mono" style={{ color: "#F0F4F8" }}>{formatCurrency(recon.total)}</span></div>
+              <div><span style={{ color: "#64748B" }}>Já vinculado</span> <span className="font-mono" style={{ color: "#10B981" }}>{formatCurrency(recon.linked)}</span></div>
+              <div><span style={{ color: "#64748B" }}>Gap</span> <span className="font-mono" style={{ color: "#F59E0B" }}>{formatCurrency(recon.unlinked)}</span></div>
+            </div>
+          </PremiumCard>
+        )}
+
         {/* Progresso consolidado */}
         <PremiumCard className="p-4">
           <div className="flex justify-between items-baseline mb-2">
@@ -695,6 +789,11 @@ export default function BusinessesPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+      )}
+
+      {/* Reconciliation dialog */}
+      {reconOpen && (
+        <ReconciliationDialog month={month} businesses={businesses} onClose={() => setReconOpen(false)} />
       )}
 
       {/* Breakdown modal */}
