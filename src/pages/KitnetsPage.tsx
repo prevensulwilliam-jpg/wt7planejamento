@@ -539,24 +539,32 @@ function ConciliacaoDialog({ open, onClose, month }: { open: boolean; onClose: (
                       <p className="text-xs italic" style={{ color: '#2D3748' }}>Nenhuma transação selecionada</p>
                     )}
 
-                    {/* Dropdown para adicionar transação */}
+                    {/* Lista inline de transações disponíveis (clicar = adicionar) */}
                     {availableTx.length > 0 && (
-                      <Select value="" onValueChange={v => { if (v) addTx(entry.id, v); }}>
-                        <SelectTrigger className="w-full text-xs bg-background border-border text-muted-foreground h-8 border-dashed">
-                          <SelectValue placeholder="+ Adicionar transação do extrato..." />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-[60vh] min-w-[480px]">
-                          {availableTx.map((t: any) => (
-                            <SelectItem key={t.id} value={t.id} className="py-2">
-                              <div className="flex items-center gap-3 w-full">
+                      <details className="group" open={txIds.length === 0}>
+                        <summary className="cursor-pointer text-xs px-2 py-1.5 rounded-md border border-dashed hover:bg-muted/20 transition-colors select-none" style={{ borderColor: '#2D3748', color: '#9CA3AF' }}>
+                          + Adicionar transação do extrato ({availableTx.length} disponíveis)
+                        </summary>
+                        <div className="mt-2 space-y-1 max-h-64 overflow-y-auto pr-1" style={{ scrollbarWidth: 'thin' }}>
+                          {availableTx.map((t: any) => {
+                            const matchesExact = Math.abs(Number(t.amount) - expected) < 0.02;
+                            return (
+                              <button
+                                key={t.id}
+                                type="button"
+                                onClick={() => addTx(entry.id, t.id)}
+                                className="w-full flex items-center gap-3 px-2 py-1.5 rounded-md text-left transition-colors hover:bg-muted/30"
+                                style={{ background: matchesExact ? 'rgba(16,185,129,0.08)' : '#0D1117', border: `1px solid ${matchesExact ? 'rgba(16,185,129,0.3)' : '#1C2333'}` }}
+                              >
                                 <span className="text-xs text-muted-foreground whitespace-nowrap w-20">{t.date ? formatDate(t.date) : "?"}</span>
                                 <span className="font-mono text-xs font-semibold whitespace-nowrap w-24 text-right" style={{ color: '#10B981' }}>{formatCurrency(t.amount)}</span>
                                 <span className="text-xs text-muted-foreground flex-1 truncate">{t.description}</span>
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                                {matchesExact && <span className="text-[10px] font-bold" style={{ color: '#10B981' }}>✓ EXATO</span>}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </details>
                     )}
 
                     {/* Barra de soma */}
