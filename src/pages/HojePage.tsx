@@ -5,9 +5,11 @@ import { PremiumCard } from "@/components/wt7/PremiumCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAutonomyIndex, useAutonomyHistory } from "@/hooks/useAutonomyIndex";
 import { useKitnetOrphans } from "@/hooks/useReconcileMonth";
-import { useMonthRevenueReconciliation } from "@/hooks/useBusinesses";
+import { useMonthRevenueReconciliation, useBusinesses, useBusinessRealized } from "@/hooks/useBusinesses";
 import { formatCurrency, getCurrentMonth, formatMonth } from "@/lib/formatters";
-import { Compass, TrendingUp, AlertTriangle, Target, Rocket, Home, Flame, ChevronRight } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { Compass, TrendingUp, AlertTriangle, Target, Rocket, Home, Flame, ChevronRight, Bot, Loader2 } from "lucide-react";
 
 export default function HojePage() {
   const [month, setMonth] = useState(getCurrentMonth());
@@ -17,6 +19,43 @@ export default function HojePage() {
   const { data: history = [], isLoading: histLoading } = useAutonomyHistory(12, month);
   const { data: kitnetOrphans } = useKitnetOrphans(month);
   const { data: reconc } = useMonthRevenueReconciliation(month);
+  const { data: businesses = [] } = useBusinesses();
+  const { data: realizedMap } = useBusinessRealized(month);
+
+  const [analysis, setAnalysis] = useState<string | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const { toast } = useToast();
+
+  const runNavalAnalysis = async () => {
+    if (!snap) return;
+    setAnalyzing(true);
+    setAnalysis(null);
+    try {
+      const bizPayload = (businesses as any[]).map((b: any) => ({
+        code: b.code,
+        name: b.name,
+        category: b.category,
+        monthly_target: Number(b.monthly_target ?? 0),
+        realized: Number(realizedMap?.get(b.id)?.amount ?? 0),
+      }));
+
+      const { data, error } = await supabase.functions.invoke("wisely-ai", {
+        body: {
+          action: "analyze-autonomy",
+          snapshot: snap,
+          history,
+          businesses: bizPayload,
+        },
+      });
+      if (error) throw error;
+      if (!data?.ok) throw new Error(data?.error ?? "Naval não retornou análise");
+      setAnalysis(data.analysis);
+    } catch (e: any) {
+      toast({ title: "Erro ao consultar Naval", description: e.message, variant: "destructive" });
+    } finally {
+      setAnalyzing(false);
+    }
+  };
 
   // Meta de autonomia do William: 50% até 2028
   const TARGET_AUTONOMY = 50;
@@ -218,6 +257,54 @@ export default function HojePage() {
                 </div>
               </PremiumCard>
             )}
+
+            {/* ═══ BLOCO 3.5: Leitura Estratégica do Naval ═══ */}
+            <PremiumCard className="p-4" glowColor={analysis ? "#A78BFA" : undefined}>
+              <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
+                <p className="text-xs uppercase tracking-widest font-mono" style={{ color: "#4A5568" }}>
+                  <Bot className="inline w-3.5 h-3.5 mr-1" style={{ color: "#A78BFA" }} />
+                  Leitura estratégica do Naval
+                </p>
+                <button
+                  onClick={runNavalAnalysis}
+                  disabled={analyzing || !snap}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
+                  style={{
+                    background: "rgba(167,139,250,0.15)",
+                    color: "#A78BFA",
+                    border: "1px solid rgba(167,139,250,0.4)",
+                  }}
+                >
+                  {analyzing ? (
+                    <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Naval pensando...</>
+                  ) : analysis ? (
+                    <><Bot className="w-3.5 h-3.5" /> Regenerar análise</>
+                  ) : (
+                    <><Bot className="w-3.5 h-3.5" /> Pedir análise deste mês</>
+                  )}
+                </button>
+              </div>
+              {analysis ? (
+                <div
+                  className="text-sm leading-relaxed mt-3 p-3 rounded-lg"
+                  style={{
+                    color: "#E8EEF5",
+                    background: "rgba(167,139,250,0.05)",
+                    border: "1px solid rgba(167,139,250,0.2)",
+                    whiteSpace: "pre-wrap",
+                  }}
+                  dangerouslySetInnerHTML={{
+                    __html: analysis
+                      .replace(/\*\*(.+?)\*\*/g, '<strong style="color:#E8C97A">$1</strong>')
+                      .replace(/\n/g, "<br>"),
+                  }}
+                />
+              ) : (
+                <p className="text-xs mt-2" style={{ color: "#64748B" }}>
+                  Clique pra receber diagnóstico cirúrgico do mês com base nos seus negócios cadastrados, tendência 12m e excedente disponível pra reinvestir.
+                </p>
+              )}
+            </PremiumCard>
 
             {/* ═══ BLOCO 4: Evolução 12m ═══ */}
             <PremiumCard className="p-4">

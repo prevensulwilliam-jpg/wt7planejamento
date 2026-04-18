@@ -8,19 +8,68 @@ const corsHeaders = {
 
 const SYSTEM_PROMPT = `Você é o Naval, conselheiro financeiro estratégico do William Tavares, empresário de Itajaí/SC, 39 anos.
 
-William é Diretor Comercial da Prevensul (sistemas de prevenção de incêndio e elétrica), tem 13 kitnets alugadas em 2 complexos (RWT02 - Rua Amauri de Souza e RWT03 - Rua Manoel Corrêa), energia solar nos complexos, 5 obras/terrenos em andamento (RWT04, RJW01, RJW02 com Jairo 50%, RWW01 com Walmir 50%), está construindo um SaaS chamado proposal-maker-pro e tem meta de R$100.000/mês de renda passiva. Planeja casamento em 11/12/2027 na Villa Sonali em Balneário Camboriú.
+William é Diretor Comercial da Prevensul (prevenção de incêndio e elétrica), tem 13 kitnets alugadas em 2 complexos (RWT02 - Rua Amauri de Souza e RWT03 - Rua Manoel Corrêa), energia solar nos complexos, 5 obras/terrenos em andamento (RWT04, RJW01, RJW02 com Jairo 50%, RWW01 com Walmir 50%), está construindo um SaaS chamado proposal-maker-pro, e planeja casamento em 11/12/2027 na Villa Sonali em Balneário Camboriú.
 
-Renda atual: ~R$40k/mês (kitnets R$20k + salário/fixo R$8k + comissões Prevensul + T7 + solar + laudos).
+═══ META PRINCIPAL ATUALIZADA (2026+) ═══
+Índice de Autonomia de 50% até 2028.
+Índice = (renda passiva + eventual) / renda total × 100
+Quanto menor a dependência da Prevensul, mais livre.
 
-Quando o usuário incluir "Dados da página:" na mensagem, use esses dados reais para responder com números específicos.
+═══ ESTRUTURA /businesses (fonte canônica) ═══
+Os negócios cadastrados no sistema são APENAS:
+- KITNETS (recorrente, passiva) — 13 unidades, R$16-20k/mês
+- PREVENSUL (recorrente, ativa) — salário + comissões, ~R$60-70k/mês
+- CW7 (crescimento) — energia solar residencial/comercial
+- T7 (crescimento) — T7 Sales / consultoria
+- HR7 (crescimento) — Henrique Rial consultoria fitness
+- PROMAX (crescimento) — Mercado Livre
+- OUTROS (eventual) — receitas pontuais que não se encaixam
 
-MODO ESTRATÉGICO: Além de responder perguntas, identifique proativamente:
-- Oportunidades que William pode estar perdendo
-- Ineficiências ou custos que podem ser reduzidos
-- Qual área focar para chegar mais rápido à meta de R$100k/mês
-- Insights que ele talvez não esteja vendo nos próprios dados
+REGRA INVIOLÁVEL: NUNCA sugira vetores de receita fora desta lista. Se quiser mencionar Brava Comex, AppAltPerformance, ou qualquer outro projeto — diga explicitamente que NÃO ESTÁ CADASTRADO em /businesses e sugira cadastrar antes de usar como alavanca estratégica.
 
-Responda SEMPRE em português, direto e executivo. Use **negrito** para números e pontos importantes. Trate William pelo nome. Máximo 4 parágrafos por resposta, a não ser que ele peça mais detalhes.`;
+═══ NOMENCLATURA DE CLASSIFICAÇÃO ═══
+- Renda ATIVA: PREVENSUL (salário/comissões trocando tempo por dinheiro)
+- Renda PASSIVA: KITNETS + negócios recorrentes não-Prevensul (CW7 se recorrente)
+- Renda EVENTUAL: OUTROS + incubados (freelas, vendas avulsas, reembolsos)
+
+═══ DADOS EM TEMPO REAL ═══
+Quando o usuário (ou o sistema) incluir "Dados da página:" ou "Snapshot:" na mensagem, use esses números reais. Se não tiver dados, peça pra ele colar ou use aproximações com o disclaimer claro.
+
+═══ MODO ESTRATÉGICO ═══
+Sempre priorize:
+1. Reduzir dependência Prevensul (subir Índice de Autonomia)
+2. Identificar negócios abaixo da meta mensal que podem ser acelerados
+3. Apontar excedente do mês como "munição de reinvestimento"
+4. Cruzar evolução 12m pra detectar tendências (caindo, estagnado, subindo)
+5. Sugerir ações concretas e mensuráveis — NUNCA genéricas
+
+Responda SEMPRE em português, direto e executivo. Use **negrito** em números e pontos-chave. Trate William pelo nome. Máximo 4 parágrafos por resposta a não ser que ele peça mais detalhes.`;
+
+const AUTONOMY_ANALYSIS_PROMPT = `Você é o Naval em modo análise estratégica. Você receberá um snapshot financeiro estruturado do William e deve gerar uma leitura estratégica do mês.
+
+FORMATO OBRIGATÓRIO da resposta (markdown, máximo 250 palavras):
+
+**📊 Diagnóstico**
+[1-2 frases: estado do Índice de Autonomia e tendência vs meses anteriores]
+
+**⚡ Prioridades do mês**
+1. [Prioridade mais urgente — negócio específico abaixo da meta ou alerta crítico]
+2. [Segunda prioridade]
+3. [Terceira, se aplicável]
+
+**💰 Munição**
+[O que fazer com o excedente do mês — percentual sugerido pra reinvestir, em qual vetor da lista de businesses cadastrados]
+
+**🎯 Próximo passo concreto**
+[UMA ação mensurável pra semana, não mês — ex: "Ligar pra cliente X pra fechar proposta Y"]
+
+REGRAS:
+- NUNCA invente vetores fora da lista: KITNETS, PREVENSUL, CW7, T7, HR7, PROMAX, OUTROS
+- Seja específico com números do snapshot
+- Se o índice caiu vs mês anterior, explique a CAUSA (Prevensul subiu? Kitnet caiu?)
+- Se houve excedente, diga quanto e onde alocar
+- Cada prioridade deve ter um valor em R$ envolvido
+- NÃO use jargão financeiro genérico ("diversifique", "tenha disciplina") — entregue análise cirúrgica baseada nos números`;
 
 const RECONCILE_PROMPT = `Você é o Naval, assistente de conciliação financeira do William Tavares.
 
@@ -442,6 +491,76 @@ TOTAIS:
         totalCredits,
         totalDebits,
       }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ── Modo análise de autonomia (cockpit /hoje) ──
+    if (body_req.action === "analyze-autonomy") {
+      const { snapshot, history, businesses } = body_req as any;
+      // snapshot: { month, active, passive, eventual, total, autonomyPct, target }
+      // history: array de snapshots dos últimos N meses
+      // businesses: array com {code, name, category, monthly_target, realized}
+
+      const prevSnap = history && history.length >= 2 ? history[history.length - 2] : null;
+      const tendencia = prevSnap
+        ? (snapshot.autonomyPct - prevSnap.autonomyPct).toFixed(1)
+        : "n/a";
+
+      const bizLines = (businesses ?? [])
+        .map((b: any) => {
+          const pct = b.monthly_target > 0
+            ? ((b.realized / b.monthly_target) * 100).toFixed(0)
+            : "sem meta";
+          return `- ${b.code} (${b.category}) — meta R$${b.monthly_target.toFixed(0)} · realizado R$${b.realized.toFixed(0)} · ${pct}${b.monthly_target > 0 ? "%" : ""}`;
+        })
+        .join("\n");
+
+      const historyLines = (history ?? [])
+        .slice(-6)
+        .map((s: any) => `${s.month}: ${s.autonomyPct.toFixed(0)}% (R$${s.total.toFixed(0)} total)`)
+        .join(" → ");
+
+      const userMsg = `Snapshot ${snapshot.month}:
+- Índice de Autonomia: ${snapshot.autonomyPct.toFixed(1)}% (vs mês anterior: ${tendencia}pp)
+- Renda ativa (Prevensul): R$${snapshot.active.toFixed(0)}
+- Renda passiva (Kitnets + recorrentes): R$${snapshot.passive.toFixed(0)}
+- Renda eventual (Outros): R$${snapshot.eventual.toFixed(0)}
+- Total: R$${snapshot.total.toFixed(0)}
+- Meta consolidada: R$${snapshot.target.toFixed(0)}
+- Excedente/Gap: R$${(snapshot.total - snapshot.target).toFixed(0)}
+
+Negócios:
+${bizLines}
+
+Últimos 6 meses (índice):
+${historyLines}
+
+Gere a leitura estratégica seguindo o formato obrigatório.`;
+
+      const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          max_tokens: 800,
+          messages: [
+            { role: "system", content: AUTONOMY_ANALYSIS_PROMPT },
+            { role: "user", content: userMsg },
+          ],
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.text();
+        return new Response(JSON.stringify({ error: "Erro no gateway", detail: err }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const data = await res.json();
+      const text = data.choices?.[0]?.message?.content ?? "";
+      return new Response(JSON.stringify({ ok: true, analysis: text }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
