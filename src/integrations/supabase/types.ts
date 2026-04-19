@@ -350,6 +350,104 @@ export type Database = {
           },
         ]
       }
+      business_revenue_entries: {
+        Row: {
+          amount_total: number | null
+          amount_william: number
+          business_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          notes: string | null
+          reference_month: string
+        }
+        Insert: {
+          amount_total?: number | null
+          amount_william: number
+          business_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          reference_month: string
+        }
+        Update: {
+          amount_total?: number | null
+          amount_william?: number
+          business_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          reference_month?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_revenue_entries_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      businesses: {
+        Row: {
+          category: string
+          code: string
+          color: string | null
+          created_at: string
+          description: string | null
+          icon: string | null
+          id: string
+          monthly_target: number
+          name: string
+          notes: string | null
+          order_index: number
+          ownership_pct: number
+          partner_name: string | null
+          status: string
+          target_12m: number
+          updated_at: string
+        }
+        Insert: {
+          category?: string
+          code: string
+          color?: string | null
+          created_at?: string
+          description?: string | null
+          icon?: string | null
+          id?: string
+          monthly_target?: number
+          name: string
+          notes?: string | null
+          order_index?: number
+          ownership_pct?: number
+          partner_name?: string | null
+          status?: string
+          target_12m?: number
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          code?: string
+          color?: string | null
+          created_at?: string
+          description?: string | null
+          icon?: string | null
+          id?: string
+          monthly_target?: number
+          name?: string
+          notes?: string | null
+          order_index?: number
+          ownership_pct?: number
+          partner_name?: string | null
+          status?: string
+          target_12m?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       celesc_invoices: {
         Row: {
           amount_paid: number | null
@@ -724,6 +822,7 @@ export type Database = {
           notes: string | null
           order_index: number | null
           pct_complete: number | null
+          pct_complete_auto: boolean
           start_date: string | null
           status: string
         }
@@ -737,6 +836,7 @@ export type Database = {
           notes?: string | null
           order_index?: number | null
           pct_complete?: number | null
+          pct_complete_auto?: boolean
           start_date?: string | null
           status?: string
         }
@@ -750,6 +850,7 @@ export type Database = {
           notes?: string | null
           order_index?: number | null
           pct_complete?: number | null
+          pct_complete_auto?: boolean
           start_date?: string | null
           status?: string
         }
@@ -1566,6 +1667,30 @@ export type Database = {
           },
         ]
       }
+      naval_memory: {
+        Row: {
+          content: string
+          priority: number
+          slug: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          content: string
+          priority?: number
+          slug: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          content?: string
+          priority?: number
+          slug?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       other_commissions: {
         Row: {
           amount: number
@@ -1779,9 +1904,45 @@ export type Database = {
         }
         Relationships: []
       }
+      recurring_bill_manual_matches: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          recurring_bill_id: string
+          reference_month: string
+          transaction_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          recurring_bill_id: string
+          reference_month: string
+          transaction_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          recurring_bill_id?: string
+          reference_month?: string
+          transaction_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recurring_bill_manual_matches_recurring_bill_id_fkey"
+            columns: ["recurring_bill_id"]
+            isOneToOne: false
+            referencedRelation: "recurring_bills"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       recurring_bills: {
         Row: {
           active: boolean
+          alias: string | null
           amount: number
           auto_promoted: boolean
           category: string | null
@@ -1799,6 +1960,7 @@ export type Database = {
         }
         Insert: {
           active?: boolean
+          alias?: string | null
           amount?: number
           auto_promoted?: boolean
           category?: string | null
@@ -1816,6 +1978,7 @@ export type Database = {
         }
         Update: {
           active?: boolean
+          alias?: string | null
           amount?: number
           auto_promoted?: boolean
           category?: string | null
@@ -1863,6 +2026,7 @@ export type Database = {
       revenues: {
         Row: {
           amount: number | null
+          business_id: string | null
           created_at: string | null
           description: string | null
           id: string
@@ -1873,6 +2037,7 @@ export type Database = {
         }
         Insert: {
           amount?: number | null
+          business_id?: string | null
           created_at?: string | null
           description?: string | null
           id?: string
@@ -1883,6 +2048,7 @@ export type Database = {
         }
         Update: {
           amount?: number | null
+          business_id?: string | null
           created_at?: string | null
           description?: string | null
           id?: string
@@ -1891,7 +2057,15 @@ export type Database = {
           source?: string | null
           type?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "revenues_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       taxes: {
         Row: {
