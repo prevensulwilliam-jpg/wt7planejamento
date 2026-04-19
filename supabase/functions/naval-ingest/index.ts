@@ -104,54 +104,65 @@ function extractYouTubeId(url: string): string | null {
   return null;
 }
 
-// Busca transcript de vídeo do YouTube via API interna youtubei/v1/player
-// (mais confiável que raspar HTML — não passa por consent wall, retorna JSON limpo)
+// Busca transcript de vídeo do YouTube via scraping do HTML /watch
+// (API InnerTube bloqueou keys hardcoded em 2026 — voltamos pro scraping com CONSENT cookie)
 async function fetchYouTubeTranscript(videoId: string): Promise<{ text: string; title: string } | null> {
   try {
-    // 1. Chama a API interna do YouTube — client IOS (ainda ativo em yt-dlp/libs modernas)
-    const IOS_KEY = "AIzaSyB-63vPrdThhKuerbB2N_l7Kwwcxj6yUAc";
-    const playerRes = await fetch(`https://youtubei.googleapis.com/youtubei/v1/player?key=${IOS_KEY}`, {
-      method: "POST",
+    // 1. Baixa a página /watch com CONSENT cookie (bypass do consent wall EU/datacenter)
+    const pageRes = await fetch(`https://www.youtube.com/watch?v=${videoId}&hl=pt&gl=BR`, {
       headers: {
-        "Content-Type": "application/json",
-        "User-Agent": "com.google.ios.youtube/19.09.3 (iPhone14,3; U; CPU iOS 15_6 like Mac OS X)",
-        "X-YouTube-Client-Name": "5",
-        "X-YouTube-Client-Version": "19.09.3",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
+        "Cookie": "CONSENT=YES+cb.20210328-17-p0.en+FX+000; SOCS=CAI; PREF=hl=pt&gl=BR",
       },
-      body: JSON.stringify({
-        context: {
-          client: {
-            clientName: "IOS",
-            clientVersion: "19.09.3",
-            deviceModel: "iPhone14,3",
-            hl: "pt",
-            gl: "BR",
-          },
-        },
-        videoId,
-      }),
     });
 
-    if (!playerRes.ok) {
-      const errBody = await playerRes.text().catch(() => "<no body>");
-      console.error("YouTube player API status:", playerRes.status, errBody.slice(0, 300));
+    if (!pageRes.ok) {
+      console.error("YouTube /watch status:", pageRes.status);
+      return null;
+    }
+    const html = await pageRes.text();
+
+    // 2. Extrai título (tenta og:title primeiro, depois <title>)
+    const ogMatch = html.match(/<meta\s+property="og:title"\s+content="([^"]+)"/);
+    const titleMatch = ogMatch ? ogMatch : html.match(/<title>([^<]+)<\/title>/);
+    const title = titleMatch
+      ? titleMatch[1].replace(/ - YouTube$/, "").trim()
+      : `YouTube ${videoId}`;
+
+    // 3. Localiza "captionTracks" no ytInitialPlayerResponse — parser balanceado
+    const idx = html.indexOf('"captionTracks":');
+    if (idx === -1) {
+      console.error("YouTube: captionTracks não encontrado no HTML (vídeo sem legenda ou bloqueado)");
+      return null;
+    }
+    const arrStart = html.indexOf("[", idx);
+    if (arrStart === -1) return null;
+    let depth = 0, arrEnd = -1, inStr = false, escape = false;
+    for (let i = arrStart; i < html.length; i++) {
+      const ch = html[i];
+      if (escape) { escape = false; continue; }
+      if (ch === "\\") { escape = true; continue; }
+      if (ch === '"') { inStr = !inStr; continue; }
+      if (inStr) continue;
+      if (ch === "[") depth++;
+      else if (ch === "]") { depth--; if (depth === 0) { arrEnd = i; break; } }
+    }
+    if (arrEnd === -1) {
+      console.error("YouTube: array captionTracks não fechou");
       return null;
     }
 
-    const player = await playerRes.json() as {
-      videoDetails?: { title?: string };
-      captions?: {
-        playerCaptionsTracklistRenderer?: {
-          captionTracks?: Array<{ baseUrl: string; languageCode?: string; kind?: string }>;
-        };
-      };
-    };
-
-    const title = player.videoDetails?.title ?? `YouTube ${videoId}`;
-    const tracks = player.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? [];
-
+    let tracks: Array<{ baseUrl: string; languageCode?: string; kind?: string }> = [];
+    try {
+      tracks = JSON.parse(html.slice(arrStart, arrEnd + 1));
+    } catch (e) {
+      console.error("YouTube: JSON.parse(captionTracks) falhou:", e);
+      return null;
+    }
     if (tracks.length === 0) {
-      console.error("YouTube: nenhuma legenda disponível para", videoId);
+      console.error("YouTube: captionTracks veio array vazio");
       return null;
     }
 
