@@ -118,11 +118,37 @@ async function fetchYouTubeTranscript(videoId: string): Promise<{ text: string; 
     const titleMatch = html.match(/<title>([^<]+)<\/title>/);
     const title = titleMatch ? titleMatch[1].replace(" - YouTube", "").trim() : `YouTube ${videoId}`;
 
-    // 3. Encontra captionTracks no ytInitialPlayerResponse
-    const captionsMatch = html.match(/"captionTracks":(\[[^\]]+\])/);
-    if (!captionsMatch) return null;
+    // 3. Encontra captionTracks no ytInitialPlayerResponse — parse balanceado
+    // (URLs em baseUrl podem conter ']' encoded, então não dá pra usar regex simples)
+    const idx = html.indexOf('"captionTracks":');
+    if (idx === -1) return null;
+    const arrStart = html.indexOf("[", idx);
+    if (arrStart === -1) return null;
+    let depth = 0;
+    let arrEnd = -1;
+    let inStr = false;
+    let escape = false;
+    for (let i = arrStart; i < html.length; i++) {
+      const ch = html[i];
+      if (escape) { escape = false; continue; }
+      if (ch === "\\") { escape = true; continue; }
+      if (ch === '"') { inStr = !inStr; continue; }
+      if (inStr) continue;
+      if (ch === "[") depth++;
+      else if (ch === "]") {
+        depth--;
+        if (depth === 0) { arrEnd = i; break; }
+      }
+    }
+    if (arrEnd === -1) return null;
 
-    const tracks = JSON.parse(captionsMatch[1]) as Array<{ baseUrl: string; languageCode?: string; kind?: string }>;
+    let tracks: Array<{ baseUrl: string; languageCode?: string; kind?: string }> = [];
+    try {
+      tracks = JSON.parse(html.slice(arrStart, arrEnd + 1));
+    } catch (e) {
+      console.error("Failed to parse captionTracks:", e);
+      return null;
+    }
     if (tracks.length === 0) return null;
 
     // 4. Prefere pt → pt-BR → en → primeiro disponível
