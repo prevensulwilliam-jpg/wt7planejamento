@@ -74,20 +74,25 @@ const LENS_LABEL: Record<string, string> = {
   outros: "OUTROS",
 };
 
-// Embedding de uma query (usado pelo RAG)
+// Embedding de uma query (usado pelo RAG) — API nativa do Gemini
+// apiKey aqui é GEMINI_API_KEY (Lovable gateway não suporta embeddings)
 async function embedQuery(text: string, apiKey: string): Promise<number[] | null> {
   try {
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/embeddings", {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${apiKey}`;
+    const res = await fetch(url, {
       method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: "google/text-embedding-004", input: text.slice(0, 8000) }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "models/text-embedding-004",
+        content: { parts: [{ text: text.slice(0, 8000) }] },
+      }),
     });
     if (!res.ok) {
       console.error("embed query status:", res.status, await res.text().catch(() => ""));
       return null;
     }
-    const data = await res.json() as { data?: Array<{ embedding: number[] }> };
-    return data.data?.[0]?.embedding ?? null;
+    const data = await res.json() as { embedding?: { values: number[] } };
+    return data.embedding?.values ?? null;
   } catch (e) {
     console.error("embedQuery error:", e);
     return null;
@@ -396,6 +401,8 @@ serve(async (req) => {
     }
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+    // Gemini nativo só pra embeddings (Lovable gateway não suporta)
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
 
     // ── Modo extração PDF de obra ──
     if (body_req.action === "extract-construction-pdf") {
@@ -779,7 +786,7 @@ Gere a leitura estratégica seguindo o formato obrigatório.`;
 
     const systemPrompt = await buildSystemPrompt({
       userQuery: userQueryText,
-      apiKey: LOVABLE_API_KEY,
+      apiKey: GEMINI_API_KEY,
       topK: isApplicabilityQuery ? 15 : 10,
       threshold: isApplicabilityQuery ? 0.2 : 0.3,
     });

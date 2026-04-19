@@ -18,37 +18,38 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const EMBED_MODEL = "google/text-embedding-004";
+const EMBED_MODEL = "models/text-embedding-004";
 const EMBED_DIM = 768;
 
+// API nativa do Gemini (Lovable gateway não suporta embeddings ainda)
 async function embedTexts(texts: string[], apiKey: string): Promise<number[][]> {
-  // Lovable gateway segue spec OpenAI: /v1/embeddings com body { model, input: string | string[] }
-  const res = await fetch("https://ai.gateway.lovable.dev/v1/embeddings", {
+  const url = `https://generativelanguage.googleapis.com/v1beta/${EMBED_MODEL}:batchEmbedContents?key=${apiKey}`;
+  const res = await fetch(url, {
     method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model: EMBED_MODEL, input: texts }),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      requests: texts.map((t) => ({
+        model: EMBED_MODEL,
+        content: { parts: [{ text: t }] },
+      })),
+    }),
   });
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(`Embeddings gateway error ${res.status}: ${err.slice(0, 300)}`);
+    throw new Error(`Gemini embeddings error ${res.status}: ${err.slice(0, 300)}`);
   }
-  const data = await res.json() as {
-    data: Array<{ embedding: number[]; index: number }>;
-  };
-  // Ordena por index pra garantir alinhamento com input
-  return data.data
-    .sort((a, b) => a.index - b.index)
-    .map((d) => d.embedding);
+  const data = await res.json() as { embeddings: Array<{ values: number[] }> };
+  return data.embeddings.map((e) => e.values);
 }
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+    if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY not configured");
     if (!SUPABASE_URL || !SERVICE_KEY) throw new Error("Supabase env missing");
 
     const body = await req.json().catch(() => null);
@@ -60,7 +61,7 @@ serve(async (req) => {
 
     // ── Modo 1: embedding pontual (usado pelo wisely-ai pra busca) ──
     if (typeof body.query === "string" && body.query.trim()) {
-      const [vec] = await embedTexts([body.query.trim()], LOVABLE_API_KEY);
+      const [vec] = await embedTexts([body.query.trim()], GEMINI_API_KEY);
       if (!vec || vec.length !== EMBED_DIM) {
         throw new Error(`embedding dim inesperada: ${vec?.length}`);
       }
@@ -107,7 +108,7 @@ serve(async (req) => {
     }
 
     // 3. Embeda tudo em lote (Gemini aceita até ~100 por request sem problema)
-    const vectors = await embedTexts(principles, LOVABLE_API_KEY);
+    const vectors = await embedTexts(principles, GEMINI_API_KEY);
     if (vectors.length !== principles.length) {
       throw new Error(`embeddings retornados ${vectors.length} != princípios ${principles.length}`);
     }
