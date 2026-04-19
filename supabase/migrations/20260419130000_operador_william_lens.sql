@@ -15,7 +15,7 @@ INSERT INTO naval_sources (
   'note',
   'operador',
   'Princípios operacionais que o William já cravou como invariáveis: gargalos humanos, travas defensivas, mecânicas do terreno. Fonte única quando o Naval precisar citar "como William opera".',
-  ARRAY[
+  to_jsonb(ARRAY[
     'Gargalo humano é o William — único closer Prevensul, único builder de tecnologia, único gestor das obras e das kitnets. Toda recomendação que exija mais tempo dele sem destravar algo precisa ser questionada antes de aceita.',
     'Caixa mínimo R$ 100k é piso de paz — nunca operar abaixo disso, nem pra aporte em obra, nem pra adiantar consórcio, nem pra oportunidade imperdível. Abaixo de R$ 100k o psicológico do William trava (hipocondria + TOC + ansiedade em tratamento).',
     'Treino com personal Henrique às 12h é âncora inegociável do dia. Qualquer agenda que colida com 12h é rejeitada por default. Saúde mental e física são infraestrutura, não luxo.',
@@ -34,7 +34,7 @@ INSERT INTO naval_sources (
     'Sprints curtos > planos grandes. Entregas incrementais que podem ir pra produção no mesmo dia > roadmap de 3 meses que nunca sai do PDF. Validação é feita testando, não planejando.',
     'NBR 17240: bateria de alarme = 7Ah (não 2.2Ah). Qualquer spec técnica em proposta Prevensul precisa ser auditada contra a NBR vigente antes de sair. Erro de spec queima credibilidade com bombeiros.',
     'Supabase do WT7 = ref hbyzmuxkgsogbxhykhhu via Lovable Cloud. Nunca acessar via supabase.com direto, nunca usar CLI com token pessoal (projeto errado). Migrations = SQL manual no SQL Editor do Lovable.'
-  ],
+  ]),
   10,  -- prioridade 10 = aparece no topo da lista
   true
 )
