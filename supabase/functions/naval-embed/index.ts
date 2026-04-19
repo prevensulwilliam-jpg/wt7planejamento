@@ -31,6 +31,7 @@ async function embedTexts(texts: string[], apiKey: string): Promise<number[][]> 
       requests: texts.map((t) => ({
         model: `models/${EMBED_MODEL}`,
         content: { parts: [{ text: t }] },
+        outputDimensionality: EMBED_DIM,
       })),
     }),
   });
