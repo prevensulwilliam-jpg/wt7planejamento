@@ -110,7 +110,6 @@ const SUGGESTIONS: Record<string, string[]> = {
   "/kitnets": ["Os repasses estão de acordo com os contratos?", "Qual kitnet me dá mais retorno?", "Tenho risco de inadimplência?", "Vale a pena expandir as kitnets?"],
   "/reconciliation": ["Tem alguma transação suspeita?", "Qual meu maior gasto recorrente?", "Como estão minhas transferências?", "Tem algum padrão de gasto que devo revisar?"],
   "/constructions": ["Qual obra está consumindo mais capital?", "Qual projeto tem melhor ROI esperado?", "Como está o ritmo de investimento?", "Quando devo esperar retorno das obras?"],
-  "/hoje": ["Como está minha Sobra Reinvestida este mês?", "Qual risco de concentração mais crítico agora?", "Estou no ritmo de chegar em R$ 70M até 2041?", "Qual obra devo priorizar para liberar caixa?"],
   "default": ["Analise minha situação atual", "Onde devo focar agora?", "O que está me custando mais?", "Como aumentar renda passiva?"],
 };
 
