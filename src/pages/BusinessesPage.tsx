@@ -56,7 +56,7 @@ type FormData = {
   partner_name: string;
   ownership_pct: number;
   status: "ativo" | "encerrado" | "incubado";
-  category: string;
+  category: "crescimento" | "incubado" | "recorrente";
   monthly_target: number;
   target_12m: number;
   icon: string;
