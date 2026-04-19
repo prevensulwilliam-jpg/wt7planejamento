@@ -1691,6 +1691,44 @@ export type Database = {
         }
         Relationships: []
       }
+      naval_principle_vectors: {
+        Row: {
+          created_at: string | null
+          embedding: string
+          id: string
+          lens: string
+          principle_idx: number
+          source_id: string
+          text: string
+        }
+        Insert: {
+          created_at?: string | null
+          embedding: string
+          id?: string
+          lens: string
+          principle_idx: number
+          source_id: string
+          text: string
+        }
+        Update: {
+          created_at?: string | null
+          embedding?: string
+          id?: string
+          lens?: string
+          principle_idx?: number
+          source_id?: string
+          text?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "naval_principle_vectors_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "naval_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       naval_sources: {
         Row: {
           active: boolean
@@ -2421,6 +2459,23 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      match_principles: {
+        Args: {
+          match_count?: number
+          match_threshold?: number
+          query_embedding: string
+        }
+        Returns: {
+          lens: string
+          principle_idx: number
+          similarity: number
+          source_author: string
+          source_id: string
+          source_summary: string
+          source_title: string
+          text: string
+        }[]
       }
       request_manager_access:
         | { Args: { p_user_id: string }; Returns: undefined }
