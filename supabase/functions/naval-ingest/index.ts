@@ -108,22 +108,22 @@ function extractYouTubeId(url: string): string | null {
 // (mais confiável que raspar HTML — não passa por consent wall, retorna JSON limpo)
 async function fetchYouTubeTranscript(videoId: string): Promise<{ text: string; title: string } | null> {
   try {
-    // 1. Chama a API interna do YouTube — client ANDROID (key pública, sem consent wall)
-    const ANDROID_KEY = "AIzaSyA8eiZmM1FaDVjRy-df2KTyQ_vz_yYM39w";
-    const playerRes = await fetch(`https://www.youtube.com/youtubei/v1/player?key=${ANDROID_KEY}`, {
+    // 1. Chama a API interna do YouTube — client IOS (ainda ativo em yt-dlp/libs modernas)
+    const IOS_KEY = "AIzaSyB-63vPrdThhKuerbB2N_l7Kwwcxj6yUAc";
+    const playerRes = await fetch(`https://youtubei.googleapis.com/youtubei/v1/player?key=${IOS_KEY}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "User-Agent": "com.google.android.youtube/17.31.35 (Linux; U; Android 11) gzip",
-        "X-YouTube-Client-Name": "3",
-        "X-YouTube-Client-Version": "17.31.35",
+        "User-Agent": "com.google.ios.youtube/19.09.3 (iPhone14,3; U; CPU iOS 15_6 like Mac OS X)",
+        "X-YouTube-Client-Name": "5",
+        "X-YouTube-Client-Version": "19.09.3",
       },
       body: JSON.stringify({
         context: {
           client: {
-            clientName: "ANDROID",
-            clientVersion: "17.31.35",
-            androidSdkVersion: 30,
+            clientName: "IOS",
+            clientVersion: "19.09.3",
+            deviceModel: "iPhone14,3",
             hl: "pt",
             gl: "BR",
           },
