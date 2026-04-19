@@ -55,8 +55,8 @@ type FormData = {
   description: string;
   partner_name: string;
   ownership_pct: number;
-  status: string;
-  category: string;
+  status: "ativo" | "encerrado" | "incubado";
+  category: "crescimento" | "incubado" | "recorrente";
   monthly_target: number;
   target_12m: number;
   icon: string;
@@ -122,7 +122,7 @@ function BusinessForm({ form, setForm, onSave, onCancel, isPending }: {
       <div className="grid grid-cols-2 gap-3">
         <div>
           <Label style={{ color: "#94A3B8" }}>Status</Label>
-          <Select value={form.status} onValueChange={v => setForm({ ...form, status: v })}>
+          <Select value={form.status} onValueChange={v => setForm({ ...form, status: v as FormData["status"] })}>
             <SelectTrigger style={inputStyle}><SelectValue /></SelectTrigger>
             <SelectContent style={{ background: "#0D1318", border: "1px solid #1A2535" }}>
               {Object.entries(STATUS_MAP).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}
@@ -131,7 +131,7 @@ function BusinessForm({ form, setForm, onSave, onCancel, isPending }: {
         </div>
         <div>
           <Label style={{ color: "#94A3B8" }}>Categoria</Label>
-          <Select value={form.category} onValueChange={v => setForm({ ...form, category: v })}>
+          <Select value={form.category} onValueChange={v => setForm({ ...form, category: v as FormData["category"] })}>
             <SelectTrigger style={inputStyle}><SelectValue /></SelectTrigger>
             <SelectContent style={{ background: "#0D1318", border: "1px solid #1A2535" }}>
               {Object.entries(CATEGORY_MAP).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}

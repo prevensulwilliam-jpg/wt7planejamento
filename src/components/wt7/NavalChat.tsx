@@ -103,14 +103,13 @@ async function fetchPageContext(pathname: string): Promise<{ label: string; data
 type Message = { role: "user" | "assistant"; content: string; loading?: boolean };
 
 const SUGGESTIONS: Record<string, string[]> = {
-  "/hoje": ["Como está meu Índice de Autonomia?", "Qual negócio está abaixo da meta?", "Onde alocar o excedente este mês?", "O que fazer pra chegar em 50% de autonomia?"],
+  "/hoje": ["Como está minha Sobra Reinvestida este mês?", "Qual risco de concentração mais crítico agora?", "Estou no ritmo de chegar em R$ 70M até 2041?", "Qual obra devo priorizar para liberar caixa?"],
   "/businesses": ["Qual negócio tem maior potencial de crescimento?", "Qual está mais longe da meta?", "Qual deveria ser meu próximo vetor?", "Como reduzir dependência da Prevensul?"],
   "/expenses": ["Quais meus 5 maiores custos?", "Onde posso cortar despesas?", "Qual categoria cresceu mais?", "Minha margem está saudável?"],
   "/revenues": ["Qual fonte de receita tem mais potencial?", "Como está minha diversificação de renda?", "Quanto é passiva vs ativa este mês?", "Qual receita cresceu mais?"],
   "/kitnets": ["Os repasses estão de acordo com os contratos?", "Qual kitnet me dá mais retorno?", "Tenho risco de inadimplência?", "Vale a pena expandir as kitnets?"],
   "/reconciliation": ["Tem alguma transação suspeita?", "Qual meu maior gasto recorrente?", "Como estão minhas transferências?", "Tem algum padrão de gasto que devo revisar?"],
   "/constructions": ["Qual obra está consumindo mais capital?", "Qual projeto tem melhor ROI esperado?", "Como está o ritmo de investimento?", "Quando devo esperar retorno das obras?"],
-  "/hoje": ["Como está minha Sobra Reinvestida este mês?", "Qual risco de concentração mais crítico agora?", "Estou no ritmo de chegar em R$ 70M até 2041?", "Qual obra devo priorizar para liberar caixa?"],
   "default": ["Analise minha situação atual", "Onde devo focar agora?", "O que está me custando mais?", "Como aumentar renda passiva?"],
 };
 
