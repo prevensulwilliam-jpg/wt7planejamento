@@ -1691,6 +1691,57 @@ export type Database = {
         }
         Relationships: []
       }
+      naval_sources: {
+        Row: {
+          active: boolean
+          author: string | null
+          id: string
+          ingested_at: string | null
+          lens: string
+          principles: Json
+          priority: number
+          raw_content: string | null
+          slug: string
+          source_type: string
+          source_url: string | null
+          summary: string | null
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          active?: boolean
+          author?: string | null
+          id?: string
+          ingested_at?: string | null
+          lens: string
+          principles?: Json
+          priority?: number
+          raw_content?: string | null
+          slug: string
+          source_type: string
+          source_url?: string | null
+          summary?: string | null
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          active?: boolean
+          author?: string | null
+          id?: string
+          ingested_at?: string | null
+          lens?: string
+          principles?: Json
+          priority?: number
+          raw_content?: string | null
+          slug?: string
+          source_type?: string
+          source_url?: string | null
+          summary?: string | null
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       other_commissions: {
         Row: {
           amount: number
