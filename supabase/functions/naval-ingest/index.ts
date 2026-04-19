@@ -245,7 +245,7 @@ serve(async (req) => {
         const yt = await fetchYouTubeTranscript(ytId);
         if (!yt || !yt.text) {
           return new Response(JSON.stringify({
-            error: "Vídeo sem legendas disponíveis. Cole a transcrição manual na aba Texto.",
+            error: "YouTube bloqueou a extração de legenda (anti-bot para IPs de servidor). Use https://tactiq.io/tools/youtube-transcript, copie o texto, e cole na aba Texto.",
           }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
         const cut = yt.text.slice(0, 60_000);
