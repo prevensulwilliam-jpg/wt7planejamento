@@ -9,7 +9,6 @@ import LoginPage from "@/pages/LoginPage";
 import ResetPasswordPage from "@/pages/ResetPasswordPage";
 import RegisterPage from "@/pages/RegisterPage";
 import AdminLayout from "@/layouts/AdminLayout";
-import DashboardPage from "@/pages/DashboardPage";
 import KitnetsPage from "@/pages/KitnetsPage";
 import EnergyPage from "@/pages/EnergyPage";
 import ManagerKitnetsPage from "@/pages/ManagerKitnetsPage";
@@ -114,11 +113,11 @@ const App = () => (
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/" element={<Navigate to="/hoje" replace />} />
+          <Route path="/dashboard" element={<Navigate to="/hoje" replace />} />
 
           {/* Admin routes */}
           <Route element={<AuthGuard><AdminLayout /></AuthGuard>}>
-            <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/hoje" element={<HojePage />} />
             <Route path="/naval" element={<NavalPage />} />
             <Route path="/revenues" element={<RevenuesPage />} />

@@ -1,9 +1,31 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useDashboardKPIs, useGoals } from "./useFinances";
 import { useKitnets, useKitnetSummary } from "./useKitnets";
 import { usePrevensulBilling } from "./useBilling";
 import { getCurrentMonth, formatMonth } from "@/lib/formatters";
 import { callNaval } from "@/lib/naval";
+import { supabase } from "@/integrations/supabase/client";
+
+/**
+ * Memória permanente do Naval — mesmos arquivos .md que o Claude Code carrega
+ * via @memoria/*.md. Sincronizada via scripts/sync-naval-memory.ts.
+ * Sem esse hook, Naval perde contexto entre sessões.
+ */
+export function useNavalMemory() {
+  return useQuery({
+    queryKey: ["naval_memory"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("naval_memory")
+        .select("slug,title,content,priority")
+        .order("priority", { ascending: true });
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 10 * 60 * 1000,
+  });
+}
 
 const NAVAL_FALLBACK_ERROR = "Erro ao conectar com o Naval. Tente novamente.";
 
@@ -20,6 +42,7 @@ export function useNavalContext() {
   const summary = useKitnetSummary(month);
   const { data: goals } = useGoals();
   const { data: billing } = usePrevensulBilling(month);
+  const { data: memory } = useNavalMemory();
 
   const isReady = !kpis.isLoading;
 
@@ -60,6 +83,11 @@ export function useNavalContext() {
               ),
               records: billing?.length ?? 0,
             },
+            memory: (memory ?? []).map((m) => ({
+              slug: m.slug,
+              title: m.title,
+              content: m.content,
+            })),
           }
         : null,
     [
@@ -77,6 +105,7 @@ export function useNavalContext() {
       summary.totalReceived,
       goals,
       billing,
+      memory,
     ],
   );
 

@@ -88,7 +88,7 @@ export default function LoginPage() {
       } else if (role === "wedding") {
         navigate("/wedding/portal", { replace: true });
       } else {
-        navigate("/dashboard", { replace: true });
+        navigate("/hoje", { replace: true });
       }
     } catch (err: any) {
       toast({ title: "Erro no login", description: err.message, variant: "destructive" });

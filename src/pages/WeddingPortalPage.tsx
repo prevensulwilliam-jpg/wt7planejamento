@@ -64,11 +64,11 @@ export default function WeddingPortalPage() {
         <div className="flex items-center gap-3">
           {isAdmin && (
             <button
-              onClick={() => navigate("/dashboard")}
+              onClick={() => navigate("/hoje")}
               className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-colors"
               style={{ color: "#94A3B8", border: "1px solid #1A2535" }}
             >
-              <ArrowLeft className="w-3.5 h-3.5" /> Dashboard
+              <ArrowLeft className="w-3.5 h-3.5" /> Hoje
             </button>
           )}
           <WT7Logo size="sm" />
