@@ -251,6 +251,7 @@ function SourceModal({ source, open, onClose }: {
         ...prev,
         title: d.title,
         author: d.author,
+        source_type: d.source_type ?? prev.source_type,
         lens: d.lens,
         summary: d.summary,
         principles: d.principles,

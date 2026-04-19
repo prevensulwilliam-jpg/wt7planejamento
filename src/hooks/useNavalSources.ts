@@ -72,6 +72,7 @@ export interface IngestInput {
 export interface IngestDraft {
   title: string;
   author: string;
+  source_type: NavalSourceType;
   lens: NavalLens;
   summary: string;
   principles: string[];
