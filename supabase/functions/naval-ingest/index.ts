@@ -19,7 +19,7 @@ Retorne APENAS JSON puro, sem markdown, sem explicação, seguindo este schema:
 {
   "title": "Título curto do conteúdo (5-10 palavras)",
   "author": "Autor único ou coletivo (regras abaixo)",
-  "source_type": "book | video | article | podcast | note | course",
+  "source_type": "book | article | podcast | note | course",
   "lens": "naval | aaron_ross | housel | tevah | operador | outros",
   "summary": "2-3 frases explicando o eixo central da obra e quando usar essa lente",
   "principles": [
@@ -47,7 +47,6 @@ REGRAS OBRIGATÓRIAS:
 6. **source_type** — detecte com base no conteúdo:
    - \`book\` = livro completo ou capítulo de livro (marque só se confirmado)
    - \`article\` = artigo de blog, newsletter, post de empresa (padrão para texto web)
-   - \`video\` = transcrição de YouTube, palestra, aula gravada
    - \`podcast\` = transcrição de áudio/entrevista
    - \`note\` = nota pessoal, trecho avulso, compilação manual
    - \`course\` = material de curso estruturado (módulos, aulas)
@@ -92,118 +91,9 @@ function stripHtml(html: string): string {
     .trim();
 }
 
-// Detecta URL do YouTube (youtube.com/watch, youtu.be/, youtube.com/shorts)
-function extractYouTubeId(url: string): string | null {
-  const patterns = [
-    /(?:youtube\.com\/watch\?v=|youtube\.com\/shorts\/|youtu\.be\/)([a-zA-Z0-9_-]{11})/,
-  ];
-  for (const p of patterns) {
-    const m = url.match(p);
-    if (m) return m[1];
-  }
-  return null;
-}
-
-// Busca transcript de vídeo do YouTube via scraping do HTML /watch
-// (API InnerTube bloqueou keys hardcoded em 2026 — voltamos pro scraping com CONSENT cookie)
-async function fetchYouTubeTranscript(videoId: string): Promise<{ text: string; title: string } | null> {
-  try {
-    // 1. Baixa a página /watch com CONSENT cookie (bypass do consent wall EU/datacenter)
-    const pageRes = await fetch(`https://www.youtube.com/watch?v=${videoId}&hl=pt&gl=BR`, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
-        "Cookie": "CONSENT=YES+cb.20210328-17-p0.en+FX+000; SOCS=CAI; PREF=hl=pt&gl=BR",
-      },
-    });
-
-    if (!pageRes.ok) {
-      console.error("YouTube /watch status:", pageRes.status);
-      return null;
-    }
-    const html = await pageRes.text();
-
-    // 2. Extrai título (tenta og:title primeiro, depois <title>)
-    const ogMatch = html.match(/<meta\s+property="og:title"\s+content="([^"]+)"/);
-    const titleMatch = ogMatch ? ogMatch : html.match(/<title>([^<]+)<\/title>/);
-    const title = titleMatch
-      ? titleMatch[1].replace(/ - YouTube$/, "").trim()
-      : `YouTube ${videoId}`;
-
-    // 3. Localiza "captionTracks" no ytInitialPlayerResponse — parser balanceado
-    const idx = html.indexOf('"captionTracks":');
-    if (idx === -1) {
-      console.error("YouTube: captionTracks não encontrado no HTML (vídeo sem legenda ou bloqueado)");
-      return null;
-    }
-    const arrStart = html.indexOf("[", idx);
-    if (arrStart === -1) return null;
-    let depth = 0, arrEnd = -1, inStr = false, escape = false;
-    for (let i = arrStart; i < html.length; i++) {
-      const ch = html[i];
-      if (escape) { escape = false; continue; }
-      if (ch === "\\") { escape = true; continue; }
-      if (ch === '"') { inStr = !inStr; continue; }
-      if (inStr) continue;
-      if (ch === "[") depth++;
-      else if (ch === "]") { depth--; if (depth === 0) { arrEnd = i; break; } }
-    }
-    if (arrEnd === -1) {
-      console.error("YouTube: array captionTracks não fechou");
-      return null;
-    }
-
-    let tracks: Array<{ baseUrl: string; languageCode?: string; kind?: string }> = [];
-    try {
-      tracks = JSON.parse(html.slice(arrStart, arrEnd + 1));
-    } catch (e) {
-      console.error("YouTube: JSON.parse(captionTracks) falhou:", e);
-      return null;
-    }
-    if (tracks.length === 0) {
-      console.error("YouTube: captionTracks veio array vazio");
-      return null;
-    }
-
-    // 4. Prefere pt → pt-BR → en → primeiro disponível
-    const pickTrack = () =>
-      tracks.find((t) => t.languageCode === "pt") ||
-      tracks.find((t) => t.languageCode === "pt-BR") ||
-      tracks.find((t) => t.languageCode === "en") ||
-      tracks[0];
-    const track = pickTrack();
-    if (!track?.baseUrl) return null;
-
-    // 5. Fetch do XML de legenda
-    const xmlRes = await fetch(track.baseUrl);
-    if (!xmlRes.ok) return null;
-    const xml = await xmlRes.text();
-
-    // 6. Parse do XML — cada <text start="..." dur="...">CONTENT</text>
-    const textMatches = [...xml.matchAll(/<text[^>]*>([\s\S]*?)<\/text>/g)];
-    const text = textMatches
-      .map((m) =>
-        m[1]
-          .replace(/&amp;/g, "&")
-          .replace(/&lt;/g, "<")
-          .replace(/&gt;/g, ">")
-          .replace(/&quot;/g, '"')
-          .replace(/&#39;/g, "'")
-          .replace(/\n/g, " ")
-          .trim()
-      )
-      .filter(Boolean)
-      .join(" ")
-      .replace(/\s+/g, " ")
-      .trim();
-
-    if (!text) return null;
-    return { text, title };
-  } catch (e) {
-    console.error("YouTube transcript error:", e);
-    return null;
-  }
+// Detecta URL do YouTube pra rejeitar cedo (YouTube bloqueia scraping de IP datacenter)
+function isYouTubeUrl(url: string): boolean {
+  return /(?:youtube\.com|youtu\.be)/i.test(url);
 }
 
 serve(async (req) => {
@@ -239,20 +129,15 @@ serve(async (req) => {
         { type: "text", text: hint ? `Dica do William: ${hint}\n\nDestile conforme o prompt.` : "Destile conforme o prompt." },
       ];
     } else if (mode === "url" && url) {
-      // YouTube detection — fetch transcript via caption tracks (sem API key)
-      const ytId = extractYouTubeId(url);
-      if (ytId) {
-        const yt = await fetchYouTubeTranscript(ytId);
-        if (!yt || !yt.text) {
-          return new Response(JSON.stringify({
-            error: "YouTube bloqueou a extração de legenda (anti-bot para IPs de servidor). Use https://tactiq.io/tools/youtube-transcript, copie o texto, e cole na aba Texto.",
-          }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-        }
-        const cut = yt.text.slice(0, 60_000);
-        userContent = `Transcrição do vídeo YouTube "${yt.title}" (URL: ${url}):\n${hint ? `\nDica: ${hint}\n` : ""}\n${cut}\n\nAo retornar JSON, use source_type: "video" e author no formato "Canal XYZ (YouTube)" ou nome do apresentador se identificável.`;
-      } else {
-        // URL comum — fetch HTML e strip
-        let fetchedText = "";
+      // YouTube não é suportado por URL direta (anti-bot). Rejeita cedo com mensagem clara.
+      if (isYouTubeUrl(url)) {
+        return new Response(JSON.stringify({
+          error: "YouTube não é suportado por URL. Cole a transcrição ou um resumo na aba Texto.",
+        }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      // URL comum — fetch HTML e strip
+      let fetchedText = "";
+      {
         try {
           const res = await fetch(url, {
             headers: { "User-Agent": "Mozilla/5.0 (compatible; NavalIngest/1.0)" },
@@ -322,10 +207,8 @@ serve(async (req) => {
     const validLens = ["naval", "aaron_ross", "housel", "tevah", "operador", "outros"];
     if (!validLens.includes(parsed.lens ?? "")) parsed.lens = "outros";
 
-    const validTypes = ["book", "video", "article", "podcast", "note", "course"];
-    let sourceType = validTypes.includes(parsed.source_type ?? "") ? parsed.source_type! : "article";
-    // Override: se veio de YouTube, força video
-    if (mode === "url" && url && extractYouTubeId(url)) sourceType = "video";
+    const validTypes = ["book", "article", "podcast", "note", "course"];
+    const sourceType = validTypes.includes(parsed.source_type ?? "") ? parsed.source_type! : "article";
 
     return new Response(JSON.stringify({
       ok: true,

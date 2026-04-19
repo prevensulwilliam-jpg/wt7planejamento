@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
 export type NavalLens = "naval" | "aaron_ross" | "housel" | "tevah" | "operador" | "outros";
-export type NavalSourceType = "book" | "video" | "article" | "podcast" | "note" | "course";
+export type NavalSourceType = "book" | "article" | "podcast" | "note" | "course";
 
 export interface NavalSource {
   id: string;

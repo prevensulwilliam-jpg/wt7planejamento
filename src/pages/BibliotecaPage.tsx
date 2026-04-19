@@ -28,7 +28,7 @@ import {
 const LENS_ORDER: NavalLens[] = ["naval", "aaron_ross", "housel", "tevah", "operador", "outros"];
 
 const SOURCE_TYPE_LABEL: Record<NavalSourceType, string> = {
-  book: "Livro", video: "Vídeo", article: "Artigo", podcast: "Podcast", note: "Nota", course: "Curso",
+  book: "Livro", article: "Artigo", podcast: "Podcast", note: "Nota", course: "Curso",
 };
 
 export default function BibliotecaPage() {
@@ -353,7 +353,7 @@ function SourceModal({ source, open, onClose }: {
                   style={{ background: "#0B1015", borderColor: "#1E293B", color: "#F0F4F8" }}
                 />
                 <p className="text-xs mt-2" style={{ color: "#64748B" }}>
-                  Baixa o HTML e extrai texto automaticamente. Ideal para artigos de blog/Substack/Medium.
+                  Para artigos, posts, newsletters. YouTube não é suportado — use a aba Texto com a transcrição.
                 </p>
               </TabsContent>
               <TabsContent value="pdf" className="pt-3">
