@@ -108,18 +108,22 @@ function extractYouTubeId(url: string): string | null {
 // (mais confiável que raspar HTML — não passa por consent wall, retorna JSON limpo)
 async function fetchYouTubeTranscript(videoId: string): Promise<{ text: string; title: string } | null> {
   try {
-    // 1. Chama a API interna do YouTube (mesma que o player usa)
-    const playerRes = await fetch("https://www.youtube.com/youtubei/v1/player?key=AIzaSyAO_FL9IIHBdVv-pwJAtaFN3O40oNbs7qE", {
+    // 1. Chama a API interna do YouTube — client ANDROID (key pública, sem consent wall)
+    const ANDROID_KEY = "AIzaSyA8eiZmM1FaDVjRy-df2KTyQ_vz_yYM39w";
+    const playerRes = await fetch(`https://www.youtube.com/youtubei/v1/player?key=${ANDROID_KEY}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "User-Agent": "com.google.android.youtube/17.31.35 (Linux; U; Android 11) gzip",
+        "X-YouTube-Client-Name": "3",
+        "X-YouTube-Client-Version": "17.31.35",
       },
       body: JSON.stringify({
         context: {
           client: {
-            clientName: "WEB",
-            clientVersion: "2.20240101.00.00",
+            clientName: "ANDROID",
+            clientVersion: "17.31.35",
+            androidSdkVersion: 30,
             hl: "pt",
             gl: "BR",
           },
@@ -129,7 +133,8 @@ async function fetchYouTubeTranscript(videoId: string): Promise<{ text: string; 
     });
 
     if (!playerRes.ok) {
-      console.error("YouTube player API status:", playerRes.status);
+      const errBody = await playerRes.text().catch(() => "<no body>");
+      console.error("YouTube player API status:", playerRes.status, errBody.slice(0, 300));
       return null;
     }
 
