@@ -104,52 +104,51 @@ function extractYouTubeId(url: string): string | null {
   return null;
 }
 
-// Busca transcript de vídeo do YouTube (sem API key — via parsing do ytInitialPlayerResponse)
+// Busca transcript de vídeo do YouTube via API interna youtubei/v1/player
+// (mais confiável que raspar HTML — não passa por consent wall, retorna JSON limpo)
 async function fetchYouTubeTranscript(videoId: string): Promise<{ text: string; title: string } | null> {
   try {
-    // 1. Baixa a página do vídeo
-    const pageRes = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
-      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
+    // 1. Chama a API interna do YouTube (mesma que o player usa)
+    const playerRes = await fetch("https://www.youtube.com/youtubei/v1/player?key=AIzaSyAO_FL9IIHBdVv-pwJAtaFN3O40oNbs7qE", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      },
+      body: JSON.stringify({
+        context: {
+          client: {
+            clientName: "WEB",
+            clientVersion: "2.20240101.00.00",
+            hl: "pt",
+            gl: "BR",
+          },
+        },
+        videoId,
+      }),
     });
-    if (!pageRes.ok) return null;
-    const html = await pageRes.text();
 
-    // 2. Extrai o título
-    const titleMatch = html.match(/<title>([^<]+)<\/title>/);
-    const title = titleMatch ? titleMatch[1].replace(" - YouTube", "").trim() : `YouTube ${videoId}`;
-
-    // 3. Encontra captionTracks no ytInitialPlayerResponse — parse balanceado
-    // (URLs em baseUrl podem conter ']' encoded, então não dá pra usar regex simples)
-    const idx = html.indexOf('"captionTracks":');
-    if (idx === -1) return null;
-    const arrStart = html.indexOf("[", idx);
-    if (arrStart === -1) return null;
-    let depth = 0;
-    let arrEnd = -1;
-    let inStr = false;
-    let escape = false;
-    for (let i = arrStart; i < html.length; i++) {
-      const ch = html[i];
-      if (escape) { escape = false; continue; }
-      if (ch === "\\") { escape = true; continue; }
-      if (ch === '"') { inStr = !inStr; continue; }
-      if (inStr) continue;
-      if (ch === "[") depth++;
-      else if (ch === "]") {
-        depth--;
-        if (depth === 0) { arrEnd = i; break; }
-      }
-    }
-    if (arrEnd === -1) return null;
-
-    let tracks: Array<{ baseUrl: string; languageCode?: string; kind?: string }> = [];
-    try {
-      tracks = JSON.parse(html.slice(arrStart, arrEnd + 1));
-    } catch (e) {
-      console.error("Failed to parse captionTracks:", e);
+    if (!playerRes.ok) {
+      console.error("YouTube player API status:", playerRes.status);
       return null;
     }
-    if (tracks.length === 0) return null;
+
+    const player = await playerRes.json() as {
+      videoDetails?: { title?: string };
+      captions?: {
+        playerCaptionsTracklistRenderer?: {
+          captionTracks?: Array<{ baseUrl: string; languageCode?: string; kind?: string }>;
+        };
+      };
+    };
+
+    const title = player.videoDetails?.title ?? `YouTube ${videoId}`;
+    const tracks = player.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? [];
+
+    if (tracks.length === 0) {
+      console.error("YouTube: nenhuma legenda disponível para", videoId);
+      return null;
+    }
 
     // 4. Prefere pt → pt-BR → en → primeiro disponível
     const pickTrack = () =>
