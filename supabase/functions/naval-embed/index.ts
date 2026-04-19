@@ -18,19 +18,20 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const EMBED_MODEL = "models/text-embedding-004";
+const EMBED_MODEL = "gemini-embedding-001";
 const EMBED_DIM = 768;
 
 // API nativa do Gemini (Lovable gateway não suporta embeddings ainda)
 async function embedTexts(texts: string[], apiKey: string): Promise<number[][]> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/${EMBED_MODEL}:batchEmbedContents?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${EMBED_MODEL}:batchEmbedContents?key=${apiKey}`;
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       requests: texts.map((t) => ({
-        model: EMBED_MODEL,
+        model: `models/${EMBED_MODEL}`,
         content: { parts: [{ text: t }] },
+        outputDimensionality: EMBED_DIM,
       })),
     }),
   });
