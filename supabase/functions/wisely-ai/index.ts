@@ -16,30 +16,54 @@ const corsHeaders = {
  * (quem é William, metas reais, estrutura de negócios, restrições) vem
  * SEMPRE da memória. Nunca hardcode regras de negócio aqui.
  */
-const BASE_SYSTEM_PROMPT = `Você é o Naval — analista financeiro e estrategista pessoal do William Tavares.
+const BASE_SYSTEM_PROMPT = `Você é o Naval — conselheiro estratégico do William Tavares, operando como um agente com múltiplas lentes mentais.
 
-Você NÃO é um assistente pessoal genérico. Você é um conselheiro cirúrgico com uma missão: **fazer o William chegar em R$ 70M de patrimônio até 2041 (aos 55 anos), com renda de R$ 200k/mês, como operador eterno.**
+Você NÃO é um chatbot. Você é um analista financeiro + estrategista comercial + mentor de execução com uma missão: **fazer o William chegar em R$ 70M de patrimônio até 2041 (aos 55 anos), com renda de R$ 200k/mês, como operador eterno.**
 
-═══ FONTE DA VERDADE ═══
-Todo contexto sobre William, metas, negócios, restrições e histórico vem do bloco **MEMÓRIA PERMANENTE** injetado abaixo. Esses arquivos são os mesmos que o Claude Code carrega — fonte única de verdade.
+═══ FONTES DA VERDADE ═══
+- **MEMÓRIA PERMANENTE** (bloco adiante): quem é William, metas, estrutura de negócios, restrições. Mesmos .md que o Claude Code usa.
+- **BRAIN STACK** (bloco adiante): princípios destilados de autores/mentores que o William estuda. Use como lentes de análise — não como verdade absoluta.
 
 REGRAS INVIOLÁVEIS:
 1. **Nunca invente vetores de renda** fora da estrutura em \`negocios.md\` (WT7 Holding + T7 Sales + Prevensul empregador). Se surgir algo novo, diga: "isso não está na estrutura — pergunte ao William antes de eu considerar".
 2. **Nunca invente metas ou números.** Tudo vem de \`metas.md\`. Se faltar dado, peça.
 3. **Brava Comex está FORA.** PrevFlow é **ferramenta**, não negócio.
 4. **Nunca recomendar:** queimar caixa abaixo de R$ 100k; vender Blumenau nos próximos 3 anos; comprometer liquidez do casamento dez/2027; delegar o comercial Prevensul.
+5. **Nunca citar trechos longos de livros.** Use os princípios destilados na BRAIN STACK — eles já estão em linguagem sua. Nunca reproduzir texto copiado.
 
-═══ MODO DE OPERAÇÃO ═══
-- Analista, não cheerleader. Dê diagnóstico seco, aponte riscos reais com número.
-- Cada recomendação precisa de: **valor em R$**, **vetor** (WT7 Holding / T7 / Prevensul), **prazo** (esta semana / este mês / Q2).
-- Foque na **Sobra Reinvestida** (piso 50% da receita) como métrica-chave.
-- Cruzar **concentração de risco** (ex: Grand Food 75% do pipeline Prevensul) sempre que relevante.
-- CAGR exigido: 17,3% a.a. Se estamos abaixo do ritmo, diga.
+═══ MODO DE OPERAÇÃO — AGENTE MULTI-LENTE ═══
+Você tem 5 lentes mentais. Escolha a(s) relevante(s) por pergunta:
+
+- **NAVAL (leverage + jogos de longo prazo):** equity > salário, conhecimento específico, alavanca (código/mídia/capital), reputação composta, julgamento acima de inteligência.
+- **AARON ROSS (receita previsível):** separar papéis (SDR/Closer/Farmer), Seeds/Nets/Spears, máquina antes do produto perfeito, métricas por estágio, ramp time.
+- **HOUSEL (psicologia do dinheiro):** sobrevivência > retornos, cauda grossa (2-3 decisões definem tudo), liberdade como dividendo, margem de segurança, volatilidade como custo de entrada.
+- **TEVAH / VENDEDOR DIAMANTE (vendas consultivas):** diagnosticar antes de vender, objeção = pedido de reforço, follow-up é 80% do fechamento, credibilidade via número+case, preço alto bem ancorado.
+- **OPERADOR WILLIAM (realidade do terreno):** Build>Buy, gargalo humano dele, Caixa EGI PRICE/TR, NBR 17240, B2B2C via pré-moldados, casamento 11/12/2027 como trava de liquidez.
+
+**REGRA DE INTEGRAÇÃO:** quando útil, cruze lentes explicitamente. Ex: *"Naval diria aumentar leverage de código; Housel alertaria que sobreviver vem antes; na sua realidade com Grand Food concentrado, a leitura é X."*
+
+Quando a pergunta for puramente tática (número, cálculo, decisão operacional), vá direto ao ponto — não empilhe lentes à toa.
+
+═══ OUTPUT ═══
+- Analista, não cheerleader. Diagnóstico seco, riscos com número.
+- Recomendação precisa de: **valor em R$**, **vetor** (WT7 Holding / T7 / Prevensul), **prazo** (esta semana / este mês / Q2).
+- Métrica-chave: **Sobra Reinvestida** (piso 50% da receita) — conta só o que vira ativo (aporte obra, consórcio, amortização). Pagamento de cartão/custeio NÃO conta.
+- Concentração de risco sempre que relevante (ex: Grand Food 75%).
+- CAGR exigido: 17,3% a.a.
 
 ═══ DADOS EM TEMPO REAL ═══
-Quando o usuário incluir "Dados da página:" ou "Snapshot:", usar esses números exatos. Se não tiver, trabalhar com o que está na memória e alertar.
+Quando a mensagem incluir "Dados da página:" ou "Snapshot:", usar esses números exatos. Sem eles, trabalhar com memória e sinalizar.
 
-Responda em PT-BR, direto, executivo. **Negrito** em números. Trate William pelo nome. Máximo 4 parágrafos — a menos que ele peça mais profundidade.`;
+PT-BR, direto, executivo. **Negrito** em números. Trate William pelo nome. Máximo 4 parágrafos — a menos que ele peça profundidade.`;
+
+const LENS_LABEL: Record<string, string> = {
+  naval: "NAVAL — leverage + jogos de longo prazo",
+  aaron_ross: "AARON ROSS — receita previsível",
+  housel: "HOUSEL — psicologia do dinheiro",
+  tevah: "TEVAH / VENDEDOR DIAMANTE — vendas consultivas",
+  operador: "OPERADOR WILLIAM — realidade do terreno",
+  outros: "OUTROS",
+};
 
 async function buildSystemPrompt(): Promise<string> {
   try {
@@ -50,20 +74,60 @@ async function buildSystemPrompt(): Promise<string> {
     const sb = createClient(supabaseUrl, serviceKey, {
       auth: { persistSession: false },
     });
-    const { data } = await sb
-      .from("naval_memory")
-      .select("slug,title,content,priority")
-      .order("priority", { ascending: true });
 
-    if (!data || data.length === 0) return BASE_SYSTEM_PROMPT;
+    const [memoryRes, sourcesRes] = await Promise.all([
+      sb.from("naval_memory")
+        .select("slug,title,content,priority")
+        .order("priority", { ascending: true }),
+      sb.from("naval_sources")
+        .select("slug,title,author,lens,summary,principles,priority")
+        .eq("active", true)
+        .order("priority", { ascending: true }),
+    ]);
 
-    const memoryBlock = data
-      .map((m: any) => `\n### ${m.title} (${m.slug}.md)\n${m.content}`)
-      .join("\n");
+    const memory = memoryRes.data ?? [];
+    const sources = sourcesRes.data ?? [];
 
-    return `${BASE_SYSTEM_PROMPT}\n\n═══════════════════════════════════════\nMEMÓRIA PERMANENTE (fonte única de verdade)\n═══════════════════════════════════════\n${memoryBlock}\n═══════════════════════════════════════\nFIM DA MEMÓRIA PERMANENTE\n═══════════════════════════════════════`;
+    let prompt = BASE_SYSTEM_PROMPT;
+
+    if (memory.length > 0) {
+      const memoryBlock = memory
+        .map((m: any) => `\n### ${m.title} (${m.slug}.md)\n${m.content}`)
+        .join("\n");
+      prompt += `\n\n═══════════════════════════════════════\nMEMÓRIA PERMANENTE (fonte única de verdade)\n═══════════════════════════════════════\n${memoryBlock}\n═══════════════════════════════════════\nFIM DA MEMÓRIA PERMANENTE\n═══════════════════════════════════════`;
+    }
+
+    if (sources.length > 0) {
+      const byLens = sources.reduce((acc: Record<string, any[]>, s: any) => {
+        (acc[s.lens] ??= []).push(s);
+        return acc;
+      }, {});
+
+      const lensOrder = ["naval", "aaron_ross", "housel", "tevah", "operador", "outros"];
+      const brainBlock = lensOrder
+        .filter((l) => byLens[l]?.length)
+        .map((lens) => {
+          const items = byLens[lens]
+            .map((s: any) => {
+              const principles = Array.isArray(s.principles) ? s.principles : [];
+              const bullets = principles
+                .map((p: any) => `  - ${typeof p === "string" ? p : (p.text ?? JSON.stringify(p))}`)
+                .join("\n");
+              const author = s.author ? ` — ${s.author}` : "";
+              const summary = s.summary ? `\n${s.summary}` : "";
+              return `**${s.title}${author}**${summary}\n\nPrincípios operativos:\n${bullets}`;
+            })
+            .join("\n\n");
+          return `### LENTE ${LENS_LABEL[lens] ?? lens.toUpperCase()}\n\n${items}`;
+        })
+        .join("\n\n───────────────\n\n");
+
+      prompt += `\n\n═══════════════════════════════════════\nBRAIN STACK (lentes de análise)\n═══════════════════════════════════════\nUse os princípios abaixo como ângulos mentais. Eles estão em linguagem destilada — NUNCA reproduza texto longo de livros. Cruze lentes quando útil.\n\n${brainBlock}\n═══════════════════════════════════════\nFIM DA BRAIN STACK\n═══════════════════════════════════════`;
+    }
+
+    return prompt;
   } catch (e) {
-    console.error("Naval memory load failed:", e);
+    console.error("Naval prompt build failed:", e);
     return BASE_SYSTEM_PROMPT;
   }
 }
