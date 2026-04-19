@@ -117,6 +117,10 @@ export function useCreateNavalSource() {
         .select()
         .single();
       if (error) throw error;
+      // Dispara embedding em background — não bloqueia a UX
+      supabase.functions
+        .invoke("naval-embed", { body: { source_id: data.id } })
+        .catch((e) => console.error("naval-embed falhou:", e));
       return data as NavalSource;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["naval_sources"] }),
@@ -140,9 +144,28 @@ export function useUpdateNavalSource() {
         .select()
         .single();
       if (error) throw error;
+      // Se princípios mudaram, re-embeda (idempotente — deleta antigos antes)
+      if (patch.principles || patch.lens) {
+        supabase.functions
+          .invoke("naval-embed", { body: { source_id: id } })
+          .catch((e) => console.error("naval-embed falhou:", e));
+      }
       return data as NavalSource;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["naval_sources"] }),
+  });
+}
+
+// Re-embedar manualmente uma source (pra painel de reindexação ou fix)
+export function useReembedNavalSource() {
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await supabase.functions.invoke("naval-embed", {
+        body: { source_id: id },
+      });
+      if (error) throw error;
+      return data as { ok: boolean; embedded: number; lens: string };
+    },
   });
 }
 

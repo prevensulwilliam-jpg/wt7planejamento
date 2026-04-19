@@ -74,7 +74,48 @@ const LENS_LABEL: Record<string, string> = {
   outros: "OUTROS",
 };
 
-async function buildSystemPrompt(): Promise<string> {
+// Embedding de uma query (usado pelo RAG)
+async function embedQuery(text: string, apiKey: string): Promise<number[] | null> {
+  try {
+    const res = await fetch("https://ai.gateway.lovable.dev/v1/embeddings", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "google/text-embedding-004", input: text.slice(0, 8000) }),
+    });
+    if (!res.ok) {
+      console.error("embed query status:", res.status, await res.text().catch(() => ""));
+      return null;
+    }
+    const data = await res.json() as { data?: Array<{ embedding: number[] }> };
+    return data.data?.[0]?.embedding ?? null;
+  } catch (e) {
+    console.error("embedQuery error:", e);
+    return null;
+  }
+}
+
+interface MatchedPrinciple {
+  source_id: string;
+  source_title: string;
+  source_author: string | null;
+  source_summary: string | null;
+  lens: string;
+  principle_idx: number;
+  text: string;
+  similarity: number;
+}
+
+/**
+ * Constrói o system prompt do Naval:
+ *   - MEMÓRIA PERMANENTE (.md sempre carrega, é pequena e é contexto fixo)
+ *   - BRAIN STACK via RAG: se userQuery fornecida, busca top-K princípios
+ *     mais próximos semanticamente. Caso contrário, cai pro fallback:
+ *     carrega TODAS as sources ativas (modo legado pra primeira mensagem / snapshots).
+ *
+ *   Modo "isso se aplica ao meu caso?": detectado no wisely-ai, aumenta K e
+ *   reduz threshold pra pegar mais contexto.
+ */
+async function buildSystemPrompt(opts?: { userQuery?: string; apiKey?: string; topK?: number; threshold?: number }): Promise<string> {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -84,18 +125,11 @@ async function buildSystemPrompt(): Promise<string> {
       auth: { persistSession: false },
     });
 
-    const [memoryRes, sourcesRes] = await Promise.all([
-      sb.from("naval_memory")
-        .select("slug,title,content,priority")
-        .order("priority", { ascending: true }),
-      sb.from("naval_sources")
-        .select("slug,title,author,lens,summary,principles,priority")
-        .eq("active", true)
-        .order("priority", { ascending: true }),
-    ]);
-
+    // 1. Memória permanente (.md) — sempre carrega, é pequena
+    const memoryRes = await sb.from("naval_memory")
+      .select("slug,title,content,priority")
+      .order("priority", { ascending: true });
     const memory = memoryRes.data ?? [];
-    const sources = sourcesRes.data ?? [];
 
     let prompt = BASE_SYSTEM_PROMPT;
 
@@ -106,32 +140,94 @@ async function buildSystemPrompt(): Promise<string> {
       prompt += `\n\n═══════════════════════════════════════\nMEMÓRIA PERMANENTE (fonte única de verdade)\n═══════════════════════════════════════\n${memoryBlock}\n═══════════════════════════════════════\nFIM DA MEMÓRIA PERMANENTE\n═══════════════════════════════════════`;
     }
 
-    if (sources.length > 0) {
-      const byLens = sources.reduce((acc: Record<string, any[]>, s: any) => {
-        (acc[s.lens] ??= []).push(s);
-        return acc;
-      }, {});
+    // 2. Brain stack — modo RAG (se temos query + apiKey) OU fallback total
+    let brainMarkdown = "";
+    let ragMode = false;
 
-      const lensOrder = ["naval", "aaron_ross", "housel", "tevah", "operador", "outros"];
-      const brainBlock = lensOrder
-        .filter((l) => byLens[l]?.length)
-        .map((lens) => {
-          const items = byLens[lens]
-            .map((s: any) => {
-              const principles = Array.isArray(s.principles) ? s.principles : [];
-              const bullets = principles
-                .map((p: any) => `  - ${typeof p === "string" ? p : (p.text ?? JSON.stringify(p))}`)
-                .join("\n");
+    if (opts?.userQuery && opts?.apiKey && opts.userQuery.trim().length >= 10) {
+      const embedding = await embedQuery(opts.userQuery, opts.apiKey);
+      if (embedding) {
+        const topK = opts.topK ?? 10;
+        const threshold = opts.threshold ?? 0.3; // relaxado — Gemini embeddings vêm com similarity menor
+        const { data: matched, error } = await sb.rpc("match_principles", {
+          query_embedding: embedding as unknown as string, // pgvector aceita array via JSON
+          match_threshold: threshold,
+          match_count: topK,
+        });
+        if (!error && Array.isArray(matched) && matched.length > 0) {
+          ragMode = true;
+          // Agrupa por source pra contexto mais limpo
+          const bySource = (matched as MatchedPrinciple[]).reduce((acc, m) => {
+            const key = m.source_id;
+            if (!acc[key]) {
+              acc[key] = {
+                title: m.source_title,
+                author: m.source_author,
+                summary: m.source_summary,
+                lens: m.lens,
+                principles: [] as Array<{ text: string; similarity: number }>,
+              };
+            }
+            acc[key].principles.push({ text: m.text, similarity: m.similarity });
+            return acc;
+          }, {} as Record<string, { title: string; author: string | null; summary: string | null; lens: string; principles: Array<{ text: string; similarity: number }> }>);
+
+          const blocks = Object.values(bySource)
+            .sort((a, b) => Math.max(...b.principles.map(p => p.similarity)) - Math.max(...a.principles.map(p => p.similarity)))
+            .map((s) => {
+              const lensTag = LENS_LABEL[s.lens] ?? s.lens.toUpperCase();
               const author = s.author ? ` — ${s.author}` : "";
-              const summary = s.summary ? `\n${s.summary}` : "";
-              return `**${s.title}${author}**${summary}\n\nPrincípios operativos:\n${bullets}`;
+              const bullets = s.principles
+                .map((p) => `  - ${p.text} [${(p.similarity * 100).toFixed(0)}%]`)
+                .join("\n");
+              return `**[${lensTag}] ${s.title}${author}**\n${bullets}`;
             })
             .join("\n\n");
-          return `### LENTE ${LENS_LABEL[lens] ?? lens.toUpperCase()}\n\n${items}`;
-        })
-        .join("\n\n───────────────\n\n");
+          brainMarkdown = blocks;
+        } else if (error) {
+          console.error("match_principles error:", error);
+        }
+      }
+    }
 
-      prompt += `\n\n═══════════════════════════════════════\nBRAIN STACK (lentes de análise)\n═══════════════════════════════════════\nUse os princípios abaixo como ângulos mentais. Eles estão em linguagem destilada — NUNCA reproduza texto longo de livros. Cruze lentes quando útil.\n\n${brainBlock}\n═══════════════════════════════════════\nFIM DA BRAIN STACK\n═══════════════════════════════════════`;
+    // Fallback: carrega brain stack inteira (modo antigo)
+    if (!ragMode) {
+      const sourcesRes = await sb.from("naval_sources")
+        .select("slug,title,author,lens,summary,principles,priority")
+        .eq("active", true)
+        .order("priority", { ascending: true });
+      const sources = sourcesRes.data ?? [];
+      if (sources.length > 0) {
+        const byLens = sources.reduce((acc: Record<string, any[]>, s: any) => {
+          (acc[s.lens] ??= []).push(s);
+          return acc;
+        }, {});
+        const lensOrder = ["naval", "aaron_ross", "housel", "tevah", "operador", "outros"];
+        brainMarkdown = lensOrder
+          .filter((l) => byLens[l]?.length)
+          .map((lens) => {
+            const items = byLens[lens]
+              .map((s: any) => {
+                const principles = Array.isArray(s.principles) ? s.principles : [];
+                const bullets = principles
+                  .map((p: any) => `  - ${typeof p === "string" ? p : (p.text ?? JSON.stringify(p))}`)
+                  .join("\n");
+                const author = s.author ? ` — ${s.author}` : "";
+                const summary = s.summary ? `\n${s.summary}` : "";
+                return `**${s.title}${author}**${summary}\n\nPrincípios operativos:\n${bullets}`;
+              })
+              .join("\n\n");
+            return `### LENTE ${LENS_LABEL[lens] ?? lens.toUpperCase()}\n\n${items}`;
+          })
+          .join("\n\n───────────────\n\n");
+      }
+    }
+
+    if (brainMarkdown) {
+      const header = ragMode
+        ? `BRAIN STACK (lentes de análise — TOP ${brainMarkdown.split("\n  -").length - 1} princípios mais relevantes pra esta pergunta, ranqueados por similaridade semântica)`
+        : `BRAIN STACK (lentes de análise — biblioteca completa)`;
+      prompt += `\n\n═══════════════════════════════════════\n${header}\n═══════════════════════════════════════\nUse os princípios abaixo como ângulos mentais. Eles estão em linguagem destilada — NUNCA reproduza texto longo de livros. Cruze lentes quando útil.\n\n${brainMarkdown}\n═══════════════════════════════════════\nFIM DA BRAIN STACK\n═══════════════════════════════════════`;
     }
 
     return prompt;
@@ -670,7 +766,23 @@ Gere a leitura estratégica seguindo o formato obrigatório.`;
       });
     }
 
-    const systemPrompt = await buildSystemPrompt();
+    // Extrai última mensagem do William pra RAG semântico na brain stack
+    const lastUserMsg = [...messages].reverse().find((m: any) => m.role === "user");
+    const userQueryText = typeof lastUserMsg?.content === "string"
+      ? lastUserMsg.content
+      : Array.isArray(lastUserMsg?.content)
+        ? lastUserMsg.content.map((c: any) => c?.text ?? "").join(" ")
+        : "";
+
+    // "isso se aplica ao meu caso?" → mais princípios, threshold relaxado
+    const isApplicabilityQuery = /isso se aplica|meu caso|se aplica ao|aplica pra mim|aplica no meu/i.test(userQueryText);
+
+    const systemPrompt = await buildSystemPrompt({
+      userQuery: userQueryText,
+      apiKey: LOVABLE_API_KEY,
+      topK: isApplicabilityQuery ? 15 : 10,
+      threshold: isApplicabilityQuery ? 0.2 : 0.3,
+    });
     const body: Record<string, unknown> = {
       model: "google/gemini-2.5-flash",
       messages: [{ role: "system", content: systemPrompt }, ...messages],
