@@ -1,11 +1,20 @@
 
-## Redeploy `wisely-ai` edge function
 
-The file `supabase/functions/wisely-ai/index.ts` is up to date in the repo (731 lines, latest commits applied), but the deployed edge function is stale ("Last updated 3 days ago"). The fix is a single action: trigger a fresh deploy of `wisely-ai` so the runtime picks up the current `main` branch source.
+## Redeploy `naval-ingest` edge function with YouTube support
 
-### Plan
-1. Switch to default mode and call `supabase--deploy_edge_functions` with `["wisely-ai"]`.
-2. Verify the deploy succeeded by checking `supabase--edge_function_logs` for a fresh boot entry.
-3. (Optional sanity check) Run a small `supabase--curl_edge_functions` POST to `/wisely-ai` with a trivial chat payload to confirm the new code responds without errors.
+The function at `supabase/functions/naval-ingest/index.ts` has been updated in the repo (commit 23075a2) with YouTube transcript support and source_type detection, but the deployed version needs to be refreshed.
 
-No code changes, no migrations, no config edits. Just a redeploy + verification.
+### What will be done
+1. Deploy the updated `naval-ingest` edge function using `supabase--deploy_edge_functions`.
+2. Verify deployment succeeded by checking edge function logs for a fresh boot entry.
+3. Test the YouTube transcript feature with a sample YouTube URL to confirm it works.
+
+### Deployment command
+```
+supabase--deploy_edge_functions with function_names: ["naval-ingest"]
+```
+
+### Verification steps
+- Check `supabase--edge_function_logs` for `naval-ingest` to confirm successful boot with new version.
+- Run `supabase--curl_edge_functions` POST to `/naval-ingest` with a YouTube URL test payload to verify transcript extraction works.
+
