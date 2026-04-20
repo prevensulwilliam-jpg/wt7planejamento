@@ -3,7 +3,12 @@ import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
 import { MonthPicker } from "@/components/wt7/MonthPicker";
+import {
+  Select, SelectTrigger, SelectValue, SelectContent,
+  SelectGroup, SelectLabel, SelectItem, SelectSeparator,
+} from "@/components/ui/select";
 import { toast } from "sonner";
+import { Gem } from "lucide-react";
 
 type Card = {
   id: string;
@@ -481,39 +486,13 @@ export default function CardsPage() {
                       <td className="py-2 px-2 text-xs" style={{ color: "#94A3B8" }}>
                         {t.cardholder || "—"}
                       </td>
-                      <td className="py-2 px-2 text-xs">
-                        <div className="flex items-center gap-1">
-                          <select
-                            value={t.category_id || ""}
-                            disabled={reclassify.isPending}
-                            onChange={(e) => {
-                              const cat = categories.find(c => c.id === e.target.value);
-                              if (cat) reclassify.mutate({ tx: t, category: cat });
-                            }}
-                            className="bg-black/30 border border-white/10 rounded px-1 py-0.5 text-xs max-w-[200px]"
-                            style={{
-                              color: t.counts_as_investment ? "#10B981" : (t.custom_categories?.slug === "a_investigar" ? "#F59E0B" : "#F0F4F8"),
-                            }}
-                          >
-                            <option value="" disabled>— categoria —</option>
-                            <optgroup label="💎 Investimento">
-                              {categories.filter(c => c.counts_as_investment).map(c => (
-                                <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>
-                              ))}
-                            </optgroup>
-                            <optgroup label="Custo de Vida">
-                              {categories.filter(c => !c.counts_as_investment && c.slug !== "a_investigar").map(c => (
-                                <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>
-                              ))}
-                            </optgroup>
-                            <optgroup label="—">
-                              {categories.filter(c => c.slug === "a_investigar").map(c => (
-                                <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>
-                              ))}
-                            </optgroup>
-                          </select>
-                          {t.counts_as_investment && <span style={{ color: "#10B981" }}>💎</span>}
-                        </div>
+                      <td className="py-2 px-2">
+                        <CategoryPicker
+                          tx={t}
+                          categories={categories}
+                          disabled={reclassify.isPending}
+                          onChange={(cat) => reclassify.mutate({ tx: t, category: cat })}
+                        />
                       </td>
                       <td className="py-2 px-2 text-center text-xs">
                         {t.installment_total > 1 ? `${t.installment_current}/${t.installment_total}` : "—"}
@@ -528,5 +507,133 @@ export default function CardsPage() {
         </div>
       </PremiumCard>
     </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// CategoryPicker — dropdown moderno com shadcn Select
+// ═══════════════════════════════════════════════════════════════════
+
+interface CategoryPickerProps {
+  tx: Tx;
+  categories: Category[];
+  disabled: boolean;
+  onChange: (cat: Category) => void;
+}
+
+function CategoryPicker({ tx, categories, disabled, onChange }: CategoryPickerProps) {
+  const current = tx.custom_categories;
+  const isInvest = !!tx.counts_as_investment;
+  const isInvestigar = current?.slug === "a_investigar" || !current;
+
+  const invests = categories.filter(c => c.counts_as_investment);
+  const custeios = categories.filter(c => !c.counts_as_investment && c.slug !== "a_investigar");
+  const aInv = categories.find(c => c.slug === "a_investigar");
+
+  // Cor da trigger: verde se 💎, âmbar se a investigar, cinza-claro caso contrário
+  const triggerColor = isInvest ? "#10B981" : isInvestigar ? "#F59E0B" : "#E2E8F0";
+  const triggerBorder = isInvest ? "rgba(16,185,129,0.35)" : isInvestigar ? "rgba(245,158,11,0.35)" : "rgba(255,255,255,0.08)";
+  const triggerBg = isInvest ? "rgba(16,185,129,0.08)" : isInvestigar ? "rgba(245,158,11,0.08)" : "rgba(255,255,255,0.03)";
+
+  return (
+    <Select
+      value={tx.category_id || ""}
+      disabled={disabled}
+      onValueChange={(id) => {
+        const cat = categories.find(c => c.id === id);
+        if (cat) onChange(cat);
+      }}
+    >
+      <SelectTrigger
+        className="h-8 text-xs min-w-[180px] max-w-[240px] gap-1 px-2.5 py-1 rounded-md transition-colors hover:opacity-80"
+        style={{ background: triggerBg, border: `1px solid ${triggerBorder}`, color: triggerColor }}
+      >
+        <SelectValue placeholder="— categoria —">
+          {current ? (
+            <span className="inline-flex items-center gap-1.5 truncate">
+              <span>{current.emoji}</span>
+              <span className="truncate font-medium">{current.name}</span>
+              {isInvest && <Gem className="w-3 h-3 shrink-0" style={{ color: "#10B981" }} />}
+            </span>
+          ) : (
+            <span style={{ color: "#F59E0B" }}>❓ A Investigar</span>
+          )}
+        </SelectValue>
+      </SelectTrigger>
+
+      <SelectContent
+        className="max-h-[400px]"
+        style={{ background: "#0D1318", border: "1px solid #1A2535" }}
+      >
+        {invests.length > 0 && (
+          <SelectGroup>
+            <SelectLabel
+              className="text-[10px] uppercase tracking-widest font-mono py-1.5 px-2 flex items-center gap-1"
+              style={{ color: "#10B981" }}
+            >
+              <Gem className="w-3 h-3" /> Investimento (conta pra Sobra)
+            </SelectLabel>
+            {invests.map(c => (
+              <SelectItem
+                key={c.id}
+                value={c.id}
+                className="text-xs cursor-pointer focus:bg-emerald-500/10"
+                style={{ color: "#10B981" }}
+              >
+                <span className="inline-flex items-center gap-1.5">
+                  <span>{c.emoji}</span>
+                  <span>{c.name}</span>
+                  {c.vector && (
+                    <span className="ml-1 text-[9px] opacity-60 font-mono">· {c.vector}</span>
+                  )}
+                </span>
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        )}
+
+        <SelectSeparator style={{ background: "#1A2535" }} />
+
+        {custeios.length > 0 && (
+          <SelectGroup>
+            <SelectLabel
+              className="text-[10px] uppercase tracking-widest font-mono py-1.5 px-2"
+              style={{ color: "#94A3B8" }}
+            >
+              Custo de Vida
+            </SelectLabel>
+            {custeios.map(c => (
+              <SelectItem
+                key={c.id}
+                value={c.id}
+                className="text-xs cursor-pointer focus:bg-white/5"
+                style={{ color: "#E2E8F0" }}
+              >
+                <span className="inline-flex items-center gap-1.5">
+                  <span>{c.emoji}</span>
+                  <span>{c.name}</span>
+                </span>
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        )}
+
+        {aInv && (
+          <>
+            <SelectSeparator style={{ background: "#1A2535" }} />
+            <SelectItem
+              value={aInv.id}
+              className="text-xs cursor-pointer focus:bg-amber-500/10"
+              style={{ color: "#F59E0B" }}
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <span>{aInv.emoji}</span>
+                <span>{aInv.name}</span>
+              </span>
+            </SelectItem>
+          </>
+        )}
+      </SelectContent>
+    </Select>
   );
 }
