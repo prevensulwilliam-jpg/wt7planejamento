@@ -283,33 +283,40 @@ serve(async (req) => {
       };
     });
 
-    // Dedupe via unique index: upsert com onConflict (dois índices parciais — fazer 2 chamadas)
-    // Estratégia simples: upsert com onConflict composto. Índice parcial dedupe automaticamente.
-    // Mais seguro: insert com ignoreDuplicates via onConflict no PK não funciona; usar upsert:
-    const withFitid = rows.filter(r => r.fitid !== null);
-    const withoutFitid = rows.filter(r => r.fitid === null);
-
+    // Dedupe manual (PostgREST não aceita índices parciais em onConflict)
     let inserted = 0, skipped = 0;
-    if (withFitid.length > 0) {
+
+    // 1) Busca existentes pro card
+    const { data: existing, error: exErr } = await supabase
+      .from("card_transactions")
+      .select("fitid, transaction_date, description, amount, cardholder, installment_current")
+      .eq("card_id", card_id);
+    if (exErr) throw exErr;
+
+    const existingFitids = new Set((existing || []).filter(e => e.fitid).map(e => e.fitid));
+    const existingKeys = new Set((existing || []).filter(e => !e.fitid).map(e =>
+      `${e.transaction_date}|${e.description}|${Number(e.amount).toFixed(2)}|${e.cardholder || ""}|${e.installment_current}`
+    ));
+
+    // 2) Filtra novos
+    const newRows = rows.filter(r => {
+      if (r.fitid) {
+        if (existingFitids.has(r.fitid)) { skipped++; return false; }
+        return true;
+      }
+      const key = `${r.transaction_date}|${r.description}|${Number(r.amount).toFixed(2)}|${r.cardholder || ""}|${r.installment_current}`;
+      if (existingKeys.has(key)) { skipped++; return false; }
+      return true;
+    });
+
+    // 3) Insert novos
+    if (newRows.length > 0) {
       const { data, error } = await supabase
         .from("card_transactions")
-        .upsert(withFitid, { onConflict: "card_id,fitid", ignoreDuplicates: true })
+        .insert(newRows)
         .select("id");
       if (error) throw error;
-      inserted += data?.length || 0;
-      skipped += withFitid.length - (data?.length || 0);
-    }
-    if (withoutFitid.length > 0) {
-      const { data, error } = await supabase
-        .from("card_transactions")
-        .upsert(withoutFitid, {
-          onConflict: "card_id,transaction_date,description,amount,cardholder,installment_current",
-          ignoreDuplicates: true,
-        })
-        .select("id");
-      if (error) throw error;
-      inserted += data?.length || 0;
-      skipped += withoutFitid.length - (data?.length || 0);
+      inserted = data?.length || 0;
     }
 
     return new Response(JSON.stringify({
