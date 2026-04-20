@@ -3,7 +3,7 @@ import { WT7Logo } from "@/components/wt7/WT7Logo";
 import {
   Bot, TrendingUp, TrendingDown, Landmark,
   Home, Zap, HardHat, Building2, BarChart3, RefreshCw, Heart,
-  Target, Receipt, Radio, ClipboardList, Coins, Users, ArrowLeftRight, Brain, Tag, KeyRound, Banknote, CalendarClock, Briefcase, Compass, BookOpen
+  Target, Receipt, Radio, ClipboardList, Coins, Users, ArrowLeftRight, Brain, Tag, KeyRound, Banknote, CalendarClock, Briefcase, Compass, BookOpen, CreditCard
 } from "lucide-react";
 
 const navGroups = [
@@ -28,6 +28,7 @@ const navGroups = [
       { label: "Despesas", icon: TrendingDown, href: "/expenses" },
       { label: "Bancos & Caixas", icon: Landmark, href: "/banks" },
       { label: "Conciliação Bancária", icon: ArrowLeftRight, href: "/reconciliation" },
+      { label: "Cartões de Crédito", icon: CreditCard, href: "/cards" },
       { label: "Categorias", icon: Tag, href: "/categories" },
       { label: "Aplicações", icon: BarChart3, href: "/assets?tab=investimentos" },
       { label: "Consórcios", icon: RefreshCw, href: "/consortiums" },
