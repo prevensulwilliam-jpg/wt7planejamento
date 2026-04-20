@@ -13,8 +13,6 @@ verify_jwt = true
 [functions.naval-ingest]
 verify_jwt = true
 
-[functions.parse-card-invoice]
-verify_jwt = true
 
 [functions.pluggy-sync]
 verify_jwt = true
