@@ -20,11 +20,19 @@ interface Props {
 
 export function SobraReinvestidaCard({ month }: Props) {
   const navigate = useNavigate();
-  const { data, isLoading } = useSobraReinvestida(month);
+  const { data, isLoading, error } = useSobraReinvestida(month);
 
-  if (isLoading || !data) {
-    return <Skeleton className="h-48" />;
+  if (isLoading) return <Skeleton className="h-48" />;
+  if (error) {
+    return (
+      <PremiumCard className="p-5">
+        <p className="text-sm" style={{ color: "#F43F5E" }}>
+          ⚠️ Erro ao calcular Sobra Reinvestida: {(error as any).message || String(error)}
+        </p>
+      </PremiumCard>
+    );
   }
+  if (!data) return null;
 
   const meta_ok = data.sobra_pct >= SOBRA_META_PCT;
   const color = meta_ok ? "#10B981" : data.sobra_pct >= 30 ? "#C9A84C" : "#F43F5E";

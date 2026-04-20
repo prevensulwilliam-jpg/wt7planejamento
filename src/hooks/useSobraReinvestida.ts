@@ -34,17 +34,25 @@ export function useSobraReinvestida(month: string) {
       if (er) throw er;
       const receita = (revs || []).reduce((s: number, r: any) => s + Number(r.amount), 0);
 
-      // 2. Despesas do mês (tabela expenses) + categoria pra ver se conta como investimento
+      // 2. Despesas do mês — duas queries separadas (evita join FK opcional)
       const { data: exps, error: ee } = await supabase
         .from("expenses")
-        .select("amount, custom_categories(counts_as_investment)")
+        .select("amount, category_id")
         .eq("reference_month", month);
       if (ee) throw ee;
+
+      // Busca categorias investimento de uma vez
+      const { data: invCats } = await supabase
+        .from("custom_categories")
+        .select("id")
+        .eq("counts_as_investment", true);
+      const invCatIds = new Set((invCats || []).map((c: any) => c.id));
+
       let custeio_expenses = 0;
       let investimento_expenses = 0;
       for (const e of exps || []) {
         const v = Number((e as any).amount);
-        const isInv = (e as any).custom_categories?.counts_as_investment === true;
+        const isInv = invCatIds.has((e as any).category_id);
         if (isInv) investimento_expenses += v;
         else custeio_expenses += v;
       }
