@@ -163,9 +163,16 @@ export default function HojePage() {
                     Índice de Autonomia {formatMonth(month)}
                   </p>
                   <div className="flex items-baseline gap-2 mt-1">
-                    <span className="text-6xl font-bold font-mono" style={{
-                      color: snap.autonomyPct >= TARGET_AUTONOMY ? "#10B981" : snap.autonomyPct >= 30 ? "#C9A84C" : "#F43F5E"
-                    }}>
+                    <span
+                      className="text-6xl font-bold font-mono"
+                      style={{
+                        backgroundImage: "linear-gradient(135deg, #10B981 0%, #34D399 35%, #E8C97A 75%, #C9A84C 100%)",
+                        WebkitBackgroundClip: "text",
+                        backgroundClip: "text",
+                        WebkitTextFillColor: "transparent",
+                        color: "transparent",
+                      }}
+                    >
                       {snap.autonomyPct.toFixed(0)}
                     </span>
                     <span className="text-2xl" style={{ color: "#64748B" }}>%</span>
