@@ -448,6 +448,259 @@ export type Database = {
         }
         Relationships: []
       }
+      card_invoices: {
+        Row: {
+          card_id: string
+          closing_date: string | null
+          due_date: string | null
+          file_format: string | null
+          file_url: string | null
+          id: string
+          imported_at: string | null
+          paid_amount: number | null
+          paid_at: string | null
+          reference_month: string
+          total_amount: number | null
+        }
+        Insert: {
+          card_id: string
+          closing_date?: string | null
+          due_date?: string | null
+          file_format?: string | null
+          file_url?: string | null
+          id?: string
+          imported_at?: string | null
+          paid_amount?: number | null
+          paid_at?: string | null
+          reference_month: string
+          total_amount?: number | null
+        }
+        Update: {
+          card_id?: string
+          closing_date?: string | null
+          due_date?: string | null
+          file_format?: string | null
+          file_url?: string | null
+          id?: string
+          imported_at?: string | null
+          paid_amount?: number | null
+          paid_at?: string | null
+          reference_month?: string
+          total_amount?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "card_invoices_card_id_fkey"
+            columns: ["card_id"]
+            isOneToOne: false
+            referencedRelation: "cards"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      card_merchant_patterns: {
+        Row: {
+          category_id: string
+          confidence: number | null
+          id: string
+          last_used_at: string | null
+          merchant_pattern: string
+        }
+        Insert: {
+          category_id: string
+          confidence?: number | null
+          id?: string
+          last_used_at?: string | null
+          merchant_pattern: string
+        }
+        Update: {
+          category_id?: string
+          confidence?: number | null
+          id?: string
+          last_used_at?: string | null
+          merchant_pattern?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "card_merchant_patterns_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "custom_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      card_rewards: {
+        Row: {
+          card_id: string
+          created_at: string | null
+          id: string
+          notes: string | null
+          points_balance: number | null
+          points_earned: number | null
+          program: string | null
+          reference_month: string
+        }
+        Insert: {
+          card_id: string
+          created_at?: string | null
+          id?: string
+          notes?: string | null
+          points_balance?: number | null
+          points_earned?: number | null
+          program?: string | null
+          reference_month: string
+        }
+        Update: {
+          card_id?: string
+          created_at?: string | null
+          id?: string
+          notes?: string | null
+          points_balance?: number | null
+          points_earned?: number | null
+          program?: string | null
+          reference_month?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "card_rewards_card_id_fkey"
+            columns: ["card_id"]
+            isOneToOne: false
+            referencedRelation: "cards"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      card_transactions: {
+        Row: {
+          amount: number
+          card_id: string
+          cardholder: string | null
+          category_id: string | null
+          counts_as_investment: boolean | null
+          created_at: string | null
+          currency: string | null
+          description: string
+          fitid: string | null
+          fx_rate: number | null
+          id: string
+          installment_current: number | null
+          installment_total: number | null
+          invoice_id: string
+          merchant_normalized: string | null
+          notes: string | null
+          transaction_date: string
+          updated_at: string | null
+          vector: string | null
+        }
+        Insert: {
+          amount: number
+          card_id: string
+          cardholder?: string | null
+          category_id?: string | null
+          counts_as_investment?: boolean | null
+          created_at?: string | null
+          currency?: string | null
+          description: string
+          fitid?: string | null
+          fx_rate?: number | null
+          id?: string
+          installment_current?: number | null
+          installment_total?: number | null
+          invoice_id: string
+          merchant_normalized?: string | null
+          notes?: string | null
+          transaction_date: string
+          updated_at?: string | null
+          vector?: string | null
+        }
+        Update: {
+          amount?: number
+          card_id?: string
+          cardholder?: string | null
+          category_id?: string | null
+          counts_as_investment?: boolean | null
+          created_at?: string | null
+          currency?: string | null
+          description?: string
+          fitid?: string | null
+          fx_rate?: number | null
+          id?: string
+          installment_current?: number | null
+          installment_total?: number | null
+          invoice_id?: string
+          merchant_normalized?: string | null
+          notes?: string | null
+          transaction_date?: string
+          updated_at?: string | null
+          vector?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "card_transactions_card_id_fkey"
+            columns: ["card_id"]
+            isOneToOne: false
+            referencedRelation: "cards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "card_transactions_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "custom_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "card_transactions_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "card_invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cards: {
+        Row: {
+          active: boolean | null
+          bank: string
+          brand: string | null
+          closing_day: number | null
+          created_at: string | null
+          credit_limit: number | null
+          due_day: number | null
+          id: string
+          last4: string | null
+          name: string
+          updated_at: string | null
+        }
+        Insert: {
+          active?: boolean | null
+          bank: string
+          brand?: string | null
+          closing_day?: number | null
+          created_at?: string | null
+          credit_limit?: number | null
+          due_day?: number | null
+          id?: string
+          last4?: string | null
+          name: string
+          updated_at?: string | null
+        }
+        Update: {
+          active?: boolean | null
+          bank?: string
+          brand?: string | null
+          closing_day?: number | null
+          created_at?: string | null
+          credit_limit?: number | null
+          due_day?: number | null
+          id?: string
+          last4?: string | null
+          name?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       celesc_invoices: {
         Row: {
           amount_paid: number | null
@@ -948,29 +1201,38 @@ export type Database = {
         Row: {
           active: boolean | null
           color: string | null
+          counts_as_investment: boolean | null
           created_at: string | null
           emoji: string | null
           id: string
           name: string
+          slug: string | null
           type: string | null
+          vector: string | null
         }
         Insert: {
           active?: boolean | null
           color?: string | null
+          counts_as_investment?: boolean | null
           created_at?: string | null
           emoji?: string | null
           id?: string
           name: string
+          slug?: string | null
           type?: string | null
+          vector?: string | null
         }
         Update: {
           active?: boolean | null
           color?: string | null
+          counts_as_investment?: boolean | null
           created_at?: string | null
           emoji?: string | null
           id?: string
           name?: string
+          slug?: string | null
           type?: string | null
+          vector?: string | null
         }
         Relationships: []
       }
