@@ -224,29 +224,21 @@ serve(async (req) => {
     const closing_day = cardData.closing_day || 25;
     const due_day = cardData.due_day || 5;
 
-    // 3) Determinar reference_month = mês do vencimento da fatura
-    // Regra: transação feita no dia D do mês M entra no ciclo que fecha em closing_day.
-    //  - Se D <= closing_day → fechamento no mês M
-    //  - Se D >  closing_day → fechamento no mês M+1
-    // Venc depende de due_day vs closing_day:
-    //  - due_day < closing_day (ex: BB close=29, due=10) → venc no mês seguinte ao fechamento
-    //  - due_day >= closing_day (ex: XP close=19, due=25) → venc no mesmo mês do fechamento
+    // 3) Determinar reference_month = mês do próximo due_day após a maxDate
+    // Regra simples: a fatura é a que vence no próximo due_day depois da transação mais recente.
+    //  - BB maxDate=06/abr, due=10 → próximo dia 10 = 10/abr → ref=2026-04
+    //  - BB maxDate=11/abr, due=10 → próximo dia 10 = 10/mai → ref=2026-05
+    //  - XP maxDate=17/abr, due=25 → próximo dia 25 = 25/abr → ref=2026-04
     function computeDueMonth(refDate: string): string {
       const [y, m, d] = refDate.split("-").map(Number);
-      let close_y = y, close_m = m;
-      if (d > closing_day) {
-        close_m = m + 1;
-        if (close_m > 12) { close_m -= 12; close_y += 1; }
-      }
-      let venc_y = close_y, venc_m = close_m;
-      if (due_day < closing_day) {
-        venc_m = close_m + 1;
+      let venc_y = y, venc_m = m;
+      if (d > due_day) {
+        venc_m = m + 1;
         if (venc_m > 12) { venc_m -= 12; venc_y += 1; }
       }
       return `${venc_y}-${String(venc_m).padStart(2, "0")}`;
     }
 
-    // Sempre usa max date de compras NÃO parceladas (OFX DTEND é pouco confiável entre bancos)
     let ref: string;
     if (reference_month) {
       ref = reference_month;
