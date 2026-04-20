@@ -34,28 +34,17 @@ export function useSobraReinvestida(month: string) {
       if (er) throw er;
       const receita = (revs || []).reduce((s: number, r: any) => s + Number(r.amount), 0);
 
-      // 2. Despesas do mês — duas queries separadas (evita join FK opcional)
+      // 2. Despesas do mês — tabela expenses usa 'category' text enum (não FK)
+      // Por enquanto: TODAS as expenses contam como custeio.
+      // TODO: quando William quiser marcar alguma expense como investimento, adiciono flag.
       const { data: exps, error: ee } = await supabase
         .from("expenses")
-        .select("amount, category_id")
+        .select("amount")
         .eq("reference_month", month);
       if (ee) throw ee;
 
-      // Busca categorias investimento de uma vez
-      const { data: invCats } = await supabase
-        .from("custom_categories")
-        .select("id")
-        .eq("counts_as_investment", true);
-      const invCatIds = new Set((invCats || []).map((c: any) => c.id));
-
-      let custeio_expenses = 0;
-      let investimento_expenses = 0;
-      for (const e of exps || []) {
-        const v = Number((e as any).amount);
-        const isInv = invCatIds.has((e as any).category_id);
-        if (isInv) investimento_expenses += v;
-        else custeio_expenses += v;
-      }
+      const custeio_expenses = (exps || []).reduce((s: number, e: any) => s + Number(e.amount), 0);
+      const investimento_expenses = 0;
 
       // 3. Cartões do mês (invoice reference_month)
       const { data: invs } = await supabase
