@@ -3,3 +3,21 @@ project_id = "hbyzmuxkgsogbxhykhhu"
 [auth]
 site_url = "https://wt7planejamento.lovable.app"
 additional_redirect_urls = ["https://wt7planejamento.lovable.app/reset-password"]
+
+[functions.wisely-ai]
+verify_jwt = true
+
+[functions.naval-embed]
+verify_jwt = true
+
+[functions.naval-ingest]
+verify_jwt = true
+
+[functions.parse-card-invoice]
+verify_jwt = true
+
+[functions.pluggy-sync]
+verify_jwt = true
+
+[functions.extract-celesc-invoice]
+verify_jwt = true
