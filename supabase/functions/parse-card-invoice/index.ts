@@ -192,12 +192,12 @@ serve(async (req) => {
 
     // 1) Parse
     let txs: ParsedTx[] = [];
-    let detectedMonth: string | undefined;
+    let cycleEndDate: string | undefined;  // YYYY-MM-DD do fim do ciclo
 
     if (file_format === "ofx") {
       const { txs: parsed, dtend } = parseOFX(file_content);
       txs = parsed;
-      if (dtend) detectedMonth = `${dtend.substring(0, 4)}-${dtend.substring(4, 6)}`;
+      if (dtend) cycleEndDate = `${dtend.substring(0, 4)}-${dtend.substring(4, 6)}-${dtend.substring(6, 8)}`;
     } else if (file_format === "csv") {
       txs = parseCSV(file_content);
     } else if (file_format === "pdf") {
@@ -214,10 +214,48 @@ serve(async (req) => {
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // 2) Determinar reference_month (prioridade: body > detectado > max date)
-    const ref = reference_month
-      || detectedMonth
-      || txs.map(t => t.transaction_date.substring(0, 7)).sort().at(-1)!;
+    // 2) Buscar cartão pra pegar closing/due
+    const { data: cardData, error: cardErr } = await supabase
+      .from("cards")
+      .select("closing_day, due_day")
+      .eq("id", card_id)
+      .single();
+    if (cardErr) throw cardErr;
+    const closing_day = cardData.closing_day || 25;
+    const due_day = cardData.due_day || 5;
+
+    // 3) Determinar reference_month = mês do vencimento
+    // Regra: a fatura contém transações até closing_day; vence no due_day do mês seguinte.
+    // Se cycleEndDate (OFX DTEND) → usa. Senão usa max date de transações não parceladas.
+    function computeDueMonth(refDate: string): string {
+      const [y, m, d] = refDate.split("-").map(Number);
+      let venc_year = y;
+      let venc_month = m;
+      // Se a data de referência passou do closing daquele mês, fechamento foi nesse mês → venc = mês+1
+      // Se ainda não chegou no closing, o ciclo anterior já venceu → venc = mês atual se due_day >= d, senão mês+1
+      if (d > closing_day) {
+        // já passou do fechamento do mês atual → ciclo fecha nesse mês, venc mês+1
+        venc_month = m + 1;
+      } else {
+        // ainda não fechou esse mês → ciclo fechou no mês anterior → venc é mês atual
+        venc_month = m;
+      }
+      if (venc_month > 12) { venc_month -= 12; venc_year += 1; }
+      return `${venc_year}-${String(venc_month).padStart(2, "0")}`;
+    }
+
+    let ref: string;
+    if (reference_month) {
+      ref = reference_month;
+    } else if (cycleEndDate) {
+      ref = computeDueMonth(cycleEndDate);
+    } else {
+      // CSV: usa max date de compras NÃO parceladas (evita pegar parcela antiga como referência)
+      const nonParc = txs.filter(t => t.installment_total === 1);
+      const pool = nonParc.length > 0 ? nonParc : txs;
+      const maxDate = pool.map(t => t.transaction_date).sort().at(-1)!;
+      ref = computeDueMonth(maxDate);
+    }
 
     // 3) Upsert invoice (manual — select + update/insert)
     const total_amount = txs.reduce((s, t) => s + Number(t.amount), 0);
