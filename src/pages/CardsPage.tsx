@@ -7,8 +7,9 @@ import {
   Select, SelectTrigger, SelectValue, SelectContent,
   SelectGroup, SelectLabel, SelectItem, SelectSeparator,
 } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Gem } from "lucide-react";
+import { Gem, X, ArrowUp, ArrowDown, Filter } from "lucide-react";
 
 type Card = {
   id: string;
@@ -117,6 +118,38 @@ export default function CardsPage() {
   const [selectedCardId, setSelectedCardId] = useState<string>("");
   const [uploading, setUploading] = useState(false);
   const [lastResult, setLastResult] = useState<ParseResult | null>(null);
+
+  // ── Filtros ───────────────────────────────────────────
+  const [search, setSearch] = useState("");
+  const [filterCard, setFilterCard] = useState<string>("all");        // card_id
+  const [filterHolder, setFilterHolder] = useState<string>("all");
+  const [filterCategory, setFilterCategory] = useState<string>("all"); // category_id | "invest" | "custeio" | "investigar"
+  const [filterVector, setFilterVector] = useState<string>("all");
+  const [minAmount, setMinAmount] = useState("");
+  const [maxAmount, setMaxAmount] = useState("");
+  const [onlyInstallments, setOnlyInstallments] = useState(false);
+  const [sortBy, setSortBy] = useState<"date" | "amount" | "description">("date");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  function clearFilters() {
+    setSearch("");
+    setFilterCard("all");
+    setFilterHolder("all");
+    setFilterCategory("all");
+    setFilterVector("all");
+    setMinAmount("");
+    setMaxAmount("");
+    setOnlyInstallments(false);
+  }
+
+  function toggleSort(col: "date" | "amount" | "description") {
+    if (sortBy === col) {
+      setSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(col);
+      setSortDir(col === "date" ? "desc" : "asc");
+    }
+  }
 
   const { data: cards } = useQuery({
     queryKey: ["cards"],
@@ -253,6 +286,97 @@ export default function CardsPage() {
 
     return { total, invest, custo, pctInvest, byVector, byCard: Object.values(byCard), semCategoria };
   }, [txs]);
+
+  // Lista única de portadores presentes
+  const holders = useMemo(() => {
+    const s = new Set<string>();
+    for (const t of txs) if (t.cardholder) s.add(t.cardholder);
+    return Array.from(s).sort();
+  }, [txs]);
+
+  // Lista única de vetores (só dos txs que contam invest)
+  const vectorsPresent = useMemo(() => {
+    const s = new Set<string>();
+    for (const t of txs) if (t.vector) s.add(t.vector);
+    return Array.from(s).sort();
+  }, [txs]);
+
+  // Lista única de cartões presentes no mês
+  const cardsPresent = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const t of txs) if (t.card_id && t.cards?.name) m.set(t.card_id, t.cards.name);
+    return Array.from(m.entries()); // [id, name]
+  }, [txs]);
+
+  const filteredTxs = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const min = minAmount ? Number(minAmount) : null;
+    const max = maxAmount ? Number(maxAmount) : null;
+
+    let out = txs.filter(t => {
+      if (q) {
+        const hay = `${t.description || ""} ${t.merchant_normalized || ""}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      if (filterCard !== "all" && t.card_id !== filterCard) return false;
+      if (filterHolder !== "all" && (t.cardholder || "") !== filterHolder) return false;
+
+      if (filterCategory !== "all") {
+        if (filterCategory === "invest") {
+          if (!t.counts_as_investment) return false;
+        } else if (filterCategory === "custeio") {
+          if (t.counts_as_investment) return false;
+          if (t.custom_categories?.slug === "a_investigar") return false;
+        } else if (filterCategory === "investigar") {
+          if (t.custom_categories && t.custom_categories.slug !== "a_investigar") return false;
+        } else {
+          if (t.category_id !== filterCategory) return false;
+        }
+      }
+
+      if (filterVector !== "all" && (t.vector || "") !== filterVector) return false;
+
+      const amt = Number(t.amount);
+      if (min !== null && amt < min) return false;
+      if (max !== null && amt > max) return false;
+
+      if (onlyInstallments && t.installment_total <= 1) return false;
+      return true;
+    });
+
+    const dir = sortDir === "asc" ? 1 : -1;
+    out = [...out].sort((a, b) => {
+      if (sortBy === "date") return a.transaction_date.localeCompare(b.transaction_date) * dir;
+      if (sortBy === "amount") return (Number(a.amount) - Number(b.amount)) * dir;
+      return (a.description || "").localeCompare(b.description || "") * dir;
+    });
+    return out;
+  }, [txs, search, filterCard, filterHolder, filterCategory, filterVector, minAmount, maxAmount, onlyInstallments, sortBy, sortDir]);
+
+  const activeFilters = useMemo(() => {
+    const chips: Array<{ key: string; label: string; onClear: () => void }> = [];
+    if (search) chips.push({ key: "search", label: `Busca: "${search}"`, onClear: () => setSearch("") });
+    if (filterCard !== "all") {
+      const n = cardsPresent.find(([id]) => id === filterCard)?.[1] || filterCard;
+      chips.push({ key: "card", label: `Cartão: ${n}`, onClear: () => setFilterCard("all") });
+    }
+    if (filterHolder !== "all") chips.push({ key: "holder", label: `Portador: ${filterHolder}`, onClear: () => setFilterHolder("all") });
+    if (filterCategory !== "all") {
+      const labelMap: Record<string, string> = { invest: "💎 Investimento", custeio: "Custo de Vida", investigar: "❓ A Investigar" };
+      const lbl = labelMap[filterCategory] || categories.find(c => c.id === filterCategory)?.name || filterCategory;
+      chips.push({ key: "cat", label: `Categoria: ${lbl}`, onClear: () => setFilterCategory("all") });
+    }
+    if (filterVector !== "all") {
+      const lbl = VECTOR_LABELS[filterVector]?.label || filterVector;
+      chips.push({ key: "vec", label: `Vetor: ${lbl}`, onClear: () => setFilterVector("all") });
+    }
+    if (minAmount) chips.push({ key: "min", label: `≥ ${money(Number(minAmount))}`, onClear: () => setMinAmount("") });
+    if (maxAmount) chips.push({ key: "max", label: `≤ ${money(Number(maxAmount))}`, onClear: () => setMaxAmount("") });
+    if (onlyInstallments) chips.push({ key: "parc", label: "Só parceladas", onClear: () => setOnlyInstallments(false) });
+    return chips;
+  }, [search, filterCard, filterHolder, filterCategory, filterVector, minAmount, maxAmount, onlyInstallments, cardsPresent, categories]);
+
+  const filteredTotal = useMemo(() => filteredTxs.reduce((s, t) => s + Number(t.amount), 0), [filteredTxs]);
 
   async function handleUpload(file: File) {
     if (!selectedCardId) {
@@ -446,14 +570,155 @@ export default function CardsPage() {
       {/* Grid de transações do mês-ref */}
       <PremiumCard>
         <div className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold" style={{ color: "#F0F4F8" }}>
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <h2 className="text-lg font-semibold flex items-center gap-2" style={{ color: "#F0F4F8" }}>
+              <Filter className="w-4 h-4" style={{ color: "#C9A84C" }} />
               Transações — {refMonth}
             </h2>
-            <span className="text-sm" style={{ color: "#94A3B8" }}>
-              {loadingTxs ? "Carregando..." : `${txs.length} lançamentos`}
-            </span>
+            <div className="text-sm flex items-center gap-3" style={{ color: "#94A3B8" }}>
+              {loadingTxs ? "Carregando..." : (
+                <>
+                  <span>
+                    <span style={{ color: "#F0F4F8", fontWeight: 600 }}>{filteredTxs.length}</span>
+                    {filteredTxs.length !== txs.length && <span> de {txs.length}</span>} lançamentos
+                  </span>
+                  <span className="font-mono" style={{ color: "#C9A84C" }}>{money(filteredTotal)}</span>
+                </>
+              )}
+            </div>
           </div>
+
+          {/* Barra de filtros */}
+          {txs.length > 0 && (
+            <div className="mb-4 space-y-3 p-3 rounded-lg" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
+                <Input
+                  placeholder="🔍 Buscar descrição / merchant..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="h-9 text-xs"
+                  style={{ background: "#080C10", border: "1px solid #1A2535", color: "#F0F4F8" }}
+                />
+                <Select value={filterCard} onValueChange={setFilterCard}>
+                  <SelectTrigger className="h-9 text-xs" style={{ background: "#080C10", border: "1px solid #1A2535", color: "#F0F4F8" }}>
+                    <SelectValue placeholder="Cartão" />
+                  </SelectTrigger>
+                  <SelectContent style={{ background: "#0D1318", border: "1px solid #1A2535" }}>
+                    <SelectItem value="all" className="text-xs" style={{ color: "#E2E8F0" }}>Todos cartões</SelectItem>
+                    {cardsPresent.map(([id, name]) => (
+                      <SelectItem key={id} value={id} className="text-xs" style={{ color: "#E2E8F0" }}>{name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={filterHolder} onValueChange={setFilterHolder}>
+                  <SelectTrigger className="h-9 text-xs" style={{ background: "#080C10", border: "1px solid #1A2535", color: "#F0F4F8" }}>
+                    <SelectValue placeholder="Portador" />
+                  </SelectTrigger>
+                  <SelectContent style={{ background: "#0D1318", border: "1px solid #1A2535" }}>
+                    <SelectItem value="all" className="text-xs" style={{ color: "#E2E8F0" }}>Todos portadores</SelectItem>
+                    {holders.map(h => (
+                      <SelectItem key={h} value={h} className="text-xs" style={{ color: "#E2E8F0" }}>{h}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={filterCategory} onValueChange={setFilterCategory}>
+                  <SelectTrigger className="h-9 text-xs" style={{ background: "#080C10", border: "1px solid #1A2535", color: "#F0F4F8" }}>
+                    <SelectValue placeholder="Categoria" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[400px]" style={{ background: "#0D1318", border: "1px solid #1A2535" }}>
+                    <SelectItem value="all" className="text-xs" style={{ color: "#E2E8F0" }}>Todas categorias</SelectItem>
+                    <SelectSeparator style={{ background: "#1A2535" }} />
+                    <SelectItem value="invest" className="text-xs" style={{ color: "#10B981" }}>💎 Todos investimentos</SelectItem>
+                    <SelectItem value="custeio" className="text-xs" style={{ color: "#E2E8F0" }}>Todos custeio</SelectItem>
+                    <SelectItem value="investigar" className="text-xs" style={{ color: "#F59E0B" }}>❓ A Investigar</SelectItem>
+                    <SelectSeparator style={{ background: "#1A2535" }} />
+                    <SelectGroup>
+                      <SelectLabel className="text-[10px] uppercase tracking-widest" style={{ color: "#10B981" }}>💎 Investimento</SelectLabel>
+                      {categories.filter(c => c.counts_as_investment).map(c => (
+                        <SelectItem key={c.id} value={c.id} className="text-xs" style={{ color: "#10B981" }}>{c.emoji} {c.name}</SelectItem>
+                      ))}
+                    </SelectGroup>
+                    <SelectSeparator style={{ background: "#1A2535" }} />
+                    <SelectGroup>
+                      <SelectLabel className="text-[10px] uppercase tracking-widest" style={{ color: "#94A3B8" }}>Custeio</SelectLabel>
+                      {categories.filter(c => !c.counts_as_investment && c.slug !== "a_investigar").map(c => (
+                        <SelectItem key={c.id} value={c.id} className="text-xs" style={{ color: "#E2E8F0" }}>{c.emoji} {c.name}</SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-2">
+                <Select value={filterVector} onValueChange={setFilterVector}>
+                  <SelectTrigger className="h-9 text-xs" style={{ background: "#080C10", border: "1px solid #1A2535", color: "#F0F4F8" }}>
+                    <SelectValue placeholder="Vetor" />
+                  </SelectTrigger>
+                  <SelectContent style={{ background: "#0D1318", border: "1px solid #1A2535" }}>
+                    <SelectItem value="all" className="text-xs" style={{ color: "#E2E8F0" }}>Todos vetores</SelectItem>
+                    {vectorsPresent.map(v => {
+                      const meta = VECTOR_LABELS[v] || { label: v, emoji: "•" };
+                      return (
+                        <SelectItem key={v} value={v} className="text-xs" style={{ color: "#10B981" }}>
+                          {meta.emoji} {meta.label}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+                <Input
+                  type="number"
+                  placeholder="Valor mín."
+                  value={minAmount}
+                  onChange={(e) => setMinAmount(e.target.value)}
+                  className="h-9 text-xs"
+                  style={{ background: "#080C10", border: "1px solid #1A2535", color: "#F0F4F8" }}
+                />
+                <Input
+                  type="number"
+                  placeholder="Valor máx."
+                  value={maxAmount}
+                  onChange={(e) => setMaxAmount(e.target.value)}
+                  className="h-9 text-xs"
+                  style={{ background: "#080C10", border: "1px solid #1A2535", color: "#F0F4F8" }}
+                />
+                <label className="flex items-center gap-2 text-xs px-2 h-9 rounded-md cursor-pointer" style={{ background: "#080C10", border: "1px solid #1A2535", color: "#E2E8F0" }}>
+                  <input
+                    type="checkbox"
+                    checked={onlyInstallments}
+                    onChange={(e) => setOnlyInstallments(e.target.checked)}
+                    className="accent-yellow-600"
+                  />
+                  Só parceladas
+                </label>
+                {activeFilters.length > 0 && (
+                  <button
+                    onClick={clearFilters}
+                    className="h-9 px-3 rounded-md text-xs font-medium transition-colors"
+                    style={{ background: "rgba(244,63,94,0.1)", border: "1px solid rgba(244,63,94,0.3)", color: "#F43F5E" }}
+                  >
+                    Limpar filtros
+                  </button>
+                )}
+              </div>
+
+              {activeFilters.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {activeFilters.map(chip => (
+                    <button
+                      key={chip.key}
+                      onClick={chip.onClear}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] transition-colors hover:opacity-80"
+                      style={{ background: "rgba(201,168,76,0.1)", border: "1px solid rgba(201,168,76,0.3)", color: "#C9A84C" }}
+                    >
+                      {chip.label}
+                      <X className="w-3 h-3" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {txs.length === 0 && !loadingTxs && (
             <div className="text-sm py-8 text-center" style={{ color: "#94A3B8" }}>
@@ -461,22 +726,34 @@ export default function CardsPage() {
             </div>
           )}
 
-          {txs.length > 0 && (
+          {txs.length > 0 && filteredTxs.length === 0 && (
+            <div className="text-sm py-8 text-center" style={{ color: "#94A3B8" }}>
+              Nenhum resultado com os filtros atuais.
+            </div>
+          )}
+
+          {filteredTxs.length > 0 && (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-white/10" style={{ color: "#94A3B8" }}>
-                    <th className="text-left py-2 px-2">Data</th>
-                    <th className="text-left py-2 px-2">Descrição</th>
+                    <th className="text-left py-2 px-2 cursor-pointer select-none" onClick={() => toggleSort("date")}>
+                      <span className="inline-flex items-center gap-1">Data {sortBy === "date" && (sortDir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />)}</span>
+                    </th>
+                    <th className="text-left py-2 px-2 cursor-pointer select-none" onClick={() => toggleSort("description")}>
+                      <span className="inline-flex items-center gap-1">Descrição {sortBy === "description" && (sortDir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />)}</span>
+                    </th>
                     <th className="text-left py-2 px-2">Cartão</th>
                     <th className="text-left py-2 px-2">Portador</th>
                     <th className="text-left py-2 px-2">Categoria</th>
                     <th className="text-center py-2 px-2">Parc</th>
-                    <th className="text-right py-2 px-2">Valor</th>
+                    <th className="text-right py-2 px-2 cursor-pointer select-none" onClick={() => toggleSort("amount")}>
+                      <span className="inline-flex items-center gap-1 justify-end w-full">Valor {sortBy === "amount" && (sortDir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />)}</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {txs.map((t) => (
+                  {filteredTxs.map((t) => (
                     <tr key={t.id} className="border-b border-white/5 hover:bg-white/5" style={{ color: "#F0F4F8" }}>
                       <td className="py-2 px-2 whitespace-nowrap">{t.transaction_date}</td>
                       <td className="py-2 px-2">{t.description}</td>
