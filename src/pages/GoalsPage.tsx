@@ -8,6 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
 import { KpiCard } from "@/components/wt7/KpiCard";
 import { GoldButton } from "@/components/wt7/GoldButton";
+import { SobraReinvestidaCard } from "@/components/wt7/SobraReinvestidaCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useGoals, useUpdateGoal, useDashboardKPIs } from "@/hooks/useFinances";
 import { useCreateGoal } from "@/hooks/useConstructions";
@@ -58,6 +59,9 @@ export default function GoalsPage() {
         </h1>
         <GoldButton onClick={() => setNewOpen(true)}><Plus className="w-4 h-4" />Nova Meta</GoldButton>
       </div>
+
+      {/* Sobra Reinvestida — meta estratégica do William (≥50% da receita) */}
+      <SobraReinvestidaCard month={getCurrentMonth()} />
 
       {/* Special R$100k card */}
       <PremiumCard glowColor="#C9A84C" className="space-y-4">

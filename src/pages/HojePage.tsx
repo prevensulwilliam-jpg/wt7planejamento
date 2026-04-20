@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAutonomyIndex, useAutonomyHistory } from "@/hooks/useAutonomyIndex";
 import { useKitnetOrphans } from "@/hooks/useReconcileMonth";
 import { useMonthRevenueReconciliation, useBusinesses, useBusinessRealized } from "@/hooks/useBusinesses";
+import { SobraReinvestidaCard } from "@/components/wt7/SobraReinvestidaCard";
 import { formatCurrency, getCurrentMonth, formatMonth } from "@/lib/formatters";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -222,6 +223,9 @@ export default function HojePage() {
                 </p>
               </PremiumCard>
             </div>
+
+            {/* ═══ BLOCO 2.5: Sobra Reinvestida (cartões + expenses) ═══ */}
+            <SobraReinvestidaCard month={month} />
 
             {/* ═══ BLOCO 3: Alertas & Ações ═══ */}
             {alertas.length > 0 && (
