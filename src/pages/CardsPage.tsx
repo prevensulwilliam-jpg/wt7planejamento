@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
 import { MonthPicker } from "@/components/wt7/MonthPicker";
@@ -31,10 +31,12 @@ type Tx = {
   invoice_id: string;
   transaction_date: string;
   description: string;
+  merchant_normalized: string | null;
   amount: number;
   cardholder: string | null;
   installment_current: number;
   installment_total: number;
+  category_id: string | null;
   counts_as_investment: boolean;
   vector: string | null;
   custom_categories: {
@@ -45,6 +47,21 @@ type Tx = {
   } | null;
   cards: { name: string; bank: string } | null;
 };
+
+type Category = {
+  id: string;
+  name: string;
+  slug: string | null;
+  emoji: string | null;
+  counts_as_investment: boolean;
+  vector: string | null;
+};
+
+/** Extrai um pattern genérico a partir do merchant_normalized (primeiras 2 palavras >= 3 chars). */
+function extractPattern(merchant: string): string {
+  const words = merchant.split(" ").filter(w => w.length >= 3);
+  return words.slice(0, 2).join(" ").trim() || merchant.trim();
+}
 
 const VECTOR_LABELS: Record<string, { label: string; emoji: string }> = {
   aporte_obra: { label: "Aporte Obra", emoji: "🧱" },
@@ -122,9 +139,9 @@ export default function CardsPage() {
       const { data, error } = await supabase
         .from("card_transactions")
         .select(`
-          id, card_id, invoice_id, transaction_date, description, amount,
+          id, card_id, invoice_id, transaction_date, description, merchant_normalized, amount,
           cardholder, installment_current, installment_total,
-          counts_as_investment, vector,
+          category_id, counts_as_investment, vector,
           custom_categories ( name, emoji, slug, counts_as_investment ),
           cards ( name, bank )
         `)
@@ -133,6 +150,73 @@ export default function CardsPage() {
       if (error) throw error;
       return (data || []) as any[];
     },
+  });
+
+  // Categorias despesa (dropdown)
+  const { data: categories = [] } = useQuery<Category[]>({
+    queryKey: ["card_categories"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("custom_categories")
+        .select("id, name, slug, emoji, counts_as_investment, vector")
+        .eq("type", "despesa")
+        .order("counts_as_investment", { ascending: false })
+        .order("name");
+      if (error) throw error;
+      return data as Category[];
+    },
+  });
+
+  // Mutation: reclassificar transação + aprender pattern
+  const reclassify = useMutation({
+    mutationFn: async ({ tx, category }: { tx: Tx; category: Category }) => {
+      // 1. Atualiza a transação
+      const { error: eu } = await supabase
+        .from("card_transactions")
+        .update({
+          category_id: category.id,
+          counts_as_investment: category.counts_as_investment,
+          vector: category.vector,
+        })
+        .eq("id", tx.id);
+      if (eu) throw eu;
+
+      // 2. Aprende o pattern (só se não for "A Investigar")
+      if (category.slug !== "a_investigar" && tx.merchant_normalized) {
+        const pat = extractPattern(tx.merchant_normalized);
+        if (pat.length >= 3) {
+          // Upsert manual — busca, atualiza ou insere
+          const { data: existing } = await supabase
+            .from("card_merchant_patterns")
+            .select("id, confidence")
+            .eq("merchant_pattern", pat)
+            .maybeSingle();
+
+          if (existing) {
+            await supabase
+              .from("card_merchant_patterns")
+              .update({
+                category_id: category.id,
+                confidence: (existing.confidence || 1) + 1,
+                last_used_at: new Date().toISOString(),
+              })
+              .eq("id", existing.id);
+          } else {
+            await supabase.from("card_merchant_patterns").insert({
+              merchant_pattern: pat,
+              category_id: category.id,
+              confidence: 1,
+            });
+          }
+        }
+      }
+    },
+    onSuccess: (_, { category }) => {
+      toast.success(`Categoria → ${category.emoji || ""} ${category.name}`);
+      qc.invalidateQueries({ queryKey: ["card_txs"] });
+      qc.invalidateQueries({ queryKey: ["sobra_reinvestida"] });
+    },
+    onError: (e: any) => toast.error(e.message || "Erro ao reclassificar"),
   });
 
   // Agregações
@@ -398,16 +482,38 @@ export default function CardsPage() {
                         {t.cardholder || "—"}
                       </td>
                       <td className="py-2 px-2 text-xs">
-                        {t.custom_categories ? (
-                          <>
-                            {t.custom_categories.emoji} {t.custom_categories.name}
-                            {t.counts_as_investment && (
-                              <span className="ml-1" style={{ color: "#10B981" }}>💎</span>
-                            )}
-                          </>
-                        ) : (
-                          <span style={{ color: "#F59E0B" }}>❓ A Investigar</span>
-                        )}
+                        <div className="flex items-center gap-1">
+                          <select
+                            value={t.category_id || ""}
+                            disabled={reclassify.isPending}
+                            onChange={(e) => {
+                              const cat = categories.find(c => c.id === e.target.value);
+                              if (cat) reclassify.mutate({ tx: t, category: cat });
+                            }}
+                            className="bg-black/30 border border-white/10 rounded px-1 py-0.5 text-xs max-w-[200px]"
+                            style={{
+                              color: t.counts_as_investment ? "#10B981" : (t.custom_categories?.slug === "a_investigar" ? "#F59E0B" : "#F0F4F8"),
+                            }}
+                          >
+                            <option value="" disabled>— categoria —</option>
+                            <optgroup label="💎 Investimento">
+                              {categories.filter(c => c.counts_as_investment).map(c => (
+                                <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>
+                              ))}
+                            </optgroup>
+                            <optgroup label="Custo de Vida">
+                              {categories.filter(c => !c.counts_as_investment && c.slug !== "a_investigar").map(c => (
+                                <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>
+                              ))}
+                            </optgroup>
+                            <optgroup label="—">
+                              {categories.filter(c => c.slug === "a_investigar").map(c => (
+                                <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>
+                              ))}
+                            </optgroup>
+                          </select>
+                          {t.counts_as_investment && <span style={{ color: "#10B981" }}>💎</span>}
+                        </div>
                       </td>
                       <td className="py-2 px-2 text-center text-xs">
                         {t.installment_total > 1 ? `${t.installment_current}/${t.installment_total}` : "—"}
