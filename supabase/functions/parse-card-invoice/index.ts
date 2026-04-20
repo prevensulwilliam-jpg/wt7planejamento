@@ -219,20 +219,40 @@ serve(async (req) => {
       || detectedMonth
       || txs.map(t => t.transaction_date.substring(0, 7)).sort().at(-1)!;
 
-    // 3) Upsert invoice
+    // 3) Upsert invoice (manual — select + update/insert)
     const total_amount = txs.reduce((s, t) => s + Number(t.amount), 0);
-    const { data: invoice, error: invErr } = await supabase
+    const { data: existingInv } = await supabase
       .from("card_invoices")
-      .upsert({
-        card_id,
-        reference_month: ref,
-        total_amount,
-        file_url: file_url || null,
-        file_format,
-      }, { onConflict: "card_id,reference_month" })
-      .select()
-      .single();
-    if (invErr) throw invErr;
+      .select("id")
+      .eq("card_id", card_id)
+      .eq("reference_month", ref)
+      .maybeSingle();
+
+    let invoice: any;
+    if (existingInv) {
+      const { data, error } = await supabase
+        .from("card_invoices")
+        .update({ total_amount, file_url: file_url || null, file_format })
+        .eq("id", existingInv.id)
+        .select()
+        .single();
+      if (error) throw error;
+      invoice = data;
+    } else {
+      const { data, error } = await supabase
+        .from("card_invoices")
+        .insert({
+          card_id,
+          reference_month: ref,
+          total_amount,
+          file_url: file_url || null,
+          file_format,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      invoice = data;
+    }
 
     // 4) Carregar merchant_patterns pra auto-categorizar
     const { data: patterns } = await supabase
