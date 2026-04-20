@@ -5,7 +5,7 @@ site_url = "https://wt7planejamento.lovable.app"
 additional_redirect_urls = ["https://wt7planejamento.lovable.app/reset-password"]
 
 [functions.wisely-ai]
-verify_jwt = true
+verify_jwt = false
 
 [functions.naval-embed]
 verify_jwt = true
