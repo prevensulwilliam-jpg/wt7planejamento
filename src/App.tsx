@@ -38,6 +38,7 @@ import WeddingPortalPage from "@/pages/WeddingPortalPage";
 import RecurringBillsPage from "@/pages/RecurringBillsPage";
 import BusinessesPage from "@/pages/BusinessesPage";
 import HojePage from "@/pages/HojePage";
+import CardsPage from "@/pages/CardsPage";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -135,6 +136,7 @@ const App = () => (
             <Route path="/consortiums" element={<ConsortiumsPage />} />
             <Route path="/recurring-bills" element={<RecurringBillsPage />} />
             <Route path="/businesses" element={<BusinessesPage />} />
+            <Route path="/cards" element={<CardsPage />} />
             <Route path="/wedding" element={<WeddingPage />} />
             <Route path="/goals" element={<GoalsPage />} />
             <Route path="/taxes" element={<TaxesPage />} />
