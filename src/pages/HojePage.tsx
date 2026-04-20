@@ -7,6 +7,7 @@ import { useAutonomyIndex, useAutonomyHistory } from "@/hooks/useAutonomyIndex";
 import { useKitnetOrphans } from "@/hooks/useReconcileMonth";
 import { useMonthRevenueReconciliation, useBusinesses, useBusinessRealized } from "@/hooks/useBusinesses";
 import { SobraReinvestidaCard } from "@/components/wt7/SobraReinvestidaCard";
+import { useSobraReinvestida } from "@/hooks/useSobraReinvestida";
 import { formatCurrency, getCurrentMonth, formatMonth } from "@/lib/formatters";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -22,6 +23,7 @@ export default function HojePage() {
   const { data: reconc } = useMonthRevenueReconciliation(month);
   const { data: businesses = [] } = useBusinesses();
   const { data: realizedMap } = useBusinessRealized(month);
+  const { data: sobra } = useSobraReinvestida(month);
 
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
@@ -98,8 +100,33 @@ export default function HojePage() {
         msg: `✓ Meta consolidada batida: +${formatCurrency(snap.total - snap.target)} acima do alvo`,
       });
     }
+    // ═══ Sobra Reinvestida — alerta estratégico ═══
+    if (sobra && sobra.receita > 0) {
+      if (sobra.sobra_pct < 40) {
+        list.push({
+          id: "sobra-red",
+          level: "warn",
+          msg: `🚨 Sobra Reinvestida em ${sobra.sobra_pct.toFixed(0)}% — sinal vermelho. Custeio ${formatCurrency(sobra.custeio_total)} alto demais. Revisar cartões.`,
+          href: "/cards",
+        });
+      } else if (sobra.sobra_pct >= 60) {
+        list.push({
+          id: "sobra-gold",
+          level: "good",
+          msg: `💎 Sobra Reinvestida em ${sobra.sobra_pct.toFixed(0)}% — fase de aceleração. ${formatCurrency(sobra.sobra_bruta - sobra.investimento_total)} livre pra aportar em obra.`,
+          href: "/cards",
+        });
+      } else if (sobra.sobra_pct < 50) {
+        list.push({
+          id: "sobra-warn",
+          level: "warn",
+          msg: `⚠️ Sobra Reinvestida em ${sobra.sobra_pct.toFixed(0)}% — abaixo do piso 50%. Congelar custeio este mês.`,
+          href: "/cards",
+        });
+      }
+    }
     return list;
-  }, [kitnetOrphans, reconc, snap, month]);
+  }, [kitnetOrphans, reconc, snap, sobra, month]);
 
   // Para o gráfico: escala de autonomia (0-100%)
   const chartMax = 100;
