@@ -224,33 +224,33 @@ serve(async (req) => {
     const closing_day = cardData.closing_day || 25;
     const due_day = cardData.due_day || 5;
 
-    // 3) Determinar reference_month = mês do vencimento
-    // Regra: a fatura contém transações até closing_day; vence no due_day do mês seguinte.
-    // Se cycleEndDate (OFX DTEND) → usa. Senão usa max date de transações não parceladas.
+    // 3) Determinar reference_month = mês do vencimento da fatura
+    // Regra: transação feita no dia D do mês M entra no ciclo que fecha em closing_day.
+    //  - Se D <= closing_day → fechamento no mês M
+    //  - Se D >  closing_day → fechamento no mês M+1
+    // Venc depende de due_day vs closing_day:
+    //  - due_day < closing_day (ex: BB close=29, due=10) → venc no mês seguinte ao fechamento
+    //  - due_day >= closing_day (ex: XP close=19, due=25) → venc no mesmo mês do fechamento
     function computeDueMonth(refDate: string): string {
       const [y, m, d] = refDate.split("-").map(Number);
-      let venc_year = y;
-      let venc_month = m;
-      // Se a data de referência passou do closing daquele mês, fechamento foi nesse mês → venc = mês+1
-      // Se ainda não chegou no closing, o ciclo anterior já venceu → venc = mês atual se due_day >= d, senão mês+1
+      let close_y = y, close_m = m;
       if (d > closing_day) {
-        // já passou do fechamento do mês atual → ciclo fecha nesse mês, venc mês+1
-        venc_month = m + 1;
-      } else {
-        // ainda não fechou esse mês → ciclo fechou no mês anterior → venc é mês atual
-        venc_month = m;
+        close_m = m + 1;
+        if (close_m > 12) { close_m -= 12; close_y += 1; }
       }
-      if (venc_month > 12) { venc_month -= 12; venc_year += 1; }
-      return `${venc_year}-${String(venc_month).padStart(2, "0")}`;
+      let venc_y = close_y, venc_m = close_m;
+      if (due_day < closing_day) {
+        venc_m = close_m + 1;
+        if (venc_m > 12) { venc_m -= 12; venc_y += 1; }
+      }
+      return `${venc_y}-${String(venc_m).padStart(2, "0")}`;
     }
 
+    // Sempre usa max date de compras NÃO parceladas (OFX DTEND é pouco confiável entre bancos)
     let ref: string;
     if (reference_month) {
       ref = reference_month;
-    } else if (cycleEndDate) {
-      ref = computeDueMonth(cycleEndDate);
     } else {
-      // CSV: usa max date de compras NÃO parceladas (evita pegar parcela antiga como referência)
       const nonParc = txs.filter(t => t.installment_total === 1);
       const pool = nonParc.length > 0 ? nonParc : txs;
       const maxDate = pool.map(t => t.transaction_date).sort().at(-1)!;
