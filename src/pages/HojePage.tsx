@@ -176,37 +176,69 @@ export default function HojePage() {
                 </div>
 
                 <div className="flex-1 min-w-[300px]">
-                  {/* Barra dupla: passiva + eventual / total */}
+                  {/* Barra tripla: passiva (verde) | eventual (dourada) | ativa Prevensul (vermelha) */}
                   <div className="flex justify-between text-xs mb-1.5" style={{ color: "#94A3B8" }}>
-                    <span>{formatCurrency(snap.passive + snap.eventual)} autônoma</span>
+                    <span>
+                      <span style={{ color: "#10B981" }}>{formatCurrency(snap.passive + snap.eventual)}</span> autônoma
+                    </span>
                     <span className="font-mono">{formatCurrency(snap.total)} total</span>
                   </div>
-                  <div style={{ position: "relative", height: 20, background: "#1A2535", borderRadius: 99, overflow: "hidden" }}>
-                    {/* Passiva */}
-                    <div style={{
-                      position: "absolute", top: 0, left: 0, height: "100%",
-                      width: snap.total > 0 ? `${(snap.passive / snap.total) * 100}%` : "0%",
-                      background: "linear-gradient(90deg, #10B981, #34D399)",
-                    }} />
-                    {/* Eventual */}
-                    <div style={{
-                      position: "absolute", top: 0,
-                      left: snap.total > 0 ? `${(snap.passive / snap.total) * 100}%` : "0%",
-                      height: "100%",
-                      width: snap.total > 0 ? `${(snap.eventual / snap.total) * 100}%` : "0%",
-                      background: "linear-gradient(90deg, #94A3B8, #CBD5E1)",
-                    }} />
-                    {/* Marcador 50% */}
-                    <div style={{
-                      position: "absolute", top: 0, left: "50%", height: "100%", width: 2,
-                      background: "#E8C97A", opacity: 0.6,
-                    }} title="Meta 50%" />
-                  </div>
-                  <div className="flex gap-4 text-[11px] mt-2 font-mono">
+                  {(() => {
+                    const pctP = snap.total > 0 ? (snap.passive / snap.total) * 100 : 0;
+                    const pctE = snap.total > 0 ? (snap.eventual / snap.total) * 100 : 0;
+                    const pctA = snap.total > 0 ? (snap.active / snap.total) * 100 : 0;
+                    return (
+                      <div style={{ position: "relative", height: 22, background: "#0B1220", borderRadius: 99, overflow: "hidden", border: "1px solid #1A2535" }}>
+                        {/* Passiva */}
+                        <div style={{
+                          position: "absolute", top: 0, left: 0, height: "100%", width: `${pctP}%`,
+                          background: "linear-gradient(90deg, #059669, #10B981)",
+                        }} title={`Passiva ${pctP.toFixed(0)}%`} />
+                        {/* Eventual */}
+                        <div style={{
+                          position: "absolute", top: 0, left: `${pctP}%`, height: "100%", width: `${pctE}%`,
+                          background: "linear-gradient(90deg, #C9A84C, #E8C97A)",
+                        }} title={`Eventual ${pctE.toFixed(0)}%`} />
+                        {/* Ativa (Prevensul) */}
+                        <div style={{
+                          position: "absolute", top: 0, left: `${pctP + pctE}%`, height: "100%", width: `${pctA}%`,
+                          background: "linear-gradient(90deg, #E11D48, #F43F5E)",
+                        }} title={`Ativa Prevensul ${pctA.toFixed(0)}%`} />
+                        {/* Marcador 50% */}
+                        <div style={{
+                          position: "absolute", top: -2, left: "50%", height: "calc(100% + 4px)", width: 2,
+                          background: "#FDE68A", opacity: 0.9, boxShadow: "0 0 6px rgba(253,230,138,0.6)",
+                        }} title="Meta 50% autonomia" />
+                      </div>
+                    );
+                  })()}
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] mt-2 font-mono">
                     <span style={{ color: "#10B981" }}>● Passiva {formatCurrency(snap.passive)}</span>
-                    <span style={{ color: "#94A3B8" }}>● Eventual {formatCurrency(snap.eventual)}</span>
+                    <span style={{ color: "#E8C97A" }}>● Eventual {formatCurrency(snap.eventual)}</span>
                     <span style={{ color: "#F43F5E" }}>● Ativa (Prevensul) {formatCurrency(snap.active)}</span>
                   </div>
+                </div>
+              </div>
+
+              {/* Legenda explicativa */}
+              <div className="mt-4 pt-3 border-t border-white/5 grid grid-cols-1 md:grid-cols-3 gap-3 text-[11px]">
+                <div>
+                  <p className="font-mono font-semibold mb-0.5" style={{ color: "#10B981" }}>● Passiva — autonomia pura</p>
+                  <p style={{ color: "#94A3B8" }}>
+                    Renda que entra sem você trabalhar: aluguéis kitnets, JW7, RWT05, JW7 Itaipava. É o núcleo da independência financeira.
+                  </p>
+                </div>
+                <div>
+                  <p className="font-mono font-semibold mb-0.5" style={{ color: "#E8C97A" }}>● Eventual — recorrente mas ativa</p>
+                  <p style={{ color: "#94A3B8" }}>
+                    Entra com regularidade mas depende de você estar na ponta: T7/TDI, CW7, comissões externas. Conta como autônoma hoje, mas exige operação.
+                  </p>
+                </div>
+                <div>
+                  <p className="font-mono font-semibold mb-0.5" style={{ color: "#F43F5E" }}>● Ativa (Prevensul) — risco de ponto único</p>
+                  <p style={{ color: "#94A3B8" }}>
+                    Vínculo CLT + comissões Prevensul. Para se você parar. Meta estratégica: reduzir essa fatia até sair em 2029.
+                  </p>
                 </div>
               </div>
             </PremiumCard>
