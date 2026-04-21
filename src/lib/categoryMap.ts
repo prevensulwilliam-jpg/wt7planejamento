@@ -2,7 +2,8 @@
 
 // Receitas (revenues.source)
 export const REVENUE_SOURCE_MAP: Record<string, { emoji: string; name: string; color: string }> = {
-  kitnets:              { emoji: "🏘️", name: "Aluguel/Kitnets",       color: "#C9A84C" },
+  // Canônicos (conforme CLAUDE.md — nunca inventar variações)
+  aluguel_kitnets:      { emoji: "🏘️", name: "Aluguel Kitnets",        color: "#C9A84C" },
   salario:              { emoji: "💼", name: "Salário",                color: "#10B981" },
   comissao_prevensul:   { emoji: "📊", name: "Comissão Prevensul",     color: "#2DD4BF" },
   solar:                { emoji: "☀️", name: "Energia Solar",          color: "#F59E0B" },
@@ -10,7 +11,8 @@ export const REVENUE_SOURCE_MAP: Record<string, { emoji: string; name: string; c
   t7:                   { emoji: "🚀", name: "T7 Sales",               color: "#8B5CF6" },
   dividendos:           { emoji: "📈", name: "Dividendos/Rendimentos", color: "#10B981" },
   outros_receita:       { emoji: "💰", name: "Outros (Receita)",       color: "#C9A84C" },
-  // slugs que podem vir do banco com acentos removidos
+  // Aliases legacy — mantidos como rede de segurança caso apareçam de novo
+  kitnets:              { emoji: "🏘️", name: "Aluguel Kitnets",        color: "#C9A84C" },
   sal_rio:              { emoji: "💼", name: "Salário",                color: "#10B981" },
   comiss_o_prevensul:   { emoji: "📊", name: "Comissão Prevensul",     color: "#2DD4BF" },
   laudos_t_cnicos:      { emoji: "📋", name: "Laudos Técnicos",        color: "#3B82F6" },
