@@ -48,13 +48,27 @@ export function ThreeRingsCockpit({ month }: Props) {
   const investidoPct = sobra.investido_pct;
 
   const metaBatida = investidoPct >= SOBRA_META_PCT;
+  const fasesAceleracao = investidoPct >= 60; // super ótimo
   const custeioOk = custeioPctReceita < 50;
   const receitaOk = receitaPct >= 100;
+  const receitaExcelente = receitaPct >= 120;
 
-  // Cores dinâmicas conforme performance
-  const corReceita = receitaOk ? "#E8C97A" : "#C9A84C";
-  const corCusteio = custeioOk ? "#10B981" : "#F43F5E";
-  const corInvest = metaBatida ? "#10B981" : investidoPct >= 40 ? "#E8C97A" : "#F43F5E";
+  // Paleta canônica (William):
+  //   🔴 vermelho = despesas/custos/negativos (SEMPRE)
+  //   🔵 azul     = receitas/valores positivos
+  //   🟢 verde    = meta batida
+  //   🟡 dourado  = super ótimo / excelente
+  const RED = "#F43F5E";
+  const BLUE = "#3B82F6";
+  const GREEN = "#10B981";
+  const GOLD = "#E8C97A";
+
+  // Receita: azul (positivo) → verde se bate meta → dourado se estoura
+  const corReceita = receitaExcelente ? GOLD : receitaOk ? GREEN : BLUE;
+  // Custeio: SEMPRE vermelho (é despesa). Só varia opacidade via alpha no bg.
+  const corCusteio = RED;
+  // Investimento: azul (é positivo) → verde se bate meta 50% → dourado se ≥60% (aceleração)
+  const corInvest = fasesAceleracao ? GOLD : metaBatida ? GREEN : BLUE;
 
   return (
     <PremiumCard className="p-6" glowColor={metaBatida && custeioOk ? "#10B981" : undefined}>
@@ -156,12 +170,13 @@ export function ThreeRingsCockpit({ month }: Props) {
             </div>
           </div>
 
-          {/* Veredito curto */}
-          <div className="pt-2 text-xs" style={{ color: "#94A3B8" }}>
-            {metaBatida && custeioOk && receitaOk && <span style={{ color: "#10B981" }}>● Mês redondo. CAGR 17,3% a.a. em dia.</span>}
-            {metaBatida && !receitaOk && <span style={{ color: "#E8C97A" }}>● Investimento em dia, receita atrás da meta.</span>}
-            {!metaBatida && custeioOk && <span style={{ color: "#E8C97A" }}>● Custeio controlado mas investimento abaixo de 50%.</span>}
-            {!metaBatida && !custeioOk && <span style={{ color: "#F43F5E" }}>● Alerta: custeio alto E investimento abaixo da meta. Revisar cartões.</span>}
+          {/* Veredito curto — paleta canônica */}
+          <div className="pt-2 text-xs">
+            {fasesAceleracao && custeioOk && receitaExcelente && <span style={{ color: GOLD }}>● Mês excelente. Fase de aceleração — CAGR acima de 17,3% a.a.</span>}
+            {metaBatida && custeioOk && receitaOk && !fasesAceleracao && <span style={{ color: GREEN }}>● Meta batida. CAGR 17,3% a.a. em dia.</span>}
+            {metaBatida && !receitaOk && <span style={{ color: BLUE }}>● Investimento em dia, receita atrás do alvo.</span>}
+            {!metaBatida && custeioOk && <span style={{ color: BLUE }}>● Custeio controlado, investimento ainda abaixo de 50%.</span>}
+            {!metaBatida && !custeioOk && <span style={{ color: RED }}>● Alerta: custeio alto E investimento abaixo da meta. Revisar cartões.</span>}
           </div>
         </div>
       </div>
