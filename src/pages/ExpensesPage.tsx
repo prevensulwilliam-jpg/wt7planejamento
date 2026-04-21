@@ -42,7 +42,10 @@ export default function ExpensesPage() {
   const { data: categories = [] } = useCategories("despesa");
   const { toast } = useToast();
 
-  const [form, setForm] = useState({ category: "", description: "", amount: "", type: "variable", paid_at: "", reference_month: month });
+  const [form, setForm] = useState({
+    category: "", description: "", amount: "", type: "variable", paid_at: "", reference_month: month,
+    counts_as_investment: false, vector: "", is_card_payment: false,
+  });
 
   // Sort & filter state
   const [sortField, setSortField] = useState<SortField>(null);
@@ -186,10 +189,13 @@ export default function ExpensesPage() {
         type: form.type,
         paid_at: form.paid_at || null,
         reference_month: form.reference_month,
-      });
+        counts_as_investment: form.counts_as_investment,
+        vector: form.counts_as_investment ? (form.vector || null) : null,
+        is_card_payment: form.is_card_payment,
+      } as any);
       toast({ title: "Despesa registrada com sucesso" });
       setDialogOpen(false);
-      setForm({ category: "", description: "", amount: "", type: "variable", paid_at: "", reference_month: month });
+      setForm({ category: "", description: "", amount: "", type: "variable", paid_at: "", reference_month: month, counts_as_investment: false, vector: "", is_card_payment: false });
     } catch {
       toast({ title: "Erro ao registrar despesa", variant: "destructive" });
     }
@@ -294,6 +300,59 @@ export default function ExpensesPage() {
                 <Label style={{ color: '#94A3B8' }}>Mês Referência</Label>
                 <MonthPicker value={form.reference_month} onChange={v => setForm(f => ({ ...f, reference_month: v }))} />
               </div>
+
+              {/* 💎 Flags de classificação */}
+              <div className="pt-2 border-t" style={{ borderColor: '#1A2535' }}>
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.counts_as_investment}
+                    onChange={e => setForm(f => ({ ...f, counts_as_investment: e.target.checked, is_card_payment: e.target.checked ? false : f.is_card_payment }))}
+                    className="mt-0.5 accent-emerald-500"
+                  />
+                  <div className="flex-1">
+                    <span className="text-sm" style={{ color: '#10B981' }}>💎 Conta como investimento (Sobra Reinvestida ≥50%)</span>
+                    <p className="text-[10px] mt-0.5" style={{ color: '#64748B' }}>
+                      Aporte em obra, consórcio patrimonial, curso, ferramenta — entra no numerador da meta.
+                    </p>
+                  </div>
+                </label>
+
+                {form.counts_as_investment && (
+                  <div className="mt-2 ml-6">
+                    <Label className="text-xs" style={{ color: '#94A3B8' }}>Vetor</Label>
+                    <Select value={form.vector} onValueChange={v => setForm(f => ({ ...f, vector: v }))}>
+                      <SelectTrigger className="h-9 text-xs" style={{ background: '#080C10', borderColor: 'rgba(16,185,129,0.3)', color: '#10B981' }}>
+                        <SelectValue placeholder="Escolha o vetor..." />
+                      </SelectTrigger>
+                      <SelectContent style={{ background: '#0D1318', borderColor: '#1A2535' }}>
+                        <SelectItem value="aporte_obra">🧱 Aporte Obra (WT7 Holding)</SelectItem>
+                        <SelectItem value="consorcios_aporte">🔁 Consórcios (Ademicon, Randon)</SelectItem>
+                        <SelectItem value="dev_profissional_agora">⚡ Dev Profissional (T7/Prevensul)</SelectItem>
+                        <SelectItem value="dev_pessoal_futuro">🧠 Dev Pessoal (curso, livro, viagem educação)</SelectItem>
+                        <SelectItem value="produtividade_ferramentas">🛠️ Ferramentas / Produtividade</SelectItem>
+                        <SelectItem value="outros_invest">• Outros investimentos</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                <label className="flex items-start gap-2 cursor-pointer mt-3">
+                  <input
+                    type="checkbox"
+                    checked={form.is_card_payment}
+                    onChange={e => setForm(f => ({ ...f, is_card_payment: e.target.checked, counts_as_investment: e.target.checked ? false : f.counts_as_investment }))}
+                    className="mt-0.5 accent-slate-400"
+                  />
+                  <div className="flex-1">
+                    <span className="text-sm" style={{ color: '#94A3B8' }}>💳 Pagamento de fatura de cartão</span>
+                    <p className="text-[10px] mt-0.5" style={{ color: '#64748B' }}>
+                      Ignora no cálculo de custeio (as compras já estão em <code>card_transactions</code>).
+                    </p>
+                  </div>
+                </label>
+              </div>
+
               <GoldButton onClick={handleSubmit} disabled={createExpense.isPending} className="w-full justify-center">
                 {createExpense.isPending ? "Salvando..." : "Registrar Despesa"}
               </GoldButton>

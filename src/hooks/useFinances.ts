@@ -59,7 +59,10 @@ export function useCreateExpense() {
       const { error } = await supabase.from("expenses").insert(entry);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["expenses"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["expenses"] });
+      qc.invalidateQueries({ queryKey: ["sobra_reinvestida"] });
+    },
   });
 }
 
@@ -70,18 +73,33 @@ export function useDeleteExpense() {
       const { error } = await supabase.from("expenses").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["expenses"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["expenses"] });
+      qc.invalidateQueries({ queryKey: ["sobra_reinvestida"] });
+    },
   });
 }
 
 export function useUpdateExpense() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...updates }: { id: string; category?: string; type?: string; description?: string; amount?: number }) => {
+    mutationFn: async ({ id, ...updates }: {
+      id: string;
+      category?: string;
+      type?: string;
+      description?: string;
+      amount?: number;
+      counts_as_investment?: boolean;
+      vector?: string | null;
+      is_card_payment?: boolean;
+    }) => {
       const { error } = await supabase.from("expenses").update(updates).eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["expenses"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["expenses"] });
+      qc.invalidateQueries({ queryKey: ["sobra_reinvestida"] });
+    },
   });
 }
 
