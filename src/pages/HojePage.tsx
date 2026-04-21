@@ -7,6 +7,7 @@ import { useAutonomyIndex, useAutonomyHistory } from "@/hooks/useAutonomyIndex";
 import { useKitnetOrphans } from "@/hooks/useReconcileMonth";
 import { useMonthRevenueReconciliation, useBusinesses, useBusinessRealized } from "@/hooks/useBusinesses";
 import { SobraReinvestidaCard } from "@/components/wt7/SobraReinvestidaCard";
+import { ThreeRingsCockpit } from "@/components/wt7/ThreeRingsCockpit";
 import { useSobraReinvestida } from "@/hooks/useSobraReinvestida";
 import { formatCurrency, getCurrentMonth, formatMonth } from "@/lib/formatters";
 import { supabase } from "@/integrations/supabase/client";
@@ -155,6 +156,9 @@ export default function HojePage() {
           </div>
         ) : (
           <>
+            {/* ═══ BLOCO 0: Cockpit 3 Anéis (fotografia canônica da meta R$70M) ═══ */}
+            <ThreeRingsCockpit month={month} />
+
             {/* ═══ BLOCO 1: Índice de Autonomia (destaque) ═══ */}
             <PremiumCard className="p-6" glowColor={snap.autonomyPct >= TARGET_AUTONOMY ? "#10B981" : "#C9A84C"}>
               <div className="flex items-start justify-between flex-wrap gap-4 mb-4">
