@@ -16,6 +16,7 @@ export type SobraSnap = {
   gap_meta: number;              // quanto falta pra bater 50% em R$
   byVector: Record<string, number>;
   card_payments_ignored: number; // R$ em pagamentos de fatura excluídos do cálculo
+  entradas_neutras: number;      // R$ em transferências/reembolsos/estornos (não contam como receita)
 };
 
 const META_PCT = 50;
@@ -34,13 +35,19 @@ export function useSobraReinvestida(month: string) {
   return useQuery<SobraSnap>({
     queryKey: ["sobra_reinvestida", month],
     queryFn: async () => {
-      // 1. Receitas do mês
+      // 1. Receitas do mês — SÓ receita real (counts_as_income=true)
+      //    Transferências entre contas, reembolsos e estornos não contam
       const { data: revs, error: er } = await supabase
         .from("revenues")
-        .select("amount")
+        .select("amount, counts_as_income, nature")
         .eq("reference_month", month);
       if (er) throw er;
-      const receita = (revs || []).reduce((s: number, r: any) => s + Number(r.amount), 0);
+      const receita = (revs || [])
+        .filter((r: any) => r.counts_as_income !== false)
+        .reduce((s: number, r: any) => s + Number(r.amount), 0);
+      const entradas_neutras = (revs || [])
+        .filter((r: any) => r.counts_as_income === false)
+        .reduce((s: number, r: any) => s + Number(r.amount), 0);
 
       // 2. Despesas do mês — separar: custeio puro × investimento × pagamento cartão (ignora)
       const { data: exps, error: ee } = await supabase
@@ -120,6 +127,7 @@ export function useSobraReinvestida(month: string) {
         gap_meta,
         byVector,
         card_payments_ignored,
+        entradas_neutras,
       };
     },
   });

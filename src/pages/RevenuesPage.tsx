@@ -43,7 +43,7 @@ export default function RevenuesPage() {
   const { data: categories = [] } = useCategories("receita");
   const { toast } = useToast();
 
-  const [form, setForm] = useState({ source: "", description: "", amount: "", type: "variable", received_at: "", reference_month: month, business_id: "" as string | "" });
+  const [form, setForm] = useState({ source: "", description: "", amount: "", type: "variable", received_at: "", reference_month: month, business_id: "" as string | "", nature: "income", counts_as_income: true });
   const { data: businessList = [] } = useBusinesses();
 
   // Sort & filter state
@@ -60,6 +60,7 @@ export default function RevenuesPage() {
   const [filterSrcSearch, setFilterSrcSearch] = useState("");
   const filterSrcRef = useRef<HTMLDivElement>(null);
   const [filterBank, setFilterBank] = useState("all");
+  const [onlyRealIncome, setOnlyRealIncome] = useState(false);
   const [bankFilterOpen, setBankFilterOpen] = useState(false);
   const bankFilterRef = useRef<HTMLDivElement>(null);
 
@@ -122,6 +123,9 @@ export default function RevenuesPage() {
     if (filterBank !== "all") {
       data = data.filter(r => extractBank(r.description ?? "") === filterBank);
     }
+    if (onlyRealIncome) {
+      data = data.filter((r: any) => r.counts_as_income !== false);
+    }
     if (sortField) {
       data.sort((a, b) => {
         let va: any = sortField === "date" ? (a.received_at ?? "") : (a as any)[sortField] ?? "";
@@ -133,7 +137,17 @@ export default function RevenuesPage() {
       });
     }
     return data;
-  }, [revenues, sortField, sortDir, filterType, filterSource, filterBank]);
+  }, [revenues, sortField, sortDir, filterType, filterSource, filterBank, onlyRealIncome]);
+
+  // Nature helpers
+  const NATURE_META: Record<string, { emoji: string; label: string; color: string }> = {
+    income: { emoji: "💰", label: "Receita", color: "#10B981" },
+    transfer: { emoji: "🔄", label: "Transferência", color: "#64748B" },
+    reimbursement: { emoji: "💳", label: "Reembolso", color: "#F59E0B" },
+    refund: { emoji: "↩️", label: "Estorno", color: "#94A3B8" },
+  };
+  const totalRealIncome = revenues.filter((r: any) => r.counts_as_income !== false).reduce((s, r) => s + (r.amount ?? 0), 0);
+  const totalNeutral = revenues.filter((r: any) => r.counts_as_income === false).reduce((s, r) => s + (r.amount ?? 0), 0);
 
   const totalMonth = filteredRevenues.reduce((s, r) => s + (r.amount ?? 0), 0);
   const totalFixed = revenues.filter(r => r.type === 'fixed').reduce((s, r) => s + (r.amount ?? 0), 0);
@@ -171,10 +185,12 @@ export default function RevenuesPage() {
         received_at: form.received_at || null,
         reference_month: form.reference_month,
         business_id: form.business_id || null,
+        nature: form.nature,
+        counts_as_income: form.nature === "income",
       } as any);
       toast({ title: "Receita registrada com sucesso" });
       setDialogOpen(false);
-      setForm({ source: "", description: "", amount: "", type: "variable", received_at: "", reference_month: month, business_id: "" });
+      setForm({ source: "", description: "", amount: "", type: "variable", received_at: "", reference_month: month, business_id: "", nature: "income", counts_as_income: true });
     } catch {
       toast({ title: "Erro ao registrar receita", variant: "destructive" });
     }
@@ -260,6 +276,21 @@ export default function RevenuesPage() {
                 <Input type="number" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} style={{ background: '#080C10', borderColor: '#1A2535', color: '#F0F4F8' }} />
               </div>
               <div>
+                <Label style={{ color: '#94A3B8' }}>Natureza</Label>
+                <Select value={form.nature} onValueChange={v => setForm(f => ({ ...f, nature: v, counts_as_income: v === "income" }))}>
+                  <SelectTrigger style={{ background: '#080C10', borderColor: '#1A2535', color: '#F0F4F8' }}><SelectValue /></SelectTrigger>
+                  <SelectContent style={{ background: '#0D1318', borderColor: '#1A2535' }}>
+                    <SelectItem value="income">💰 Receita real (conta na Sobra)</SelectItem>
+                    <SelectItem value="transfer">🔄 Transferência entre contas</SelectItem>
+                    <SelectItem value="reimbursement">💳 Reembolso (pagará no cartão)</SelectItem>
+                    <SelectItem value="refund">↩️ Estorno de serviço</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-[10px] mt-1" style={{ color: '#64748B' }}>
+                  Só "Receita real" entra no denominador da Sobra Reinvestida.
+                </p>
+              </div>
+              <div>
                 <Label style={{ color: '#94A3B8' }}>Tipo</Label>
                 <Select value={form.type} onValueChange={v => setForm(f => ({ ...f, type: v }))}>
                   <SelectTrigger style={{ background: '#080C10', borderColor: '#1A2535', color: '#F0F4F8' }}><SelectValue /></SelectTrigger>
@@ -311,9 +342,9 @@ export default function RevenuesPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {isLoading ? Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-[120px] rounded-2xl" style={{ background: '#0D1318' }} />) : (
               <>
-                <KpiCard label="Total do Mês" value={revenues.reduce((s, r) => s + (r.amount ?? 0), 0)} color="gold" />
-                <KpiCard label="Receitas Fixas" value={totalFixed} color="green" />
-                <KpiCard label="Receitas Variáveis" value={totalVariable} color="cyan" />
+                <KpiCard label="Receita Real" value={totalRealIncome} color="gold" />
+                <KpiCard label="Entradas Neutras" value={totalNeutral} color="cyan" />
+                <KpiCard label="Fixas" value={totalFixed} color="green" />
                 <KpiCard label="Quantidade" value={revenues.length} color="cyan" formatAs="number" />
               </>
             )}
@@ -407,8 +438,18 @@ export default function RevenuesPage() {
               </div>
             )}
 
-            {(filterType !== "all" || filterSource !== "all" || filterBank !== "all" || sortField) && (
-              <button onClick={() => { setFilterType("all"); setFilterSource("all"); setFilterBank("all"); setSortField(null); }}
+            <button onClick={() => setOnlyRealIncome(v => !v)}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg outline-none"
+              style={{
+                background: onlyRealIncome ? "rgba(16,185,129,0.15)" : "#080C10",
+                border: `1px solid ${onlyRealIncome ? "rgba(16,185,129,0.4)" : "#1A2535"}`,
+                color: onlyRealIncome ? "#10B981" : "#64748B",
+              }}>
+              💰 {onlyRealIncome ? "Só receita real" : "Todas entradas"}
+            </button>
+
+            {(filterType !== "all" || filterSource !== "all" || filterBank !== "all" || sortField || onlyRealIncome) && (
+              <button onClick={() => { setFilterType("all"); setFilterSource("all"); setFilterBank("all"); setSortField(null); setOnlyRealIncome(false); }}
                 className="px-3 py-1.5 text-xs rounded-lg"
                 style={{ background: "rgba(244,63,94,0.1)", color: "#F43F5E", border: "1px solid rgba(244,63,94,0.2)" }}>
                 Limpar filtros
@@ -450,21 +491,42 @@ export default function RevenuesPage() {
                   {filteredRevenues.map(revenue => {
                     const isEditing = editingId === revenue.id;
                     const srcDisplay = getSourceDisplay(revenue.source);
+                    const natureKey = (revenue as any).nature ?? "income";
+                    const natureInfo = NATURE_META[natureKey] ?? NATURE_META.income;
+                    const isNeutral = (revenue as any).counts_as_income === false;
 
                     return (
-                      <TableRow key={revenue.id} style={{ borderColor: '#1A2535' }}>
+                      <TableRow key={revenue.id} style={{ borderColor: '#1A2535', opacity: isNeutral ? 0.6 : 1 }}>
                         <TableCell>
                           {isEditing ? (
-                            <select value={editForm.source ?? revenue.source ?? ""}
-                              onChange={e => setEditForm(f => ({ ...f, source: e.target.value }))}
-                              className="text-xs px-2 py-1 rounded outline-none w-full"
-                              style={{ background: "#080C10", border: "1px solid #1A2535", color: "#F0F4F8" }}>
-                              {allSourceOptions.map(s => (
-                                <option key={s.value} value={s.value}>{s.label}</option>
-                              ))}
-                            </select>
+                            <div className="space-y-1">
+                              <select value={editForm.source ?? revenue.source ?? ""}
+                                onChange={e => setEditForm(f => ({ ...f, source: e.target.value }))}
+                                className="text-xs px-2 py-1 rounded outline-none w-full"
+                                style={{ background: "#080C10", border: "1px solid #1A2535", color: "#F0F4F8" }}>
+                                {allSourceOptions.map(s => (
+                                  <option key={s.value} value={s.value}>{s.label}</option>
+                                ))}
+                              </select>
+                              <select value={editForm.nature ?? natureKey}
+                                onChange={e => setEditForm(f => ({ ...f, nature: e.target.value, counts_as_income: e.target.value === "income" }))}
+                                className="text-xs px-2 py-1 rounded outline-none w-full"
+                                style={{ background: "#080C10", border: "1px solid #1A2535", color: "#F0F4F8" }}>
+                                <option value="income">💰 Receita real</option>
+                                <option value="transfer">🔄 Transferência</option>
+                                <option value="reimbursement">💳 Reembolso</option>
+                                <option value="refund">↩️ Estorno</option>
+                              </select>
+                            </div>
                           ) : (
-                            <WtBadge variant="gray">{srcDisplay.label}</WtBadge>
+                            <div className="flex items-center gap-1 flex-wrap">
+                              <WtBadge variant="gray">{srcDisplay.label}</WtBadge>
+                              {isNeutral && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(100,116,139,0.15)", color: natureInfo.color, border: `1px solid ${natureInfo.color}33` }}>
+                                  {natureInfo.emoji} {natureInfo.label}
+                                </span>
+                              )}
+                            </div>
                           )}
                         </TableCell>
                         <TableCell>

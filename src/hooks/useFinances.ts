@@ -23,7 +23,10 @@ export function useCreateRevenue() {
       const { error } = await supabase.from("revenues").insert(entry);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["revenues"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["revenues"] });
+      qc.invalidateQueries({ queryKey: ["sobra_reinvestida"] });
+    },
   });
 }
 
@@ -34,7 +37,10 @@ export function useDeleteRevenue() {
       const { error } = await supabase.from("revenues").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["revenues"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["revenues"] });
+      qc.invalidateQueries({ queryKey: ["sobra_reinvestida"] });
+    },
   });
 }
 
@@ -106,11 +112,22 @@ export function useUpdateExpense() {
 export function useUpdateRevenue() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...updates }: { id: string; source?: string; type?: string; description?: string; amount?: number }) => {
+    mutationFn: async ({ id, ...updates }: {
+      id: string;
+      source?: string;
+      type?: string;
+      description?: string;
+      amount?: number;
+      counts_as_income?: boolean;
+      nature?: string;
+    }) => {
       const { error } = await supabase.from("revenues").update(updates).eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["revenues"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["revenues"] });
+      qc.invalidateQueries({ queryKey: ["sobra_reinvestida"] });
+    },
   });
 }
 
@@ -119,11 +136,14 @@ export function useDashboardKPIs(month: string) {
   const revenues = useRevenues(month);
   const expenses = useExpenses(month);
 
-  const totalRevenue = (revenues.data ?? []).reduce((s, r) => s + (r.amount ?? 0), 0);
+  // Só receita real (counts_as_income=true). Transferências/reembolsos/estornos não contam.
+  const totalRevenue = (revenues.data ?? [])
+    .filter((r: any) => r.counts_as_income !== false)
+    .reduce((s, r) => s + (r.amount ?? 0), 0);
   const totalExpenses = (expenses.data ?? []).reduce((s, e) => s + (e.amount ?? 0), 0);
   const netResult = totalRevenue - totalExpenses;
 
-  const revenueBySource = (revenues.data ?? []).reduce((acc, r) => {
+  const revenueBySource = (revenues.data ?? []).filter((r: any) => r.counts_as_income !== false).reduce((acc, r) => {
     const src = r.source ?? "outros";
     acc[src] = (acc[src] ?? 0) + (r.amount ?? 0);
     return acc;
