@@ -352,9 +352,10 @@ function ConciliacaoDialog({ open, onClose, month }: { open: boolean; onClose: (
   const reconcileMut = useReconcileWithTransactions();
   const { toast } = useToast();
 
-  // Apenas créditos não ignorados do extrato
+  // Créditos ainda não conciliados (inclui ignored — muitas vezes são depósitos de inquilino
+  // que o auto-categorizador marcou como transferência por engano)
   const credits = useMemo(
-    () => (txRaw as any[]).filter(t => t.type === "credit" && t.status !== "ignored"),
+    () => (txRaw as any[]).filter(t => t.type === "credit" && t.status !== "matched"),
     [txRaw]
   );
 
