@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useDashboardKPIs, useGoals } from "./useFinances";
 import { useKitnets, useKitnetSummary } from "./useKitnets";
 import { usePrevensulBilling } from "./useBilling";
+import { useSobraReinvestida, SOBRA_META_PCT } from "./useSobraReinvestida";
 import { getCurrentMonth, formatMonth } from "@/lib/formatters";
 import { callNaval } from "@/lib/naval";
 import { supabase } from "@/integrations/supabase/client";
@@ -43,6 +44,7 @@ export function useNavalContext() {
   const { data: goals } = useGoals();
   const { data: billing } = usePrevensulBilling(month);
   const { data: memory } = useNavalMemory();
+  const { data: sobra } = useSobraReinvestida(month);
 
   const isReady = !kpis.isLoading;
 
@@ -52,11 +54,29 @@ export function useNavalContext() {
         ? {
             month: formatMonth(month),
             monthKey: month,
+            // IMPORTANTE: totalRevenue = SÓ receita real (counts_as_income=true).
+            // Transferências, reembolsos e estornos estão em entradasNeutras e NÃO
+            // contam no denominador da Sobra Reinvestida.
             totalRevenue: kpis.totalRevenue,
             totalExpenses: kpis.totalExpenses,
             netResult: kpis.netResult,
             revenueBySource: kpis.revenueBySource,
             expenseByCategory: kpis.expenseByCategory,
+            sobraReinvestida: sobra
+              ? {
+                  receitaReal: sobra.receita,
+                  entradasNeutras: sobra.entradas_neutras,
+                  custeioTotal: sobra.custeio_total,
+                  investimentoTotal: sobra.investimento_total,
+                  sobraBruta: sobra.sobra_bruta,
+                  sobraPct: Math.round(sobra.sobra_pct * 10) / 10,
+                  investidoPct: Math.round(sobra.investido_pct * 10) / 10,
+                  metaPct: SOBRA_META_PCT,
+                  gapMeta: sobra.gap_meta,
+                  byVector: sobra.byVector,
+                  cardPaymentsIgnored: sobra.card_payments_ignored,
+                }
+              : null,
             kitnets: {
               totalKitnets: kitnets?.length ?? 13,
               occupied: summary.occupied,
@@ -106,6 +126,7 @@ export function useNavalContext() {
       goals,
       billing,
       memory,
+      sobra,
     ],
   );
 
@@ -131,7 +152,7 @@ export function useNavalAnalysis() {
       try {
         const prompt =
           customPrompt ??
-          `Analise os dados financeiros de ${context.month} e me dê:\n1. Os 2 pontos mais positivos do mês\n2. Os 2 alertas ou oportunidades de melhoria\n3. 1 ação prioritária que devo tomar esta semana\n\nDados do mês:\n${JSON.stringify(context, null, 2)}`;
+          `Analise os dados financeiros de ${context.month} e me dê:\n1. Os 2 pontos mais positivos do mês\n2. Os 2 alertas ou oportunidades de melhoria\n3. 1 ação prioritária que devo tomar esta semana\n\nREGRAS CANÔNICAS:\n- totalRevenue = SÓ receita real. Entradas neutras (transferência/reembolso/estorno) estão em sobraReinvestida.entradasNeutras e NÃO contam no cálculo.\n- Meta canônica: investidoPct ≥ ${SOBRA_META_PCT}% (memoria/metas.md). Se estiver abaixo, sinalize o gap em R$.\n- Se houver entradasNeutras relevantes, mencione explicitamente ("ignoradas R$ X em reembolsos/transferências, que virarão despesa no cartão").\n\nDados do mês:\n${JSON.stringify(context, null, 2)}`;
         const text = await callNaval([{ role: "user", content: prompt }]);
         if (mounted.current) {
           setAnalysis(text);
