@@ -56,6 +56,7 @@ const navGroups = [
     items: [
       { label: "Despesas Recorrentes", icon: CalendarClock, href: "/recurring-bills" },
       { label: "Metas", icon: Target, href: "/goals" },
+      { label: "Plano 2026-28", icon: ClipboardList, href: "/plan" },
       { label: "Impostos & Dívidas", icon: Receipt, href: "/taxes" },
       { label: "Projeções", icon: Radio, href: "/projections" },
       { label: "Casamento 2027", icon: Heart, href: "/wedding" },
