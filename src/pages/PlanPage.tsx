@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Plus, Trash2, Pencil, Check, X, Compass, Lock, Unlock } from "lucide-react";
+import { Plus, Trash2, Pencil, Check, X, Compass, Lock, Unlock, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
 import { GoldButton } from "@/components/wt7/GoldButton";
 import { KpiCard } from "@/components/wt7/KpiCard";
@@ -54,6 +54,44 @@ export default function PlanPage() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<PlanItem>>({});
+
+  // Ordenação
+  type SortKey = "month" | "kind" | "description" | "category" | "amount" | "locked";
+  const [sortKey, setSortKey] = useState<SortKey>("month");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir(d => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
+
+  const sortedItems = useMemo(() => {
+    const arr = [...items];
+    arr.sort((a, b) => {
+      let av: any, bv: any;
+      switch (sortKey) {
+        case "month":       av = a.month; bv = b.month; break;
+        case "kind":        av = a.kind; bv = b.kind; break;
+        case "description": av = a.description.toLowerCase(); bv = b.description.toLowerCase(); break;
+        case "category":    av = (a.category ?? "").toLowerCase(); bv = (b.category ?? "").toLowerCase(); break;
+        case "amount":      av = Number(a.amount) * (a.is_revenue ? 1 : -1); bv = Number(b.amount) * (b.is_revenue ? 1 : -1); break;
+        case "locked":      av = a.locked ? 1 : 0; bv = b.locked ? 1 : 0; break;
+      }
+      if (av < bv) return sortDir === "asc" ? -1 : 1;
+      if (av > bv) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+    return arr;
+  }, [items, sortKey, sortDir]);
+
+  const SortIcon = ({ col }: { col: SortKey }) => {
+    if (sortKey !== col) return <ArrowUpDown className="w-3 h-3 opacity-40" />;
+    return sortDir === "asc" ? <ArrowUp className="w-3 h-3" style={{ color: GOLD }} /> : <ArrowDown className="w-3 h-3" style={{ color: GOLD }} />;
+  };
 
   // KPIs agregados
   const totals = useMemo(() => {
@@ -237,17 +275,29 @@ export default function PlanPage() {
                 <Table>
                   <TableHeader>
                     <TableRow style={{ borderColor: "#1A2535" }}>
-                      <TableHead style={{ color: "#94A3B8" }}>Mês</TableHead>
-                      <TableHead style={{ color: "#94A3B8" }}>Tipo</TableHead>
-                      <TableHead style={{ color: "#94A3B8" }}>Descrição</TableHead>
-                      <TableHead style={{ color: "#94A3B8" }}>Categoria</TableHead>
-                      <TableHead className="text-right" style={{ color: "#94A3B8" }}>Valor</TableHead>
-                      <TableHead className="w-24" style={{ color: "#94A3B8" }}>Status</TableHead>
+                      <TableHead style={{ color: "#94A3B8" }}>
+                        <button onClick={() => toggleSort("month")} className="flex items-center gap-1 hover:opacity-80"><span>Mês</span><SortIcon col="month" /></button>
+                      </TableHead>
+                      <TableHead style={{ color: "#94A3B8" }}>
+                        <button onClick={() => toggleSort("kind")} className="flex items-center gap-1 hover:opacity-80"><span>Tipo</span><SortIcon col="kind" /></button>
+                      </TableHead>
+                      <TableHead style={{ color: "#94A3B8" }}>
+                        <button onClick={() => toggleSort("description")} className="flex items-center gap-1 hover:opacity-80"><span>Descrição</span><SortIcon col="description" /></button>
+                      </TableHead>
+                      <TableHead style={{ color: "#94A3B8" }}>
+                        <button onClick={() => toggleSort("category")} className="flex items-center gap-1 hover:opacity-80"><span>Categoria</span><SortIcon col="category" /></button>
+                      </TableHead>
+                      <TableHead className="text-right" style={{ color: "#94A3B8" }}>
+                        <button onClick={() => toggleSort("amount")} className="flex items-center gap-1 ml-auto hover:opacity-80"><span>Valor</span><SortIcon col="amount" /></button>
+                      </TableHead>
+                      <TableHead className="w-24" style={{ color: "#94A3B8" }}>
+                        <button onClick={() => toggleSort("locked")} className="flex items-center gap-1 hover:opacity-80"><span>Status</span><SortIcon col="locked" /></button>
+                      </TableHead>
                       <TableHead className="w-20" style={{ color: "#94A3B8" }}>Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {items.map(item => {
+                    {sortedItems.map(item => {
                       const meta = PLAN_KIND_META[item.kind];
                       const isEditing = editingId === item.id;
                       const valueColor = item.is_revenue ? BLUE : RED;
