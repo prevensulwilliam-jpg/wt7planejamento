@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Plus, Trash2, Pencil, Check, X, Compass, Lock, Unlock, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { Plus, Trash2, Pencil, Check, X, Compass, Lock, Unlock, ArrowUp, ArrowDown, ArrowUpDown, Filter } from "lucide-react";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
 import { GoldButton } from "@/components/wt7/GoldButton";
 import { KpiCard } from "@/components/wt7/KpiCard";
@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { usePlanItems, useCreatePlanItem, useUpdatePlanItem, useDeletePlanItem, PLAN_KIND_META, type PlanKind, type PlanItem } from "@/hooks/usePlanItems";
 import { formatCurrency, formatMonth } from "@/lib/formatters";
@@ -60,6 +61,42 @@ export default function PlanPage() {
   const [sortKey, setSortKey] = useState<SortKey>("month");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
+  // Filtros por coluna (Set vazio = sem filtro; Set com valores = mostrar só esses)
+  type FilterKey = "month" | "kind" | "category" | "locked";
+  const [filters, setFilters] = useState<Record<FilterKey, Set<string>>>({
+    month: new Set(), kind: new Set(), category: new Set(), locked: new Set(),
+  });
+
+  const toggleFilterValue = (col: FilterKey, value: string) => {
+    setFilters(prev => {
+      const next = new Set(prev[col]);
+      if (next.has(value)) next.delete(value); else next.add(value);
+      return { ...prev, [col]: next };
+    });
+  };
+  const clearFilter = (col: FilterKey) => setFilters(prev => ({ ...prev, [col]: new Set() }));
+
+  // Valores únicos por coluna (para popover)
+  const uniqueValues = useMemo(() => ({
+    month: Array.from(new Set(items.map(i => i.month))).sort(),
+    kind: Array.from(new Set(items.map(i => i.kind))).sort(),
+    category: Array.from(new Set(items.map(i => i.category ?? "—"))).sort(),
+    locked: ["true", "false"],
+  }), [items]);
+
+  // Aplica filtros ANTES da ordenação
+  const filteredItems = useMemo(() => {
+    return items.filter(i => {
+      if (filters.month.size > 0 && !filters.month.has(i.month)) return false;
+      if (filters.kind.size > 0 && !filters.kind.has(i.kind)) return false;
+      if (filters.category.size > 0 && !filters.category.has(i.category ?? "—")) return false;
+      if (filters.locked.size > 0 && !filters.locked.has(String(i.locked))) return false;
+      return true;
+    });
+  }, [items, filters]);
+
+  const activeFilterCount = filters.month.size + filters.kind.size + filters.category.size + filters.locked.size;
+
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
       setSortDir(d => (d === "asc" ? "desc" : "asc"));
@@ -70,7 +107,7 @@ export default function PlanPage() {
   };
 
   const sortedItems = useMemo(() => {
-    const arr = [...items];
+    const arr = [...filteredItems];
     arr.sort((a, b) => {
       let av: any, bv: any;
       switch (sortKey) {
@@ -86,11 +123,47 @@ export default function PlanPage() {
       return 0;
     });
     return arr;
-  }, [items, sortKey, sortDir]);
+  }, [filteredItems, sortKey, sortDir]);
 
   const SortIcon = ({ col }: { col: SortKey }) => {
     if (sortKey !== col) return <ArrowUpDown className="w-3 h-3 opacity-40" />;
     return sortDir === "asc" ? <ArrowUp className="w-3 h-3" style={{ color: GOLD }} /> : <ArrowDown className="w-3 h-3" style={{ color: GOLD }} />;
+  };
+
+  const FilterPopover = ({ col, label, formatValue }: { col: FilterKey; label: string; formatValue?: (v: string) => string }) => {
+    const values = uniqueValues[col];
+    const selected = filters[col];
+    const hasFilter = selected.size > 0;
+    return (
+      <Popover>
+        <PopoverTrigger asChild>
+          <button className="p-1 rounded hover:bg-white/5" title={`Filtrar por ${label}`}>
+            <Filter className="w-3 h-3" style={{ color: hasFilter ? GOLD : "#4A5568" }} fill={hasFilter ? GOLD : "none"} />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent className="w-64 p-2" style={{ background: "#0D1318", border: "1px solid #1A2535" }} align="start">
+          <div className="flex items-center justify-between mb-2 pb-2 border-b" style={{ borderColor: "#1A2535" }}>
+            <span className="text-xs font-semibold" style={{ color: "#F0F4F8" }}>Filtrar {label}</span>
+            {hasFilter && (
+              <button onClick={() => clearFilter(col)} className="text-[10px] underline" style={{ color: GOLD }}>limpar</button>
+            )}
+          </div>
+          <div className="max-h-64 overflow-y-auto space-y-0.5">
+            {values.map(v => {
+              const checked = selected.has(v);
+              const display = formatValue ? formatValue(v) : v;
+              return (
+                <label key={v} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-white/5 cursor-pointer">
+                  <input type="checkbox" checked={checked} onChange={() => toggleFilterValue(col, v)}
+                    className="accent-[#C9A84C]" />
+                  <span className="text-xs" style={{ color: "#F0F4F8" }}>{display}</span>
+                </label>
+              );
+            })}
+          </div>
+        </PopoverContent>
+      </Popover>
+    );
   };
 
   // KPIs agregados
@@ -269,6 +342,18 @@ export default function PlanPage() {
           {/* ═══ ABA 1: Lista de itens ═══ */}
           <TabsContent value="itens" className="space-y-4">
             <PremiumCard className="p-4">
+              {activeFilterCount > 0 && (
+                <div className="flex items-center justify-between mb-3 px-2 py-1.5 rounded" style={{ background: "rgba(201,168,76,0.08)", border: "1px solid rgba(201,168,76,0.2)" }}>
+                  <span className="text-xs" style={{ color: GOLD }}>
+                    <Filter className="w-3 h-3 inline mr-1" />
+                    {sortedItems.length} de {items.length} itens · {activeFilterCount} filtro{activeFilterCount > 1 ? "s" : ""} ativo{activeFilterCount > 1 ? "s" : ""}
+                  </span>
+                  <button onClick={() => setFilters({ month: new Set(), kind: new Set(), category: new Set(), locked: new Set() })}
+                    className="text-xs underline hover:opacity-80" style={{ color: GOLD }}>
+                    limpar todos
+                  </button>
+                </div>
+              )}
               {isLoading ? <Skeleton className="h-40" /> : items.length === 0 ? (
                 <div className="text-center py-8" style={{ color: "#64748B" }}>Sem itens ainda</div>
               ) : (
@@ -276,22 +361,34 @@ export default function PlanPage() {
                   <TableHeader>
                     <TableRow style={{ borderColor: "#1A2535" }}>
                       <TableHead style={{ color: "#94A3B8" }}>
-                        <button onClick={() => toggleSort("month")} className="flex items-center gap-1 hover:opacity-80"><span>Mês</span><SortIcon col="month" /></button>
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => toggleSort("month")} className="flex items-center gap-1 hover:opacity-80"><span>Mês</span><SortIcon col="month" /></button>
+                          <FilterPopover col="month" label="Mês" />
+                        </div>
                       </TableHead>
                       <TableHead style={{ color: "#94A3B8" }}>
-                        <button onClick={() => toggleSort("kind")} className="flex items-center gap-1 hover:opacity-80"><span>Tipo</span><SortIcon col="kind" /></button>
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => toggleSort("kind")} className="flex items-center gap-1 hover:opacity-80"><span>Tipo</span><SortIcon col="kind" /></button>
+                          <FilterPopover col="kind" label="Tipo" formatValue={v => `${PLAN_KIND_META[v as PlanKind]?.emoji ?? ""} ${PLAN_KIND_META[v as PlanKind]?.label ?? v}`} />
+                        </div>
                       </TableHead>
                       <TableHead style={{ color: "#94A3B8" }}>
                         <button onClick={() => toggleSort("description")} className="flex items-center gap-1 hover:opacity-80"><span>Descrição</span><SortIcon col="description" /></button>
                       </TableHead>
                       <TableHead style={{ color: "#94A3B8" }}>
-                        <button onClick={() => toggleSort("category")} className="flex items-center gap-1 hover:opacity-80"><span>Categoria</span><SortIcon col="category" /></button>
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => toggleSort("category")} className="flex items-center gap-1 hover:opacity-80"><span>Categoria</span><SortIcon col="category" /></button>
+                          <FilterPopover col="category" label="Categoria" />
+                        </div>
                       </TableHead>
                       <TableHead className="text-right" style={{ color: "#94A3B8" }}>
                         <button onClick={() => toggleSort("amount")} className="flex items-center gap-1 ml-auto hover:opacity-80"><span>Valor</span><SortIcon col="amount" /></button>
                       </TableHead>
-                      <TableHead className="w-24" style={{ color: "#94A3B8" }}>
-                        <button onClick={() => toggleSort("locked")} className="flex items-center gap-1 hover:opacity-80"><span>Status</span><SortIcon col="locked" /></button>
+                      <TableHead className="w-28" style={{ color: "#94A3B8" }}>
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => toggleSort("locked")} className="flex items-center gap-1 hover:opacity-80"><span>Status</span><SortIcon col="locked" /></button>
+                          <FilterPopover col="locked" label="Status" formatValue={v => v === "true" ? "🔒 Travado" : "🔓 Estimativa"} />
+                        </div>
                       </TableHead>
                       <TableHead className="w-20" style={{ color: "#94A3B8" }}>Ações</TableHead>
                     </TableRow>
