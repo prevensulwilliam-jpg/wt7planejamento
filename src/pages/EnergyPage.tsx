@@ -67,18 +67,27 @@ function InvoicesTab() {
   const invoiceTotal = Number(form.invoice_total) || 0;
   const cosip = Number(form.cosip) || 0;
   const kwhTotal = Number(form.kwh_total) || 0;
+  // Tarifa real pós-abate solar = (total - COSIP) / kWh.
+  // Quando o painel solar compensa, esse valor cai bem abaixo da tarifa CELESC
+  // cheia (ex: R$ 0,25 em vez de R$ 1,10) — é o que vira margem solar positiva.
   const tariff = kwhTotal > 0 ? (invoiceTotal - cosip) / kwhTotal : 0;
 
-  // Alerta de divergência: compara a tarifa real da fatura com a tarifa
-  // configurada em energy_config (que é a cobrada dos inquilinos).
-  // Se diferença > 5%, sinaliza — senão o William absorve margem negativa
-  // silenciosamente.
+  // Margem solar: compara a tarifa real (pós-abate) com a tarifa cobrada dos
+  // inquilinos (energy_config). Negativo = William está subsidiando (prejuízo);
+  // positivo = lucro solar.
+  //
+  // ⚠️ Alerta SÓ dispara quando a tarifa real SUPERA a cobrada — aí sim é
+  // situação indesejada (solar não compensou o suficiente). Se real < cobrada,
+  // é o cenário normal e desejado: silencioso.
   const { data: energyConfigs } = useEnergyConfig();
   const configTariff = (energyConfigs ?? []).find((c: any) => c.residencial_code === form.residencial_code)?.tariff_kwh
     ?? DEFAULT_ENERGY_TARIFF;
-  const tariffDiffAbs = Math.abs(tariff - configTariff);
-  const tariffDiffPct = configTariff > 0 ? (tariffDiffAbs / configTariff) * 100 : 0;
-  const hasTariffDivergence = tariff > 0 && tariffDiffPct > 5;
+  const margemPorKwh = configTariff - tariff;        // positivo = lucro solar
+  const margemTotal = margemPorKwh * kwhTotal;       // R$ lucro/prejuízo na fatura
+  const isSubsidizingLoss = tariff > 0 && tariff > configTariff; // real > cobrada → prejuízo
+  const solarMarginPct = configTariff > 0 && tariff > 0
+    ? (margemPorKwh / configTariff) * 100
+    : 0;
 
   const handleOpen = () => {
     setForm(EMPTY_FORM);
@@ -483,29 +492,48 @@ function InvoicesTab() {
               <p className="text-xs text-muted-foreground mt-1">(Total - COSIP) ÷ kWh</p>
             </PremiumCard>
 
-            {/* Alerta de divergência entre tarifa fatura e tarifa cobrada (config) */}
-            {hasTariffDivergence && (
-              <div
-                className="p-3 rounded-lg border text-sm space-y-1"
-                style={{
-                  background: 'rgba(244, 63, 94, 0.08)',
-                  border: '1px solid #F43F5E',
-                  color: '#FCA5A5',
-                }}
-              >
-                <p className="font-bold">⚠️ Divergência de tarifa detectada</p>
-                <p className="text-xs">
-                  Fatura: <span className="font-mono">R$ {tariff.toFixed(4)}/kWh</span> ·
-                  Configurada: <span className="font-mono">R$ {configTariff.toFixed(4)}/kWh</span> ·
-                  Diferença: <span className="font-mono">{tariffDiffPct.toFixed(1)}%</span>
-                </p>
-                <p className="text-xs">
-                  {tariff > configTariff
-                    ? "Você está cobrando MENOS dos inquilinos do que paga à CELESC. Margem solar negativa."
-                    : "Você está cobrando MAIS dos inquilinos do que paga à CELESC. Revise pra não sobrecarregar."}
-                  {" "}Atualize em <span className="underline">Leituras &amp; Cobrança</span> se precisar.
-                </p>
-              </div>
+            {/* Painel de margem solar — informativo sempre, alerta só quando prejuízo */}
+            {tariff > 0 && (
+              isSubsidizingLoss ? (
+                <div
+                  className="p-3 rounded-lg border text-sm space-y-1"
+                  style={{
+                    background: 'rgba(244, 63, 94, 0.08)',
+                    border: '1px solid #F43F5E',
+                    color: '#FCA5A5',
+                  }}
+                >
+                  <p className="font-bold">⚠️ Margem solar NEGATIVA nesta fatura</p>
+                  <p className="text-xs">
+                    Tarifa real paga: <span className="font-mono">R$ {tariff.toFixed(4)}/kWh</span> ·
+                    Cobrada inquilinos: <span className="font-mono">R$ {configTariff.toFixed(4)}/kWh</span>
+                  </p>
+                  <p className="text-xs">
+                    Prejuízo nesta fatura: <span className="font-mono font-bold">R$ {Math.abs(margemTotal).toFixed(2)}</span>.
+                    Painel solar não compensou o suficiente ou tarifa cobrada está baixa.
+                    Ajustar em <span className="underline">Leituras &amp; Cobrança</span> se for padrão recorrente.
+                  </p>
+                </div>
+              ) : (
+                <div
+                  className="p-3 rounded-lg border text-sm space-y-1"
+                  style={{
+                    background: 'rgba(45, 212, 191, 0.08)',
+                    border: '1px solid #2DD4BF',
+                    color: '#5EEAD4',
+                  }}
+                >
+                  <p className="font-bold">💚 Margem solar positiva</p>
+                  <p className="text-xs">
+                    Tarifa real paga: <span className="font-mono">R$ {tariff.toFixed(4)}/kWh</span> ·
+                    Cobrada inquilinos: <span className="font-mono">R$ {configTariff.toFixed(4)}/kWh</span> ·
+                    Delta: <span className="font-mono">+{solarMarginPct.toFixed(1)}%</span>
+                  </p>
+                  <p className="text-xs">
+                    Lucro solar nesta fatura: <span className="font-mono font-bold">+R$ {margemTotal.toFixed(2)}</span>
+                  </p>
+                </div>
+              )
             )}
           </div>
           <DialogFooter>
