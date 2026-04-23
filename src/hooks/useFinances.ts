@@ -314,6 +314,7 @@ export function useDeleteBankAccount() {
 //   + Σ investments.current_amount  (caixa em investimentos)
 //   + Σ properties.property_value × ownership_pct/100  (cota no imóvel/obra)
 //   + Σ consortiums.total_paid × ownership_pct/100  (parcelas já pagas = patrimônio consorcial)
+//   + Σ bank_accounts.balance  (saldo atual das contas correntes)
 //
 //   Passivos:
 //   − Σ debts.remaining_amount  (saldos devedores ativos)
@@ -328,6 +329,15 @@ export function useNetWorth() {
     queryKey: ["investments"],
     queryFn: async () => {
       const { data, error } = await supabase.from("investments").select("current_amount");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const bankAccounts = useQuery({
+    queryKey: ["bank_accounts_networth"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("bank_accounts").select("balance");
       if (error) throw error;
       return data;
     },
@@ -382,9 +392,16 @@ export function useNetWorth() {
       return (Number(c.total_paid) || 0) * (pct / 100);
     })
   );
+  const bankBalanceTotal = sumMoney((bankAccounts.data ?? []).map((b: any) => b.balance));
   const debtsTotal = sumMoney((debts.data ?? []).map((d: any) => d.remaining_amount));
 
-  const grossAssets = sumMoney([assetsTotal, investmentsTotal, propertiesTotal, consortiumsTotal]);
+  const grossAssets = sumMoney([
+    assetsTotal,
+    investmentsTotal,
+    propertiesTotal,
+    consortiumsTotal,
+    bankBalanceTotal,
+  ]);
   const netWorth = grossAssets - debtsTotal;
 
   return {
@@ -394,9 +411,11 @@ export function useNetWorth() {
     investmentsTotal,
     propertiesTotal,
     consortiumsTotal,
+    bankBalanceTotal,
     debtsTotal,
     isLoading:
       assets.isLoading ||
+      bankAccounts.isLoading ||
       investments.isLoading ||
       properties.isLoading ||
       consortiums.isLoading ||
