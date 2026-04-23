@@ -83,38 +83,13 @@ export function useCreateKitnetEntry() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (entry: TablesInsert<"kitnet_entries"> & { _kitnetCode?: string; _tenantName?: string }) => {
-      const { _kitnetCode, _tenantName, ...entryData } = entry;
+      // Fechamento de kitnet NUNCA cria receita automática.
+      // Receita vem APENAS de: extrato bancário (importado) ou lançamento manual em /revenues.
+      // O fechamento é depois conciliado contra essa receita via /reconciliation.
+      const { _kitnetCode: _kc, _tenantName: _tn, ...entryData } = entry;
       const { data: inserted, error } = await supabase
         .from("kitnet_entries").insert(entryData).select("id").single();
       if (error) throw error;
-
-      // Auto-create revenue for bank reconciliation matching by value
-      if (entryData.total_liquid && entryData.total_liquid > 0 && entryData.reference_month) {
-        const description = _kitnetCode
-          ? `Repasse ${_kitnetCode}${_tenantName ? ` — ${_tenantName}` : ""}`
-          : "Repasse Kitnet";
-
-        // Avoid duplicates: check if revenue already exists for this kitnet+month
-        const { data: existing } = await supabase
-          .from("revenues")
-          .select("id")
-          .eq("source", "kitnets")
-          .eq("reference_month", entryData.reference_month)
-          .ilike("description", `%${_kitnetCode ?? ""}%`)
-          .maybeSingle();
-
-        if (!existing) {
-          await supabase.from("revenues").insert({
-            source: "kitnets",
-            description,
-            amount: entryData.total_liquid,
-            type: "fixed",
-            reference_month: entryData.reference_month,
-            received_at: entryData.period_end ?? entryData.period_start ?? null,
-          });
-        }
-      }
-      // Retorna o ID do fechamento criado para uso pelo chamador (ex: criar alerta)
       return inserted?.id as string | undefined;
     },
     onSuccess: () => {
