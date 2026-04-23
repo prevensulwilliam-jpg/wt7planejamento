@@ -24,6 +24,7 @@ import type { Tables } from "@/integrations/supabase/types";
 
 import { useSearchParams } from "react-router-dom";
 import { useBankTransactions } from "@/hooks/useBankReconciliation";
+import { useQuery } from "@tanstack/react-query";
 
 const statusLabels: Record<string, { label: string; variant: "green" | "gold" | "red" }> = {
   occupied: { label: "Ocupada", variant: "green" },
@@ -352,11 +353,28 @@ function ConciliacaoDialog({ open, onClose, month }: { open: boolean; onClose: (
   const reconcileMut = useReconcileWithTransactions();
   const { toast } = useToast();
 
-  // Créditos ainda não conciliados (inclui ignored — muitas vezes são depósitos de inquilino
-  // que o auto-categorizador marcou como transferência por engano)
+  // Ids de bts já linkados via tabela de junção (pingados). Usado junto com kitnet_entry_id
+  // para saber se um crédito já foi conciliado com algum fechamento.
+  const { data: linkedBtIds = [] } = useQuery({
+    queryKey: ["kitnet_linked_bt_ids", month],
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from("kitnet_entry_transactions")
+        .select("bank_transaction_id");
+      return ((data ?? []) as any[]).map(r => r.bank_transaction_id);
+    },
+  });
+  const linkedSet = useMemo(() => new Set(linkedBtIds as string[]), [linkedBtIds]);
+
+  // Créditos candidatos a conciliar com fechamento.
+  // Critério: crédito que ainda NÃO está linkado a nenhum kitnet_entry
+  // (nem via FK direta bank_transactions.kitnet_entry_id, nem via tabela de junção).
+  // Isso inclui bts matched com revenue (o fechamento converte → revenue é deletada, modelo A).
   const credits = useMemo(
-    () => (txRaw as any[]).filter(t => t.type === "credit" && t.status !== "matched"),
-    [txRaw]
+    () => (txRaw as any[]).filter(
+      t => t.type === "credit" && !t.kitnet_entry_id && !linkedSet.has(t.id)
+    ),
+    [txRaw, linkedSet]
   );
 
   // Sugestão automática por valor exato (1 transação = total)

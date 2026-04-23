@@ -414,15 +414,15 @@ export function useReconcileWithTransactions() {
       entryId: string;
       transactionIds: string[];
     }) => {
-      // 1. Busca os valores de cada transação selecionada
       if (transactionIds.length > 0) {
+        // 1. Busca dados das transações selecionadas (valor + revenue órfã linkada)
         const { data: txData, error: txFetchError } = await supabase
           .from("bank_transactions")
-          .select("id, amount")
+          .select("id, amount, matched_revenue_id")
           .in("id", transactionIds);
         if (txFetchError) throw txFetchError;
 
-        // 2. Insere/atualiza registros em kitnet_entry_transactions
+        // 2. Upsert em kitnet_entry_transactions (tabela de junção N:1 pra pingados)
         const rows = (txData ?? []).map((t: any) => ({
           kitnet_entry_id: entryId,
           bank_transaction_id: t.id,
@@ -433,14 +433,30 @@ export function useReconcileWithTransactions() {
           .upsert(rows, { onConflict: "kitnet_entry_id,bank_transaction_id" });
         if (linkError) throw linkError;
 
-        // 3. Marca cada transação como matched
+        // 3. Atualiza bank_transactions: status matched, zera revenue, categoria kitnet
+        //    Se for única transação, seta também kitnet_entry_id direto (facilita filtros).
+        const singleLink = transactionIds.length === 1;
         await supabase
           .from("bank_transactions")
-          .update({ status: "matched" })
+          .update({
+            status: "matched",
+            matched_revenue_id: null,
+            category_confirmed: "aluguel_kitnets",
+            category_intent: "receita",
+            ...(singleLink ? { kitnet_entry_id: entryId as any } : {}),
+          })
           .in("id", transactionIds);
+
+        // 4. Deleta revenues órfãs (opção A: fechamento é fonte única)
+        const orphanRevenueIds = (txData ?? [])
+          .map((t: any) => t.matched_revenue_id)
+          .filter((id: string | null): id is string => !!id);
+        if (orphanRevenueIds.length > 0) {
+          await supabase.from("revenues").delete().in("id", orphanRevenueIds);
+        }
       }
 
-      // 4. Marca o fechamento como conciliado
+      // 5. Marca o fechamento como conciliado
       const { error: updateError } = await supabase
         .from("kitnet_entries")
         .update({
@@ -456,6 +472,8 @@ export function useReconcileWithTransactions() {
       qc.invalidateQueries({ queryKey: ["kitnet_entries_unreconciled_count"] });
       qc.invalidateQueries({ queryKey: ["kitnet_entries"] });
       qc.invalidateQueries({ queryKey: ["bank_transactions"] });
+      qc.invalidateQueries({ queryKey: ["revenues"] });
+      qc.invalidateQueries({ queryKey: ["kitnet_linked_bt_ids"] });
     },
   });
 }
