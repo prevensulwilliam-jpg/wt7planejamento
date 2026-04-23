@@ -124,7 +124,8 @@ export function useBulkConfirmSuggestions() {
 }
 
 // Auto-match: cruza depósitos com kitnet_entries por valor exato
-// Grava matched_revenue_id E kitnet_entry_id para rastreabilidade completa
+// Modelo A (fonte única): linka kitnet_entry_id e DELETA qualquer revenue órfã
+// que tenha sido criada pelo extrato antes do fechamento existir.
 export function useAutoMatchKitnets() {
   const qc = useQueryClient();
   return useMutation({
@@ -133,18 +134,18 @@ export function useAutoMatchKitnets() {
       const start = `${y}-${m}-01`;
       const end = new Date(+y, +m, 0).toISOString().split("T")[0];
 
-      // 1. Créditos não conciliados do mês
+      // 1. Créditos não linkados a kitnet (podem estar pending, auto_categorized ou matched com revenue)
       const { data: credits } = await supabase
         .from("bank_transactions")
-        .select("id, amount, description")
+        .select("id, amount, description, matched_revenue_id, status")
         .eq("type", "credit")
-        .in("status", ["pending", "auto_categorized"])
+        .is("kitnet_entry_id", null)
         .gte("date", start)
         .lte("date", end);
 
       if (!credits?.length) return { matched: 0 };
 
-      // 2. Kitnet entries do mês (com kitnet_id para identificação)
+      // 2. Kitnet entries do mês ainda sem bt linkado
       const { data: kitnetEntries } = await supabase
         .from("kitnet_entries")
         .select("id, total_liquid, kitnet_id, kitnets(code, tenant_name)")
@@ -152,52 +153,53 @@ export function useAutoMatchKitnets() {
 
       if (!kitnetEntries?.length) return { matched: 0 };
 
-      // 3. Receitas de kitnets do mês (para manter matched_revenue_id)
-      // Aceita tanto "kitnets" quanto "aluguel_kitnets" (padrão atual do sistema)
-      const { data: kitnetRevenues } = await supabase
-        .from("revenues")
-        .select("id, amount")
-        .in("source", ["kitnets", "aluguel_kitnets"])
-        .eq("reference_month", month);
-
-      // 4. Já vinculados — evitar duplo match
       const { data: alreadyLinked } = await supabase
         .from("bank_transactions")
         .select("kitnet_entry_id")
-        .eq("status", "matched")
         .not("kitnet_entry_id", "is", null);
 
       const usedEntryIds = new Set((alreadyLinked ?? []).map((t: any) => t.kitnet_entry_id));
       const availableEntries = (kitnetEntries ?? []).filter(e => !usedEntryIds.has(e.id));
 
-      // 5. Match por valor exato (em centavos para evitar float)
+      // 3. Pra cada crédito, se bate com 1 fechamento ÚNICO → linka + deleta revenue
       let matchCount = 0;
       for (const credit of credits) {
         const creditCents = Math.round(Math.abs(credit.amount) * 100);
 
-        // Tentar match com kitnet_entry por total_liquid
-        const entryMatch = availableEntries.find(
+        const entryMatches = availableEntries.filter(
           e => Math.round((e.total_liquid ?? 0) * 100) === creditCents
         );
+        if (entryMatches.length !== 1) continue; // só casa unívoco, evita confundir com comissão
 
-        if (!entryMatch) continue;
-
-        // Encontrar revenue correspondente pelo mesmo valor
-        const revenueMatch = (kitnetRevenues ?? []).find(
-          r => Math.round((r.amount ?? 0) * 100) === creditCents
-        );
+        const entryMatch = entryMatches[0] as any;
+        const revenueIdToDelete = credit.matched_revenue_id;
 
         await supabase
           .from("bank_transactions")
           .update({
             category_confirmed: "aluguel_kitnets",
             category_intent: "receita",
-            category_label: `${(entryMatch as any).kitnets?.code} - ${(entryMatch as any).kitnets?.tenant_name}`,
+            category_label: `${entryMatch.kitnets?.code ?? ""}${entryMatch.kitnets?.tenant_name ? " - " + entryMatch.kitnets.tenant_name : ""}`,
             status: "matched",
             kitnet_entry_id: entryMatch.id as any,
-            matched_revenue_id: revenueMatch?.id ?? null,
+            matched_revenue_id: null,
           })
           .eq("id", credit.id);
+
+        // Marca fechamento como conciliado
+        await supabase
+          .from("kitnet_entries")
+          .update({
+            reconciled: true,
+            bank_transaction_id: credit.id,
+            reconciled_at: new Date().toISOString(),
+          } as any)
+          .eq("id", entryMatch.id);
+
+        // Opção A: fechamento é fonte única. Deleta revenue órfã se havia.
+        if (revenueIdToDelete) {
+          await supabase.from("revenues").delete().eq("id", revenueIdToDelete);
+        }
 
         usedEntryIds.add(entryMatch.id);
         matchCount++;
@@ -209,6 +211,8 @@ export function useAutoMatchKitnets() {
       qc.invalidateQueries({ queryKey: ["bank_transactions"] });
       qc.invalidateQueries({ queryKey: ["revenues"] });
       qc.invalidateQueries({ queryKey: ["kitnet_entries"] });
+      qc.invalidateQueries({ queryKey: ["kitnet_entries_unreconciled"] });
+      qc.invalidateQueries({ queryKey: ["kitnet_entries_unreconciled_count"] });
     },
   });
 }

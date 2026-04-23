@@ -85,18 +85,78 @@ export function useCreateKitnetEntry() {
     mutationFn: async (entry: TablesInsert<"kitnet_entries"> & { _kitnetCode?: string; _tenantName?: string }) => {
       // Fechamento de kitnet NUNCA cria receita automática.
       // Receita vem APENAS de: extrato bancário (importado) ou lançamento manual em /revenues.
-      // O fechamento é depois conciliado contra essa receita via /reconciliation.
-      const { _kitnetCode: _kc, _tenantName: _tn, ...entryData } = entry;
+      const { _kitnetCode: kitnetCode, _tenantName: tenantName, ...entryData } = entry;
       const { data: inserted, error } = await supabase
         .from("kitnet_entries").insert(entryData).select("id").single();
       if (error) throw error;
-      return inserted?.id as string | undefined;
+
+      const entryId = inserted?.id as string | undefined;
+      const totalLiquid = Number(entryData.total_liquid ?? 0);
+      const refMonth = entryData.reference_month as string | undefined;
+
+      // Auto-match com bank_transaction órfão (crédito do mês, mesmo valor, sem kitnet_entry_id)
+      if (entryId && totalLiquid > 0 && refMonth) {
+        const [y, m] = refMonth.split("-");
+        const start = `${y}-${m}-01`;
+        const end = new Date(+y, +m, 0).toISOString().split("T")[0];
+        const cents = Math.round(totalLiquid * 100);
+
+        const { data: candidates } = await supabase
+          .from("bank_transactions")
+          .select("id, amount, matched_revenue_id")
+          .eq("type", "credit")
+          .gte("date", start)
+          .lte("date", end)
+          .is("kitnet_entry_id", null);
+
+        const matches = (candidates ?? []).filter(
+          (c: any) => Math.round(Math.abs(Number(c.amount)) * 100) === cents
+        );
+
+        if (matches.length === 1) {
+          const bt = matches[0] as any;
+          const label = kitnetCode ? `${kitnetCode}${tenantName ? " - " + tenantName : ""}` : null;
+
+          // Linka bt → kitnet_entry, zera matched_revenue_id (FK ON DELETE SET NULL vai ajudar)
+          await supabase
+            .from("bank_transactions")
+            .update({
+              kitnet_entry_id: entryId as any,
+              matched_revenue_id: null,
+              status: "matched",
+              category_confirmed: "aluguel_kitnets",
+              category_intent: "receita",
+              ...(label ? { category_label: label } : {}),
+            })
+            .eq("id", bt.id);
+
+          // Marca fechamento como conciliado
+          await supabase
+            .from("kitnet_entries")
+            .update({
+              reconciled: true,
+              bank_transaction_id: bt.id,
+              reconciled_at: new Date().toISOString(),
+            } as any)
+            .eq("id", entryId);
+
+          // Deleta revenue órfão (opção A: sem duplicidade entre /revenues e /kitnets)
+          if (bt.matched_revenue_id) {
+            await supabase.from("revenues").delete().eq("id", bt.matched_revenue_id);
+          }
+        }
+      }
+
+      return entryId;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["kitnet_entries"] });
       qc.invalidateQueries({ queryKey: ["kitnet_fechamentos"] });
       qc.invalidateQueries({ queryKey: ["kitnet_alerts"] });
       qc.invalidateQueries({ queryKey: ["kitnet_alerts_month"] });
+      qc.invalidateQueries({ queryKey: ["kitnet_entries_unreconciled"] });
+      qc.invalidateQueries({ queryKey: ["kitnet_entries_unreconciled_count"] });
+      qc.invalidateQueries({ queryKey: ["bank_transactions"] });
       qc.invalidateQueries({ queryKey: ["revenues"] });
     },
   });
