@@ -69,6 +69,17 @@ function InvoicesTab() {
   const kwhTotal = Number(form.kwh_total) || 0;
   const tariff = kwhTotal > 0 ? (invoiceTotal - cosip) / kwhTotal : 0;
 
+  // Alerta de divergência: compara a tarifa real da fatura com a tarifa
+  // configurada em energy_config (que é a cobrada dos inquilinos).
+  // Se diferença > 5%, sinaliza — senão o William absorve margem negativa
+  // silenciosamente.
+  const { data: energyConfigs } = useEnergyConfig();
+  const configTariff = (energyConfigs ?? []).find((c: any) => c.residencial_code === form.residencial_code)?.tariff_kwh
+    ?? DEFAULT_ENERGY_TARIFF;
+  const tariffDiffAbs = Math.abs(tariff - configTariff);
+  const tariffDiffPct = configTariff > 0 ? (tariffDiffAbs / configTariff) * 100 : 0;
+  const hasTariffDivergence = tariff > 0 && tariffDiffPct > 5;
+
   const handleOpen = () => {
     setForm(EMPTY_FORM);
     setEditingId(null);
@@ -471,6 +482,31 @@ function InvoicesTab() {
               <p className="font-mono text-2xl font-bold mt-1" style={{ color: '#E8C97A' }}>R$ {tariff.toFixed(4)}</p>
               <p className="text-xs text-muted-foreground mt-1">(Total - COSIP) ÷ kWh</p>
             </PremiumCard>
+
+            {/* Alerta de divergência entre tarifa fatura e tarifa cobrada (config) */}
+            {hasTariffDivergence && (
+              <div
+                className="p-3 rounded-lg border text-sm space-y-1"
+                style={{
+                  background: 'rgba(244, 63, 94, 0.08)',
+                  border: '1px solid #F43F5E',
+                  color: '#FCA5A5',
+                }}
+              >
+                <p className="font-bold">⚠️ Divergência de tarifa detectada</p>
+                <p className="text-xs">
+                  Fatura: <span className="font-mono">R$ {tariff.toFixed(4)}/kWh</span> ·
+                  Configurada: <span className="font-mono">R$ {configTariff.toFixed(4)}/kWh</span> ·
+                  Diferença: <span className="font-mono">{tariffDiffPct.toFixed(1)}%</span>
+                </p>
+                <p className="text-xs">
+                  {tariff > configTariff
+                    ? "Você está cobrando MENOS dos inquilinos do que paga à CELESC. Margem solar negativa."
+                    : "Você está cobrando MAIS dos inquilinos do que paga à CELESC. Revise pra não sobrecarregar."}
+                  {" "}Atualize em <span className="underline">Leituras &amp; Cobrança</span> se precisar.
+                </p>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <GoldButton onClick={handleSave} disabled={createMut.isPending || updateMut.isPending} className="w-full justify-center">

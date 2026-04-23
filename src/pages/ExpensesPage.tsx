@@ -44,7 +44,7 @@ export default function ExpensesPage() {
 
   const [form, setForm] = useState({
     category: "", description: "", amount: "", type: "variable", paid_at: "", reference_month: month,
-    counts_as_investment: false, vector: "", is_card_payment: false,
+    counts_as_investment: false, vector: "", is_card_payment: false, is_transfer: false,
   });
 
   // Sort & filter state
@@ -182,6 +182,15 @@ export default function ExpensesPage() {
   const handleSubmit = async () => {
     if (!form.category || !form.amount || !form.description) return;
     try {
+      // Deriva nature canônico a partir das flags.
+      // Prioridade: transfer > card_payment > investment > expense.
+      const nature = form.is_transfer
+        ? "transfer"
+        : form.is_card_payment
+          ? "card_payment"
+          : form.counts_as_investment
+            ? "investment"
+            : "expense";
       await createExpense.mutateAsync({
         category: form.category,
         description: form.description,
@@ -192,10 +201,11 @@ export default function ExpensesPage() {
         counts_as_investment: form.counts_as_investment,
         vector: form.counts_as_investment ? (form.vector || null) : null,
         is_card_payment: form.is_card_payment,
+        nature,
       } as any);
       toast({ title: "Despesa registrada com sucesso" });
       setDialogOpen(false);
-      setForm({ category: "", description: "", amount: "", type: "variable", paid_at: "", reference_month: month, counts_as_investment: false, vector: "", is_card_payment: false });
+      setForm({ category: "", description: "", amount: "", type: "variable", paid_at: "", reference_month: month, counts_as_investment: false, vector: "", is_card_payment: false, is_transfer: false });
     } catch {
       toast({ title: "Erro ao registrar despesa", variant: "destructive" });
     }
@@ -341,13 +351,28 @@ export default function ExpensesPage() {
                   <input
                     type="checkbox"
                     checked={form.is_card_payment}
-                    onChange={e => setForm(f => ({ ...f, is_card_payment: e.target.checked, counts_as_investment: e.target.checked ? false : f.counts_as_investment }))}
+                    onChange={e => setForm(f => ({ ...f, is_card_payment: e.target.checked, counts_as_investment: e.target.checked ? false : f.counts_as_investment, is_transfer: e.target.checked ? false : f.is_transfer }))}
                     className="mt-0.5 accent-slate-400"
                   />
                   <div className="flex-1">
                     <span className="text-sm" style={{ color: '#94A3B8' }}>💳 Pagamento de fatura de cartão</span>
                     <p className="text-[10px] mt-0.5" style={{ color: '#64748B' }}>
                       Ignora no cálculo de custeio (as compras já estão em <code>card_transactions</code>).
+                    </p>
+                  </div>
+                </label>
+
+                <label className="flex items-start gap-2 cursor-pointer mt-3">
+                  <input
+                    type="checkbox"
+                    checked={form.is_transfer}
+                    onChange={e => setForm(f => ({ ...f, is_transfer: e.target.checked, counts_as_investment: e.target.checked ? false : f.counts_as_investment, is_card_payment: e.target.checked ? false : f.is_card_payment }))}
+                    className="mt-0.5 accent-sky-400"
+                  />
+                  <div className="flex-1">
+                    <span className="text-sm" style={{ color: '#60A5FA' }}>🔁 Transferência entre contas próprias</span>
+                    <p className="text-[10px] mt-0.5" style={{ color: '#64748B' }}>
+                      Ajuste de caixa — nem receita, nem despesa. Não entra no custeio nem na Sobra Reinvestida.
                     </p>
                   </div>
                 </label>

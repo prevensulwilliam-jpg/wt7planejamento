@@ -27,3 +27,15 @@ export function getCurrentMonth(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
+
+// Soma de valores monetários via inteiros em centavos — evita drift de float.
+// Ex: 0.1 + 0.2 === 0.30000000000000004 em JS. sumMoney([0.1, 0.2]) === 0.3.
+export function sumMoney(values: Array<number | null | undefined>): number {
+  const cents = values.reduce<number>((acc, v) => acc + Math.round(((v ?? 0) as number) * 100), 0);
+  return cents / 100;
+}
+
+// Arredondamento consistente para 2 casas em centavos (evita 1234.005 → 1234.00).
+export function roundMoney(value: number): number {
+  return Math.round(value * 100) / 100;
+}

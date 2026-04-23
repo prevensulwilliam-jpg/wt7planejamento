@@ -161,7 +161,20 @@ export function useAutoMatchKitnets() {
       const usedEntryIds = new Set((alreadyLinked ?? []).map((t: any) => t.kitnet_entry_id));
       const availableEntries = (kitnetEntries ?? []).filter(e => !usedEntryIds.has(e.id));
 
-      // 3. Pra cada crédito, se bate com 1 fechamento ÚNICO → linka + deleta revenue
+      // 3. Matching com desambiguação:
+      //    (a) Se há 1 candidato de mesmo valor → casa direto.
+      //    (b) Se há N candidatos (valores duplicados: 2+ kitnets com mesmo aluguel),
+      //        tenta desambiguar pela descrição do extrato — procura o código da
+      //        kitnet ou o nome do inquilino. Se encontrar só 1, casa.
+      //    (c) Se ainda ambíguo, deixa pendente (usuário decide manualmente).
+      //    Isso resolve o caso comum no RWT02 (várias kitnets com aluguel idêntico).
+      const normalize = (s: string | null | undefined) =>
+        (s ?? "")
+          .toLowerCase()
+          .normalize("NFD")
+          .replace(/[̀-ͯ]/g, "")
+          .replace(/[^a-z0-9 ]/g, " ");
+
       let matchCount = 0;
       for (const credit of credits) {
         const creditCents = Math.round(Math.abs(credit.amount) * 100);
@@ -169,9 +182,24 @@ export function useAutoMatchKitnets() {
         const entryMatches = availableEntries.filter(
           e => Math.round((e.total_liquid ?? 0) * 100) === creditCents
         );
-        if (entryMatches.length !== 1) continue; // só casa unívoco, evita confundir com comissão
 
-        const entryMatch = entryMatches[0] as any;
+        let entryMatch: any | null = null;
+        if (entryMatches.length === 1) {
+          entryMatch = entryMatches[0];
+        } else if (entryMatches.length > 1) {
+          // Desambigua por descrição: procura código da kitnet OU nome do inquilino.
+          const desc = normalize(credit.description as string | null);
+          const byDescription = entryMatches.filter((e: any) => {
+            const code = normalize(e.kitnets?.code);
+            const tenant = normalize(e.kitnets?.tenant_name);
+            return (code && desc.includes(code)) || (tenant && tenant.length >= 3 && desc.includes(tenant));
+          });
+          if (byDescription.length === 1) {
+            entryMatch = byDescription[0];
+          }
+        }
+        if (!entryMatch) continue;
+
         const revenueIdToDelete = credit.matched_revenue_id;
 
         await supabase
