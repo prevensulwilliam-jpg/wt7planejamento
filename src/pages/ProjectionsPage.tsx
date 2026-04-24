@@ -8,9 +8,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useProperties } from "@/hooks/useConstructions";
 import { useKitnets } from "@/hooks/useKitnets";
 import { useNetWorth } from "@/hooks/useFinances";
-import { formatCurrency, sumMoney } from "@/lib/formatters";
+import { useUpcomingTravelPlans } from "@/hooks/useTravelPlans";
+import { formatCurrency, formatDate, sumMoney } from "@/lib/formatters";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend } from "recharts";
-import { TrendingUp, Calculator, Building2 } from "lucide-react";
+import { TrendingUp, Calculator, Building2, Plane } from "lucide-react";
 
 // CAGR = (final / inicial)^(1/anos) − 1
 function cagr(initial: number, final: number, years: number): number | null {
@@ -34,6 +35,7 @@ export default function ProjectionsPage() {
 
   const { data: properties, isLoading: isLoadingProperties } = useProperties();
   const { data: kitnets, isLoading: isLoadingKitnets } = useKitnets();
+  const { data: upcomingTrips = [], isLoading: isLoadingTrips } = useUpcomingTravelPlans();
   const nw = useNetWorth();
 
   // ── Simulador de renda mensal ─────────────────────────────────────────
@@ -170,6 +172,72 @@ export default function ProjectionsPage() {
                 {cagrPct == null ? "—" : `${cagrPct.toFixed(1)}% a.a.`}
               </p>
             </div>
+          </div>
+        )}
+      </PremiumCard>
+
+      {/* Viagens planejadas — próximas saídas grandes de caixa */}
+      <PremiumCard glowColor="#2DD4BF" className="space-y-3">
+        <h3 className="font-display font-bold text-lg" style={{ color: '#E8C97A' }}>
+          <Plane className="inline w-5 h-5 mr-2" /> Viagens planejadas
+        </h3>
+        {isLoadingTrips ? (
+          <Skeleton className="h-16" />
+        ) : upcomingTrips.length === 0 ? (
+          <p className="text-xs" style={{ color: '#94A3B8' }}>Nenhuma viagem planejada.</p>
+        ) : (
+          <div className="space-y-2">
+            {upcomingTrips.map((t: any) => {
+              const days = t.start_date
+                ? Math.ceil((new Date(t.start_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+                : null;
+              const paidPct = t.estimated_cost > 0
+                ? Math.min((Number(t.amount_paid) / Number(t.estimated_cost)) * 100, 100)
+                : 0;
+              const purposeLabel: Record<string, string> = {
+                leisure: '🏖️ Lazer',
+                business: '💼 Negócio',
+                honeymoon: '💍 Lua de mel',
+                mixed: '🔀 Misto',
+              };
+              return (
+                <div
+                  key={t.id}
+                  className="p-3 rounded-lg flex items-start justify-between gap-3"
+                  style={{ background: 'rgba(45, 212, 191, 0.05)', border: '1px solid #1A2535' }}
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold truncate" style={{ color: '#F0F4F8' }}>
+                      {t.name}
+                    </p>
+                    <p className="text-xs" style={{ color: '#94A3B8' }}>
+                      {t.destination} · {purposeLabel[t.purpose] ?? t.purpose}
+                    </p>
+                    <p className="text-xs mt-1" style={{ color: '#64748B' }}>
+                      {t.start_date ? formatDate(t.start_date) : "data a definir"}
+                      {t.end_date ? ` → ${formatDate(t.end_date)}` : ""}
+                      {days != null && days > 0 ? ` · em ${days} dias` : ""}
+                      {days != null && days < 0 ? ` · em andamento` : ""}
+                    </p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="font-mono text-sm font-bold" style={{ color: '#E8C97A' }}>
+                      {formatCurrency(Number(t.estimated_cost) || 0)}
+                    </p>
+                    {Number(t.amount_paid) > 0 && (
+                      <p className="text-xs" style={{ color: '#10B981' }}>
+                        {formatCurrency(Number(t.amount_paid))} pago ({paidPct.toFixed(0)}%)
+                      </p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            <p className="text-[10px] pt-1" style={{ color: '#4A5568' }}>
+              Total planejado: <span className="font-mono">{formatCurrency(sumMoney(upcomingTrips.map((t: any) => t.estimated_cost)))}</span>
+              {" · "}
+              pago: <span className="font-mono">{formatCurrency(sumMoney(upcomingTrips.map((t: any) => t.amount_paid)))}</span>
+            </p>
           </div>
         )}
       </PremiumCard>
