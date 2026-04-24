@@ -12,16 +12,15 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useWeddingInstallments, useUpdateWeddingInstallment, useWeddingVendors, useCreateWeddingVendor, useUpdateWeddingVendor, useDeleteWeddingVendor, useCreateVendorPayment, useUpdateVendorPayment, useDeleteVendorPayment, uploadWeddingFile } from "@/hooks/useConstructions";
-import { formatCurrency, formatDate } from "@/lib/formatters";
+import { formatCurrency, formatDate, sumMoney } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { Heart, Check, Clock, Plus, Trash2 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 
+// Data do casamento fixa. Outros valores (contratado, pago, orçamento) calculados
+// dinamicamente a partir de wedding_installments + wedding_vendors no banco.
 const WEDDING_DATE = new Date("2027-12-11");
-const TOTAL_CONTRACTED = 98110;
-const TOTAL_BUDGET = 170000;
-const RESERVA = 19622;
 
 const milestones = [
   { done: true, label: "Reserva data", date: "31/12/2025" },
@@ -534,19 +533,55 @@ function VendorDetailModal({ vendor, open, onClose }: { vendor: any; open: boole
 // ─── Main Page ──────────────────────────────────────────────────────────────────
 
 export default function WeddingPage() {
-  const { data: installments, isLoading } = useWeddingInstallments();
+  const { data: installments = [], isLoading: loadingInstalls } = useWeddingInstallments();
+  const { data: vendors = [], isLoading: loadingVendors } = useWeddingVendors();
   const updateInstallment = useUpdateWeddingInstallment();
   const { toast } = useToast();
 
+  const isLoading = loadingInstalls || loadingVendors;
   const daysUntil = Math.ceil((WEDDING_DATE.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-  const totalPaid = (installments ?? []).filter(i => i.status === "pago").reduce((s, i) => s + (i.amount ?? 0), 0);
-  const totalPending = TOTAL_CONTRACTED - totalPaid;
-  const aContratar = TOTAL_BUDGET - TOTAL_CONTRACTED;
+
+  // ── Cálculos dinâmicos a partir dos dados reais ─────────────────────
+  // Villa Sonali: cronograma de pagamento (reserva + 10 parcelas)
+  const villaTotalContracted = sumMoney(installments.map((i: any) => i.amount));
+  const villaTotalPaid = sumMoney(
+    installments.filter((i: any) => i.status === "pago").map((i: any) => i.amount)
+  );
+  const villaTotalPending = villaTotalContracted - villaTotalPaid;
+  const reservaInstallment = installments.find((i: any) =>
+    /reserva|assinatura/i.test(i.description ?? "")
+  );
+
+  // Vendors fora do pacote Villa (evita duplicar valores do pacote)
+  const otherVendors = vendors.filter((v: any) => v.vendor_name !== "Villa Sonali");
+  const otherContratado = sumMoney(
+    otherVendors
+      .filter((v: any) => v.status === "contratado" && v.contracted_value)
+      .map((v: any) => v.contracted_value)
+  );
+  const otherAContratar = sumMoney(
+    otherVendors
+      .filter((v: any) => v.status === "a_contratar")
+      .map((v: any) => v.contracted_value || v.estimated_value || 0)
+  );
+
+  // Pagamentos dos vendors já efetuados
+  const allVendorPayments: any[] = vendors.flatMap((v: any) => v.wedding_vendor_payments ?? []);
+  const vendorsTotalPaid = sumMoney(
+    allVendorPayments.filter(p => p.status === "paid").map(p => p.amount)
+  );
+
+  // ── Consolidado global ──────────────────────────────────────────────
+  const totalPaid = villaTotalPaid + vendorsTotalPaid;                   // tudo que já saiu do caixa
+  const totalContracted = villaTotalContracted + otherContratado;        // compromisso fechado
+  const totalAContratar = otherAContratar;                               // ainda sem contrato
+  const totalBudget = totalContracted + totalAContratar;                 // orçamento completo
+  const totalPending = totalContracted - totalPaid;                      // contratado que ainda não pagou
 
   const chartData = [
-    { name: "Villa Sonali (Pago)", value: totalPaid, color: "#10B981" },
-    { name: "Villa Sonali (Pendente)", value: totalPending, color: "#C9A84C" },
-    { name: "Extras a Contratar", value: aContratar, color: "#2DD4BF" },
+    { name: "Pago",                value: totalPaid,        color: "#10B981" },
+    { name: "Contratado pendente", value: totalPending,     color: "#C9A84C" },
+    { name: "A Contratar",         value: totalAContratar,  color: "#2DD4BF" },
   ];
 
   const handleMarkPaid = async (id: string) => {
@@ -577,19 +612,44 @@ export default function WeddingPage() {
 
         <TabsContent value="financeiro" className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <KpiCard label="Total Pago" value={totalPaid} color="green" />
-            <KpiCard label="Pendente (Villa)" value={totalPending} color="gold" />
-            <KpiCard label="A Contratar (extras)" value={aContratar} color="cyan" />
-            <KpiCard label="Orçamento Total" value={TOTAL_BUDGET} color="gold" />
+            <KpiCard label="Total Pago"           value={totalPaid}       color="green" />
+            <KpiCard label="Contratado pendente"  value={totalPending}    color="gold" />
+            <KpiCard label="A Contratar"          value={totalAContratar} color="cyan" />
+            <KpiCard label="Orçamento Total"      value={totalBudget}     color="gold" />
           </div>
 
           <PremiumCard className="space-y-3">
             <h3 className="font-display font-bold" style={{ color: '#F0F4F8' }}>Villa Sonali — Contrato</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-              <div><p className="text-xs" style={{ color: '#94A3B8' }}>Total Contratado</p><p className="font-mono" style={{ color: '#E8C97A' }}>{formatCurrency(TOTAL_CONTRACTED)}</p></div>
-              <div><p className="text-xs" style={{ color: '#94A3B8' }}>Reserva (31/12/2025)</p><p className="font-mono" style={{ color: '#10B981' }}>{formatCurrency(RESERVA)} ✅</p></div>
-              <div><p className="text-xs" style={{ color: '#94A3B8' }}>Parcelas</p><p className="font-mono" style={{ color: '#F0F4F8' }}>10x R$ 7.848,80</p></div>
-              <div><p className="text-xs" style={{ color: '#94A3B8' }}>Período</p><p className="font-mono" style={{ color: '#F0F4F8' }}>jan/27 a out/27</p></div>
+              <div>
+                <p className="text-xs" style={{ color: '#94A3B8' }}>Total Contratado</p>
+                <p className="font-mono" style={{ color: '#E8C97A' }}>{formatCurrency(villaTotalContracted)}</p>
+              </div>
+              <div>
+                <p className="text-xs" style={{ color: '#94A3B8' }}>
+                  Reserva{reservaInstallment?.paid_at ? ` (${formatDate(reservaInstallment.paid_at)})` : ""}
+                </p>
+                <p className="font-mono" style={{ color: '#10B981' }}>
+                  {reservaInstallment ? `${formatCurrency(reservaInstallment.amount ?? 0)} ${reservaInstallment.status === "pago" ? "✅" : "⏳"}` : "—"}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs" style={{ color: '#94A3B8' }}>Parcelas pendentes</p>
+                <p className="font-mono" style={{ color: '#F0F4F8' }}>
+                  {installments.filter((i: any) => i.status !== "pago").length}x
+                </p>
+              </div>
+              <div>
+                <p className="text-xs" style={{ color: '#94A3B8' }}>Próxima parcela</p>
+                <p className="font-mono" style={{ color: '#F0F4F8' }}>
+                  {(() => {
+                    const next = installments
+                      .filter((i: any) => i.status !== "pago" && i.due_date)
+                      .sort((a: any, b: any) => a.due_date.localeCompare(b.due_date))[0];
+                    return next ? formatDate(next.due_date) : "—";
+                  })()}
+                </p>
+              </div>
             </div>
           </PremiumCard>
 
