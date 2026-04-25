@@ -136,6 +136,7 @@ export default function CardsPage() {
   const [lastResult, setLastResult] = useState<ParseResult | null>(null);
   const [expandedInvoiceId, setExpandedInvoiceId] = useState<string | null>(null);
   const [payDialogInv, setPayDialogInv] = useState<ClosedInvoice | null>(null);
+  const [closedUploadOpen, setClosedUploadOpen] = useState(false);
 
   // ── Filtros ───────────────────────────────────────────
   const [search, setSearch] = useState("");
@@ -449,8 +450,9 @@ export default function CardsPage() {
 
   const filteredTotal = useMemo(() => filteredTxs.reduce((s, t) => s + Number(t.amount), 0), [filteredTxs]);
 
-  async function handleUpload(file: File) {
-    if (!selectedCardId) {
+  async function handleUpload(file: File, opts?: { cardId?: string; closedAt?: string }) {
+    const cardId = opts?.cardId ?? selectedCardId;
+    if (!cardId) {
       toast.error("Selecione um cartão primeiro");
       return;
     }
@@ -465,16 +467,23 @@ export default function CardsPage() {
 
     try {
       const file_content = format === "pdf" ? await fileToBase64(file) : await fileToText(file);
+      const body: any = { card_id: cardId, file_format: format, file_content };
+      if (opts?.closedAt) body.closed_at = opts.closedAt;
       const { data, error } = await supabase.functions.invoke("parse-card-invoice", {
-        body: { card_id: selectedCardId, file_format: format, file_content },
+        body,
       });
       if (error) throw error;
       const result = data as ParseResult;
       setLastResult(result);
       if (result.ok) {
-        toast.success(`Importado: ${result.inserted} novas, ${result.skipped} duplicadas → ${result.reference_month}`);
-        if (result.reference_month) setRefMonth(result.reference_month);
+        toast.success(
+          opts?.closedAt
+            ? `Fatura fechada importada: ${result.inserted} novas, ${result.skipped} duplicadas`
+            : `Importado: ${result.inserted} novas, ${result.skipped} duplicadas → ${result.reference_month}`
+        );
+        if (result.reference_month && !opts?.closedAt) setRefMonth(result.reference_month);
         qc.invalidateQueries({ queryKey: ["card_txs"] });
+        qc.invalidateQueries({ queryKey: ["card_invoices_closed"] });
       } else {
         toast.error(result.error || "Erro desconhecido");
       }
@@ -875,9 +884,19 @@ export default function CardsPage() {
                   <FileText className="w-4 h-4" style={{ color: "#C9A84C" }} />
                   Faturas fechadas
                 </h2>
-                <span className="text-sm" style={{ color: "#94A3B8" }}>
-                  {closedInvoices.length} fatura{closedInvoices.length !== 1 ? "s" : ""}
-                </span>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm" style={{ color: "#94A3B8" }}>
+                    {closedInvoices.length} fatura{closedInvoices.length !== 1 ? "s" : ""}
+                  </span>
+                  <Button
+                    onClick={() => setClosedUploadOpen(true)}
+                    size="sm"
+                    style={{ background: "#C9A84C", color: "#000" }}
+                    className="hover:opacity-90"
+                  >
+                    + Importar fatura fechada
+                  </Button>
+                </div>
               </div>
 
               {closedInvoices.length === 0 ? (
@@ -960,7 +979,116 @@ export default function CardsPage() {
         }}
         isPending={markPaid.isPending}
       />
+
+      {/* Dialog: importar fatura fechada (Aba 2) */}
+      <ClosedInvoiceUploadDialog
+        open={closedUploadOpen}
+        onClose={() => setClosedUploadOpen(false)}
+        cards={cards ?? []}
+        onUpload={(file, cardId, closedAt) => handleUpload(file, { cardId, closedAt })}
+        uploading={uploading}
+      />
     </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ClosedInvoiceUploadDialog — upload de fatura fechada (Aba 2)
+// Aba "Compras em andamento" sobe sem closed_at (in_progress).
+// Aba "Faturas fechadas" sobe COM closed_at (cria invoice já fechada).
+// ═══════════════════════════════════════════════════════════════════
+
+interface ClosedUploadProps {
+  open: boolean;
+  onClose: () => void;
+  cards: Card[];
+  onUpload: (file: File, cardId: string, closedAt: string) => void;
+  uploading: boolean;
+}
+
+function ClosedInvoiceUploadDialog({ open, onClose, cards, onUpload, uploading }: ClosedUploadProps) {
+  const today = new Date().toISOString().split("T")[0];
+  const [cardId, setCardId] = useState("");
+  const [closedAt, setClosedAt] = useState(today);
+  const [file, setFile] = useState<File | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setCardId("");
+      setClosedAt(today);
+      setFile(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  function handleSubmit() {
+    if (!file || !cardId || !closedAt) {
+      toast.error("Preencha cartão, arquivo e data de fechamento");
+      return;
+    }
+    onUpload(file, cardId, closedAt);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent style={{ background: "#0D1318", border: "1px solid rgba(201,168,76,0.4)" }}>
+        <DialogHeader>
+          <DialogTitle style={{ color: "#C9A84C" }}>
+            Importar fatura fechada
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <p className="text-xs" style={{ color: "#94A3B8" }}>
+            Sobe a fatura definitiva (PDF/OFX/CSV) — vai criar invoice com <span style={{ color: "#C9A84C" }}>closed_at</span> preenchido.
+            Pra fatura em andamento (consumindo ainda), use a aba <span style={{ color: "#C9A84C" }}>Compras em andamento</span>.
+          </p>
+
+          <div className="space-y-2">
+            <label className="text-xs uppercase tracking-wider" style={{ color: "#94A3B8" }}>Cartão</label>
+            <select
+              value={cardId}
+              onChange={(e) => setCardId(e.target.value)}
+              className="w-full px-3 py-2 rounded-md bg-black/30 border border-white/10 text-white"
+            >
+              <option value="">— escolha —</option>
+              {cards.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} {c.last4 ? `•••• ${c.last4}` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs uppercase tracking-wider" style={{ color: "#94A3B8" }}>Data de fechamento</label>
+            <Input type="date" value={closedAt} onChange={(e) => setClosedAt(e.target.value)} className="h-9" />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs uppercase tracking-wider" style={{ color: "#94A3B8" }}>Arquivo (.ofx / .csv / .pdf)</label>
+            <input
+              type="file"
+              accept=".ofx,.csv,.pdf"
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              className="w-full text-sm text-white file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:bg-yellow-600 file:text-black file:font-semibold hover:file:bg-yellow-500"
+            />
+            {file && (
+              <p className="text-xs" style={{ color: "#10B981" }}>✓ {file.name}</p>
+            )}
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button
+            onClick={handleSubmit}
+            disabled={uploading || !file || !cardId || !closedAt}
+            style={{ background: "#C9A84C", color: "#000" }}
+          >
+            {uploading ? "Processando..." : "Importar fatura fechada"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

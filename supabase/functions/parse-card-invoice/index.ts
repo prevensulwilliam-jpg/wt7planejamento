@@ -184,7 +184,7 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    const { card_id, file_format, file_content, reference_month, file_url } = await req.json();
+    const { card_id, file_format, file_content, reference_month, file_url, closed_at } = await req.json();
     if (!card_id || !file_format || !file_content) {
       return new Response(JSON.stringify({ ok: false, error: "missing_params" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -258,11 +258,15 @@ serve(async (req) => {
       .eq("reference_month", ref)
       .maybeSingle();
 
+    // Se closed_at foi enviado (upload pela Aba "Faturas fechadas"), seta na invoice.
+    // Caso contrário (Aba "Em andamento"), mantém NULL.
+    const closedAtPayload = closed_at ? { closed_at } : {};
+
     let invoice: any;
     if (existingInv) {
       const { data, error } = await supabase
         .from("card_invoices")
-        .update({ total_amount, file_url: file_url || null, file_format })
+        .update({ total_amount, file_url: file_url || null, file_format, ...closedAtPayload })
         .eq("id", existingInv.id)
         .select()
         .single();
@@ -277,6 +281,7 @@ serve(async (req) => {
           total_amount,
           file_url: file_url || null,
           file_format,
+          ...closedAtPayload,
         })
         .select()
         .single();
