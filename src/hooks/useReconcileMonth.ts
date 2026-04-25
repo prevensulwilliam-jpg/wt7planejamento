@@ -81,6 +81,10 @@ export function useReconcileMonth() {
             reference_month: tx.date?.slice(0, 7),
             received_at: tx.date,
             business_id: businessId,
+            // Conciliação automática só cria revenues que são receita real.
+            // Se descrição sugere transfer/reembolso, deixar pendente pra revisão manual.
+            counts_as_income: true,
+            nature: "income",
           } as any).select("id").single();
           if (!error && data) {
             revenueId = data.id;
@@ -95,6 +99,11 @@ export function useReconcileMonth() {
             type: "variable",
             reference_month: tx.date?.slice(0, 7),
             paid_at: tx.date,
+            // Conciliação automática gera despesa real (não transfer/investment).
+            // Trigger normalize_expense_flags vai sincronizar flags no INSERT.
+            nature: "expense",
+            counts_as_investment: false,
+            is_card_payment: false,
           } as any).select("id").single();
           if (!error && data) {
             expenseId = data.id;
@@ -115,11 +124,13 @@ export function useReconcileMonth() {
       }
 
       // ═══ 4) Resolver business_id em revenues órfãs do mês ═══
+      // Filtra só receitas reais — transfer/reembolso/refund não pertence a business
       const { data: orphanRevs } = await supabase
         .from("revenues")
         .select("id, description, source")
         .eq("reference_month", month)
-        .is("business_id", null);
+        .is("business_id", null)
+        .neq("counts_as_income", false);
 
       for (const r of ((orphanRevs as any[]) ?? [])) {
         const code = suggestBusinessCode({ description: r.description, source: r.source });
