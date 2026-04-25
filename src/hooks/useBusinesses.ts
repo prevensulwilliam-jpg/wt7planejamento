@@ -196,18 +196,24 @@ export function useBusinessBreakdown(businessId: string | null, businessCode: st
   });
 }
 
-// Totais do mês: todas as receitas + só as vinculadas — pra calcular gap
+// Totais do mês: receita REAL + só a vinculada — pra calcular gap.
+// IMPORTANTE: ignora entradas neutras (counts_as_income=false). Por definição,
+// transferências interconta, reembolsos e estornos NÃO pertencem a negócio.
+// Se contadas como "unlinked" inflam o alerta de "receita sem negócio" no /hoje
+// e sugerem ação onde não há.
 export function useMonthRevenueReconciliation(month: string) {
   return useQuery({
     queryKey: ["revenues_reconciliation", month],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("revenues")
-        .select("amount, business_id")
+        .select("amount, business_id, counts_as_income")
         .eq("reference_month", month);
       if (error) throw error;
       let total = 0, linked = 0, unlinked = 0, unlinkedCount = 0;
       (data ?? []).forEach((r: any) => {
+        // Skip neutras — não são receita real, não fazem sentido com business
+        if (r.counts_as_income === false) return;
         const a = Number(r.amount ?? 0);
         total += a;
         if (r.business_id) linked += a;
@@ -219,15 +225,19 @@ export function useMonthRevenueReconciliation(month: string) {
 }
 
 // Receitas do mês SEM negócio vinculado — pra oferecer reconciliação rápida
+// Revenues do mês SEM business_id E que SÃO receita real (counts_as_income=true).
+// Neutras sem business são esperadas (transferência interconta nunca tem business)
+// — não devem virar sugestão de "vincular a negócio".
 export function useUnlinkedRevenuesForMonth(month: string) {
   return useQuery({
     queryKey: ["revenues_unlinked", month],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("revenues")
-        .select("id, description, source, amount, received_at, business_id")
+        .select("id, description, source, amount, received_at, business_id, counts_as_income")
         .eq("reference_month", month)
         .is("business_id", null)
+        .neq("counts_as_income", false)  // exclui neutras
         .order("received_at", { ascending: false });
       if (error) throw error;
       return data as Array<{ id: string; description: string | null; source: string | null; amount: number; received_at: string | null; business_id: string | null }>;
