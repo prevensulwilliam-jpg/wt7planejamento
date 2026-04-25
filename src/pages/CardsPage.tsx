@@ -2,7 +2,6 @@ import { useState, useMemo, useEffect } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
-import { MonthPicker } from "@/components/wt7/MonthPicker";
 import {
   Select, SelectTrigger, SelectValue, SelectContent,
   SelectGroup, SelectLabel, SelectItem, SelectSeparator,
@@ -92,11 +91,6 @@ const VECTOR_LABELS: Record<string, { label: string; emoji: string }> = {
   consorcios_aporte: { label: "Consórcios", emoji: "🔁" },
 };
 
-function currentRefMonth(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
 async function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -130,7 +124,6 @@ function money(v: number): string {
 export default function CardsPage() {
   const qc = useQueryClient();
   const [tab, setTab] = useState<"in_progress" | "closed">("in_progress");
-  const [refMonth, setRefMonth] = useState<string>(currentRefMonth());
   const [selectedCardId, setSelectedCardId] = useState<string>("");
   const [uploading, setUploading] = useState(false);
   const [lastResult, setLastResult] = useState<ParseResult | null>(null);
@@ -179,15 +172,16 @@ export default function CardsPage() {
     },
   });
 
-  // Todas as transações do mês-ref selecionado (todas as faturas, todos os cartões)
+  // Aba "Compras em andamento": SÓ tx das invoices in_progress (closed_at IS NULL).
+  // Não usa refMonth — sempre mostra o ciclo CORRENTE de todos os cartões.
   const { data: txs = [], isLoading: loadingTxs } = useQuery<Tx[]>({
-    queryKey: ["card_txs", refMonth],
+    queryKey: ["card_txs_in_progress"],
     queryFn: async () => {
-      // 1. pega as invoices do mês
+      // 1. pega invoices in_progress (closed_at NULL)
       const { data: invs, error: ei } = await supabase
         .from("card_invoices")
         .select("id")
-        .eq("reference_month", refMonth);
+        .is("closed_at", null);
       if (ei) throw ei;
       const invIds = (invs || []).map(i => i.id);
       if (invIds.length === 0) return [];
@@ -277,32 +271,7 @@ export default function CardsPage() {
     onError: (e: any) => toast.error(e.message || "Erro ao fechar fatura"),
   });
 
-  // Mutation SOFT: apagar apenas tx (mantém invoice + closed_at + payments)
-  const resetInvoice = useMutation({
-    mutationFn: async (invId: string) => {
-      const { error: e1 } = await supabase
-        .from("card_transactions")
-        .delete()
-        .eq("invoice_id", invId);
-      if (e1) throw e1;
-      const { error: e2 } = await supabase
-        .from("card_invoices")
-        .update({ total_amount: 0 })
-        .eq("id", invId);
-      if (e2) throw e2;
-    },
-    onSuccess: () => {
-      toast.success("Tx apagadas — pode reimportar a fatura");
-      qc.invalidateQueries({ queryKey: ["card_txs"] });
-      qc.invalidateQueries({ queryKey: ["card_invoices_closed"] });
-      qc.invalidateQueries({ queryKey: ["card_invoices_in_progress"] });
-      qc.invalidateQueries({ queryKey: ["sobra_reinvestida"] });
-      qc.invalidateQueries({ queryKey: ["cockpit_breakdown"] });
-    },
-    onError: (e: any) => toast.error(e.message || "Erro ao apagar tx"),
-  });
-
-  // Mutation HARD: apaga a fatura completamente (CASCADE remove tx + payments)
+  // Mutation: apaga a fatura completamente (CASCADE remove tx + payments)
   const deleteInvoice = useMutation({
     mutationFn: async (invId: string) => {
       const { error } = await supabase.from("card_invoices").delete().eq("id", invId);
@@ -319,7 +288,7 @@ export default function CardsPage() {
     onError: (e: any) => toast.error(e.message || "Erro ao excluir fatura"),
   });
 
-  // Hook: invoices in_progress (Aba 1) — pra mostrar lista com botão "Apagar tx"
+  // Hook: invoices in_progress (Aba 1) — pra mostrar lista com botão "Apagar fatura"
   const { data: inProgressInvoices = [] } = useQuery<ClosedInvoice[]>({
     queryKey: ["card_invoices_in_progress"],
     queryFn: async () => {
@@ -331,6 +300,34 @@ export default function CardsPage() {
         `)
         .is("closed_at", null)
         .order("reference_month", { ascending: false });
+      if (error) throw error;
+      return (data || []) as any[];
+    },
+  });
+
+  // Aba "Faturas fechadas": tx das invoices closed (igual ao grid da Aba 1)
+  const { data: closedTxs = [], isLoading: loadingClosedTxs } = useQuery<Tx[]>({
+    queryKey: ["card_txs_closed"],
+    queryFn: async () => {
+      const { data: invs, error: ei } = await supabase
+        .from("card_invoices")
+        .select("id")
+        .not("closed_at", "is", null);
+      if (ei) throw ei;
+      const invIds = (invs || []).map(i => i.id);
+      if (invIds.length === 0) return [];
+
+      const { data, error } = await supabase
+        .from("card_transactions")
+        .select(`
+          id, card_id, invoice_id, transaction_date, description, merchant_normalized, amount,
+          cardholder, installment_current, installment_total,
+          category_id, counts_as_investment, vector,
+          custom_categories ( name, emoji, slug, counts_as_investment ),
+          cards ( name, bank )
+        `)
+        .in("invoice_id", invIds)
+        .order("transaction_date", { ascending: false });
       if (error) throw error;
       return (data || []) as any[];
     },
@@ -540,8 +537,8 @@ export default function CardsPage() {
             ? `Fatura fechada importada: ${result.inserted} novas, ${result.skipped} duplicadas`
             : `Importado: ${result.inserted} novas, ${result.skipped} duplicadas → ${result.reference_month}`
         );
-        if (result.reference_month && !opts?.closedAt) setRefMonth(result.reference_month);
-        qc.invalidateQueries({ queryKey: ["card_txs"] });
+        qc.invalidateQueries({ queryKey: ["card_txs_in_progress"] });
+        qc.invalidateQueries({ queryKey: ["card_invoices_in_progress"] });
         qc.invalidateQueries({ queryKey: ["card_invoices_closed"] });
       } else {
         toast.error(result.error || "Erro desconhecido");
@@ -564,12 +561,6 @@ export default function CardsPage() {
             Compras em andamento → análise · Faturas fechadas → conciliação de pagamento.
           </p>
         </div>
-        {tab === "in_progress" && (
-          <div className="flex items-center gap-3">
-            <label className="text-sm" style={{ color: "#94A3B8" }}>Mês-ref (venc.)</label>
-            <MonthPicker value={refMonth} onChange={setRefMonth} className="w-44" />
-          </div>
-        )}
       </div>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as "in_progress" | "closed")}>
@@ -698,32 +689,18 @@ export default function CardsPage() {
                       <td className="py-2 px-2 font-mono text-xs">{inv.reference_month}</td>
                       <td className="py-2 px-2 text-right font-mono">{money(Number(inv.total_amount))}</td>
                       <td className="py-2 px-2 text-center">
-                        <div className="flex items-center justify-center gap-1.5">
-                          <button
-                            onClick={() => {
-                              if (confirm(`🧹 LIMPAR tx da fatura ${inv.cards?.name} ${inv.reference_month}?\n\nApaga só as transações. Mantém a invoice (vazia).\nUsa pra reimportar OFX/CSV.`)) {
-                                resetInvoice.mutate(inv.id);
-                              }
-                            }}
-                            disabled={resetInvoice.isPending}
-                            className="text-xs px-2 py-1 rounded transition-colors hover:opacity-80"
-                            style={{ background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.3)", color: "#F59E0B" }}
-                          >
-                            🧹 Limpar tx
-                          </button>
-                          <button
-                            onClick={() => {
-                              if (confirm(`🗑️ EXCLUIR fatura ${inv.cards?.name} ${inv.reference_month}?\n\nApaga TUDO: invoice + tx + payments.\nFica como se nunca tivesse existido. Irreversível.`)) {
-                                deleteInvoice.mutate(inv.id);
-                              }
-                            }}
-                            disabled={deleteInvoice.isPending}
-                            className="text-xs px-2 py-1 rounded transition-colors hover:opacity-80"
-                            style={{ background: "rgba(244,63,94,0.1)", border: "1px solid rgba(244,63,94,0.3)", color: "#F43F5E" }}
-                          >
-                            🗑️ Excluir
-                          </button>
-                        </div>
+                        <button
+                          onClick={() => {
+                            if (confirm(`🗑️ APAGAR fatura ${inv.cards?.name} ${inv.reference_month}?\n\nApaga TUDO: invoice + transações + payments.\nIrreversível.`)) {
+                              deleteInvoice.mutate(inv.id);
+                            }
+                          }}
+                          disabled={deleteInvoice.isPending}
+                          className="text-xs px-2 py-1 rounded transition-colors hover:opacity-80"
+                          style={{ background: "rgba(244,63,94,0.1)", border: "1px solid rgba(244,63,94,0.3)", color: "#F43F5E" }}
+                        >
+                          🗑️ Apagar fatura
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -786,7 +763,7 @@ export default function CardsPage() {
           <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
             <h2 className="text-lg font-semibold flex items-center gap-2" style={{ color: "#F0F4F8" }}>
               <Filter className="w-4 h-4" style={{ color: "#C9A84C" }} />
-              Transações — {refMonth}
+              Transações em andamento (todos cartões)
             </h2>
             <div className="text-sm flex items-center gap-3" style={{ color: "#94A3B8" }}>
               {loadingTxs ? "Carregando..." : (
@@ -1082,35 +1059,87 @@ export default function CardsPage() {
                                 )}
                                 <button
                                   onClick={() => {
-                                    if (confirm(`🧹 LIMPAR tx da fatura ${inv.cards?.name} ${inv.reference_month}?\n\nApaga só as transações. Mantém: status pago, closed_at, payments.\nUsa pra reimportar PDF/OFX corrigido.`)) {
-                                      resetInvoice.mutate(inv.id);
-                                    }
-                                  }}
-                                  disabled={resetInvoice.isPending}
-                                  className="text-xs px-2 py-1 rounded transition-colors hover:opacity-80"
-                                  style={{ background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.3)", color: "#F59E0B" }}
-                                  title="Apaga só as transações. Mantém status pago + payments."
-                                >
-                                  🧹 Limpar tx
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    if (confirm(`🗑️ EXCLUIR fatura ${inv.cards?.name} ${inv.reference_month}?\n\nApaga TUDO: invoice + tx + payments + auto-match.\nFica como se nunca tivesse existido. Irreversível.`)) {
+                                    if (confirm(`🗑️ APAGAR fatura ${inv.cards?.name} ${inv.reference_month}?\n\nApaga TUDO: invoice + transações + payments + auto-match.\nIrreversível.`)) {
                                       deleteInvoice.mutate(inv.id);
                                     }
                                   }}
                                   disabled={deleteInvoice.isPending}
                                   className="text-xs px-2 py-1 rounded transition-colors hover:opacity-80"
                                   style={{ background: "rgba(244,63,94,0.1)", border: "1px solid rgba(244,63,94,0.3)", color: "#F43F5E" }}
-                                  title="Apaga TUDO: invoice, tx, payments, auto-match. Irreversível."
                                 >
-                                  🗑️ Excluir
+                                  🗑️ Apagar fatura
                                 </button>
                               </div>
                             </td>
                           </tr>
                         );
                       })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </PremiumCard>
+
+          {/* Grid de tx das faturas fechadas (igual ao da Aba 1, mas só closed) */}
+          <PremiumCard>
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold flex items-center gap-2" style={{ color: "#F0F4F8" }}>
+                  <Filter className="w-4 h-4" style={{ color: "#C9A84C" }} />
+                  Transações das faturas fechadas
+                </h2>
+                <span className="text-sm" style={{ color: "#94A3B8" }}>
+                  {loadingClosedTxs ? "Carregando..." : (
+                    <>
+                      <span style={{ color: "#F0F4F8", fontWeight: 600 }}>{closedTxs.length}</span> lançamentos ·{" "}
+                      <span className="font-mono" style={{ color: "#C9A84C" }}>
+                        {money(closedTxs.reduce((s, t) => s + Number(t.amount), 0))}
+                      </span>
+                    </>
+                  )}
+                </span>
+              </div>
+
+              {closedTxs.length === 0 ? (
+                <div className="text-sm py-8 text-center" style={{ color: "#94A3B8" }}>
+                  Nenhuma transação. Importe uma fatura fechada acima.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-white/10" style={{ color: "#94A3B8" }}>
+                        <th className="text-left py-2 px-2">Data</th>
+                        <th className="text-left py-2 px-2">Descrição</th>
+                        <th className="text-left py-2 px-2">Cartão</th>
+                        <th className="text-left py-2 px-2">Portador</th>
+                        <th className="text-left py-2 px-2">Categoria</th>
+                        <th className="text-center py-2 px-2">Parc</th>
+                        <th className="text-right py-2 px-2">Valor</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {closedTxs.map((t) => (
+                        <tr key={t.id} className="border-b border-white/5 hover:bg-white/5" style={{ color: "#F0F4F8" }}>
+                          <td className="py-2 px-2 whitespace-nowrap">{t.transaction_date}</td>
+                          <td className="py-2 px-2">{t.description}</td>
+                          <td className="py-2 px-2 text-xs" style={{ color: "#94A3B8" }}>{t.cards?.bank || "—"}</td>
+                          <td className="py-2 px-2 text-xs" style={{ color: "#94A3B8" }}>{t.cardholder || "—"}</td>
+                          <td className="py-2 px-2">
+                            <CategoryPicker
+                              tx={t}
+                              categories={categories}
+                              disabled={reclassify.isPending}
+                              onChange={(cat) => reclassify.mutate({ tx: t, category: cat })}
+                            />
+                          </td>
+                          <td className="py-2 px-2 text-center text-xs">
+                            {t.installment_total > 1 ? `${t.installment_current}/${t.installment_total}` : "—"}
+                          </td>
+                          <td className="py-2 px-2 text-right font-mono">{money(Number(t.amount))}</td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
