@@ -451,6 +451,54 @@ export type Database = {
         }
         Relationships: []
       }
+      card_invoice_payments: {
+        Row: {
+          bank_tx_id: string | null
+          created_at: string | null
+          id: string
+          invoice_id: string
+          notes: string | null
+          paid_amount: number
+          paid_at: string
+          source: string
+        }
+        Insert: {
+          bank_tx_id?: string | null
+          created_at?: string | null
+          id?: string
+          invoice_id: string
+          notes?: string | null
+          paid_amount: number
+          paid_at: string
+          source?: string
+        }
+        Update: {
+          bank_tx_id?: string | null
+          created_at?: string | null
+          id?: string
+          invoice_id?: string
+          notes?: string | null
+          paid_amount?: number
+          paid_at?: string
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "card_invoice_payments_bank_tx_id_fkey"
+            columns: ["bank_tx_id"]
+            isOneToOne: false
+            referencedRelation: "bank_transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "card_invoice_payments_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "card_invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       card_invoices: {
         Row: {
           bank_tx_id: string | null
@@ -2893,6 +2941,10 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      match_card_invoice_payment_for_bank_tx: {
+        Args: { p_bank_tx_id: string }
+        Returns: string
       }
       match_principles: {
         Args: {
