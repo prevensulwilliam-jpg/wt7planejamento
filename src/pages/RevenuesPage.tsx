@@ -39,7 +39,8 @@ export default function RevenuesPage() {
   const [month, setMonth] = useState(getCurrentMonth());
   const [dialogOpen, setDialogOpen] = useState(false);
   const { data: revenues = [], isLoading } = useRevenues(month);
-  const { data: kitnetRev } = useKitnetMonthRevenue(month);
+  const kitnetRevQuery = useKitnetMonthRevenue(month);
+  const { data: kitnetRev } = kitnetRevQuery;
   const createRevenue = useCreateRevenue();
   const deleteRevenue = useDeleteRevenue();
   const updateRevenue = useUpdateRevenue();
@@ -375,6 +376,21 @@ export default function RevenuesPage() {
             </div>
           </DialogContent>
         </Dialog>
+      </div>
+
+      {/* DEBUG TEMPORÁRIO — diagnóstico do KPI Aluguéis Kitnets zerado */}
+      <div style={{ background: '#1F1409', border: '2px solid #F59E0B', borderRadius: 8, padding: 12, fontSize: 11, color: '#FBD38D', fontFamily: 'monospace' }}>
+        <div style={{ fontWeight: 700, marginBottom: 6, color: '#F59E0B' }}>🔍 DEBUG useKitnetMonthRevenue (remover após resolver)</div>
+        <div>month = "{month}"</div>
+        <div>isLoading = {String(kitnetRevQuery.isLoading)}</div>
+        <div>isError = {String(kitnetRevQuery.isError)}</div>
+        <div>error = {kitnetRevQuery.error ? String((kitnetRevQuery.error as any)?.message ?? kitnetRevQuery.error) : "null"}</div>
+        <div>data.total = {kitnetRev?.total ?? "undefined"}</div>
+        <div>data.count = {kitnetRev?.count ?? "undefined"}</div>
+        <div>data.bankTxCount = {kitnetRev?.bankTxCount ?? "undefined"}</div>
+        <div>data.totalBankLinked = {kitnetRev?.totalBankLinked ?? "undefined"}</div>
+        <div>data.all.length = {(kitnetRev as any)?.all?.length ?? "undefined"}</div>
+        <div>data.entries.length = {kitnetRev?.entries?.length ?? "undefined"}</div>
       </div>
 
       <Tabs defaultValue="lancamentos">
