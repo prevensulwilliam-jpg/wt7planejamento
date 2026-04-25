@@ -407,7 +407,8 @@ export type Database = {
           ownership_pct: number
           partner_name: string | null
           status: string
-          target_12m: number
+          target_year_end: number
+          target_year_end_date: string | null
           updated_at: string
         }
         Insert: {
@@ -425,7 +426,8 @@ export type Database = {
           ownership_pct?: number
           partner_name?: string | null
           status?: string
-          target_12m?: number
+          target_year_end?: number
+          target_year_end_date?: string | null
           updated_at?: string
         }
         Update: {
@@ -443,7 +445,8 @@ export type Database = {
           ownership_pct?: number
           partner_name?: string | null
           status?: string
-          target_12m?: number
+          target_year_end?: number
+          target_year_end_date?: string | null
           updated_at?: string
         }
         Relationships: []

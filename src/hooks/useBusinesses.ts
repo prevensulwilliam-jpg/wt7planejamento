@@ -11,7 +11,8 @@ export type Business = {
   status: "ativo" | "incubado" | "encerrado";
   category: "recorrente" | "crescimento" | "incubado";
   monthly_target: number;
-  target_12m: number;
+  target_year_end: number;
+  target_year_end_date: string | null;
   icon: string | null;
   color: string | null;
   notes: string | null;
@@ -249,6 +250,71 @@ export function useLinkRevenueToBusiness() {
       qc.invalidateQueries({ queryKey: ["business_breakdown"] });
       qc.invalidateQueries({ queryKey: ["revenues_unlinked"] });
       qc.invalidateQueries({ queryKey: ["revenues"] });
+    },
+  });
+}
+
+// ─── Acumulado Year-To-Date (jan/Y → mês corrente) ──────────────────────────
+// Soma realizado de todos os meses do ano corrente, por negócio. Usado pra KPI
+// "Acumulado 2026" no /negocios. Mesmo critério de useBusinessRealized:
+// kitnets via kitnet_entries (fonte canônica), demais via revenues.
+export function useBusinessYTDRealized(year: number) {
+  return useQuery({
+    queryKey: ["business_ytd_realized", year],
+    queryFn: async () => {
+      const start = `${year}-01`;
+      const end = `${year}-12`;
+      const result = new Map<string, number>();
+
+      const { data: kitnetBiz } = await (supabase as any)
+        .from("businesses").select("id").eq("code", "KITNETS").maybeSingle();
+      const kitnetBizId = kitnetBiz?.id ?? null;
+
+      // 1. Kitnets — soma todos os fechamentos reconciled do ano
+      if (kitnetBizId) {
+        const { data: entries } = await (supabase as any)
+          .from("kitnet_entries")
+          .select("total_liquid, reference_month, reconciled")
+          .gte("reference_month", start)
+          .lte("reference_month", end);
+        const total = ((entries ?? []) as any[])
+          .filter(e => e.reconciled === true)
+          .reduce((s, e) => s + Number(e.total_liquid ?? 0), 0);
+        result.set(kitnetBizId, total);
+      }
+
+      // 2. Revenues do ano agregadas por business_id (skip KITNETS — duplica)
+      const { data: revs } = await (supabase as any)
+        .from("revenues")
+        .select("business_id, amount, counts_as_income")
+        .gte("reference_month", start)
+        .lte("reference_month", end)
+        .not("business_id", "is", null);
+      ((revs ?? []) as any[])
+        .filter(r => r.counts_as_income !== false)
+        .forEach(r => {
+          if (!r.business_id || r.business_id === kitnetBizId) return;
+          result.set(r.business_id, (result.get(r.business_id) ?? 0) + Number(r.amount));
+        });
+
+      // 3. Override manual sobrescreve total do mês
+      const { data: manual } = await (supabase as any)
+        .from("business_revenue_entries")
+        .select("business_id, amount_william, reference_month")
+        .gte("reference_month", start)
+        .lte("reference_month", end);
+      // Para cada business com manual override, soma manual ao invés de revenue
+      // (já que useBusinessRealized faz override TOTAL no mês com manual)
+      const manualByBiz = new Map<string, number>();
+      ((manual ?? []) as any[]).forEach(m => {
+        manualByBiz.set(m.business_id, (manualByBiz.get(m.business_id) ?? 0) + Number(m.amount_william));
+      });
+      // Aplica override apenas se houver manual (caso contrário mantém soma auto)
+      manualByBiz.forEach((amount, bizId) => {
+        if (bizId !== kitnetBizId) result.set(bizId, amount);
+      });
+
+      return result;
     },
   });
 }

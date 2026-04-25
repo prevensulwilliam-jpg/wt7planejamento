@@ -23,6 +23,7 @@ import {
   useUpsertRevenueEntry,
   useDeleteRevenueEntry,
   useBusinessRealized,
+  useBusinessYTDRealized,
   useBusinessBreakdown,
   useUnlinkedRevenuesForMonth,
   useLinkRevenueToBusiness,
@@ -58,7 +59,8 @@ type FormData = {
   status: "ativo" | "encerrado" | "incubado";
   category: "crescimento" | "incubado" | "recorrente";
   monthly_target: number;
-  target_12m: number;
+  target_year_end: number;
+  target_year_end_date: string;
   icon: string;
   color: string;
   notes: string;
@@ -73,7 +75,8 @@ const emptyForm = (): FormData => ({
   status: "ativo",
   category: "crescimento",
   monthly_target: 0,
-  target_12m: 0,
+  target_year_end: 0,
+  target_year_end_date: "2026-12-31",
   icon: "💼",
   color: "#C9A84C",
   notes: "",
@@ -140,16 +143,23 @@ function BusinessForm({ form, setForm, onSave, onCancel, isPending }: {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-3 gap-3">
         <div>
-          <Label style={{ color: "#C9A84C" }}>Meta mensal (R$)</Label>
+          <Label style={{ color: "#C9A84C" }}>Meta mensal hoje (R$)</Label>
           <Input type="number" value={form.monthly_target || ""} onChange={e => setForm({ ...form, monthly_target: parseFloat(e.target.value) || 0 })} style={{ ...inputStyle, borderColor: "rgba(201,168,76,0.4)" }} />
         </div>
         <div>
-          <Label style={{ color: "#C9A84C" }}>Meta 12 meses (R$)</Label>
-          <Input type="number" value={form.target_12m || ""} onChange={e => setForm({ ...form, target_12m: parseFloat(e.target.value) || 0 })} style={{ ...inputStyle, borderColor: "rgba(201,168,76,0.4)" }} />
+          <Label style={{ color: "#C9A84C" }}>Meta mensal alvo (R$)</Label>
+          <Input type="number" value={form.target_year_end || ""} onChange={e => setForm({ ...form, target_year_end: parseFloat(e.target.value) || 0 })} style={{ ...inputStyle, borderColor: "rgba(201,168,76,0.4)" }} />
+        </div>
+        <div>
+          <Label style={{ color: "#C9A84C" }}>Data alvo</Label>
+          <Input type="date" value={form.target_year_end_date} onChange={e => setForm({ ...form, target_year_end_date: e.target.value })} style={{ ...inputStyle, borderColor: "rgba(201,168,76,0.4)" }} />
         </div>
       </div>
+      <p className="text-[10px]" style={{ color: "#64748B" }}>
+        💡 "Meta mensal alvo" = quanto você quer estar ganhando POR MÊS na "Data alvo" (ex: dez/2026). Não é acumulado anual.
+      </p>
 
       <div>
         <Label style={{ color: "#94A3B8" }}>Notas estratégicas</Label>
@@ -504,6 +514,8 @@ export default function BusinessesPage() {
 
   const { data: businesses = [], isLoading } = useBusinesses();
   const { data: realizedMap = new Map() } = useBusinessRealized(month);
+  const currentYear = parseInt(month.split("-")[0]);
+  const { data: ytdMap = new Map() } = useBusinessYTDRealized(currentYear);
   const { data: recon } = useMonthRevenueReconciliation(month);
   const { data: kitnetOrphans } = useKitnetOrphans(month);
   const createBiz = useCreateBusiness();
@@ -547,17 +559,43 @@ export default function BusinessesPage() {
   }, [realizedMap]);
 
   // Agregados globais
+  // - targetMonth = soma das metas mensais HOJE (dos negócios ativos)
+  // - targetYearEnd = soma das metas mensais ALVO (na data alvo de cada negócio)
+  // - realizedMonth = soma realizado mês corrente
+  // - realizedYTD = soma realizado ano até hoje (jan → mês corrente)
+  // - expectedYTD = baseline conservador = monthly_target × meses decorridos
+  // - earliestTargetDate = data alvo mais próxima (pra mostrar "faltam X meses")
   const totals = useMemo(() => {
-    let targetMonth = 0, realized = 0, target12m = 0;
+    let targetMonth = 0, realizedMonth = 0, targetYearEnd = 0;
+    let realizedYTD = 0, expectedYTD = 0;
+    let earliestTargetDate: string | null = null;
+    const monthsElapsed = parseInt(month.split("-")[1]); // 1=jan, 4=abr, etc
     businesses.forEach(b => {
       if (b.status !== "encerrado") {
-        targetMonth += Number(b.monthly_target);
-        target12m  += Number(b.target_12m);
-        realized   += revenueByBiz.get(b.id) ?? 0;
+        targetMonth   += Number(b.monthly_target);
+        targetYearEnd += Number(b.target_year_end);
+        realizedMonth += revenueByBiz.get(b.id) ?? 0;
+        realizedYTD   += (ytdMap as Map<string, number>).get(b.id) ?? 0;
+        expectedYTD   += Number(b.monthly_target) * monthsElapsed;
+        const dt = b.target_year_end_date;
+        if (dt && (!earliestTargetDate || dt < earliestTargetDate)) earliestTargetDate = dt;
       }
     });
-    return { targetMonth, realized, target12m, pct: targetMonth > 0 ? (realized / targetMonth) * 100 : 0 };
-  }, [businesses, revenueByBiz]);
+    // Calcula meses até a data alvo mais próxima
+    let monthsToTarget = 0;
+    if (earliestTargetDate) {
+      const [y, m] = earliestTargetDate.split("-").map(Number);
+      const targetDt = new Date(y, m - 1, 1);
+      const nowDt = new Date();
+      monthsToTarget = (targetDt.getFullYear() - nowDt.getFullYear()) * 12 + (targetDt.getMonth() - nowDt.getMonth());
+    }
+    return {
+      targetMonth, realizedMonth, targetYearEnd,
+      realizedYTD, expectedYTD,
+      earliestTargetDate, monthsToTarget,
+      pct: targetMonth > 0 ? (realizedMonth / targetMonth) * 100 : 0,
+    };
+  }, [businesses, revenueByBiz, ytdMap, month]);
 
   const grouped = useMemo(() => {
     const g: Record<string, Business[]> = { recorrente: [], crescimento: [], incubado: [] };
@@ -573,7 +611,9 @@ export default function BusinessesPage() {
       partner_name: b.partner_name ?? "",
       ownership_pct: b.ownership_pct,
       status: b.status, category: b.category,
-      monthly_target: b.monthly_target, target_12m: b.target_12m,
+      monthly_target: b.monthly_target,
+      target_year_end: b.target_year_end,
+      target_year_end_date: b.target_year_end_date ?? "2026-12-31",
       icon: b.icon ?? "💼", color: b.color ?? "#C9A84C",
       notes: b.notes ?? "",
     });
@@ -762,10 +802,13 @@ export default function BusinessesPage() {
           </>
         )}
 
-        {b.target_12m > 0 && (
+        {b.target_year_end > 0 && (
           <div className="mt-2 pt-2 text-xs flex justify-between" style={{ color: "#64748B", borderTop: "1px solid #1A2535" }}>
-            <span><Target className="inline w-3 h-3 mr-1" />Meta 12m</span>
-            <span className="font-mono" style={{ color: "#C9A84C" }}>{formatCurrency(b.target_12m)}</span>
+            <span>
+              <Target className="inline w-3 h-3 mr-1" />
+              Meta {b.target_year_end_date ? new Date(b.target_year_end_date).toLocaleDateString("pt-BR", { month: "short", year: "2-digit" }) : "alvo"}
+            </span>
+            <span className="font-mono" style={{ color: "#C9A84C" }}>{formatCurrency(b.target_year_end)}/mês</span>
           </div>
         )}
 
@@ -800,11 +843,48 @@ export default function BusinessesPage() {
 
         {/* KPIs */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <KpiCard label="Meta do mês" value={totals.targetMonth} color="gold" />
-          <KpiCard label="Realizado no mês" value={totals.realized} color={totals.realized >= totals.targetMonth ? "green" : "red"} />
-          <KpiCard label={totals.realized >= totals.targetMonth ? "Excedente" : "Gap"} value={Math.abs(totals.targetMonth - totals.realized)} color={totals.realized >= totals.targetMonth ? "green" : "red"} />
-          <KpiCard label="Meta 12 meses (anual)" value={totals.target12m} color="gold" />
+          <KpiCard
+            label="Meta do mês"
+            value={totals.targetMonth}
+            color="gold"
+            tooltip="Soma das metas mensais HOJE de todos os negócios ativos"
+          />
+          <KpiCard
+            label="Realizado no mês"
+            value={totals.realizedMonth}
+            color={totals.realizedMonth >= totals.targetMonth ? "green" : "red"}
+            tooltip={`${totals.pct.toFixed(0)}% da meta do mês`}
+          />
+          <KpiCard
+            label={`Meta ${totals.earliestTargetDate ? new Date(totals.earliestTargetDate).toLocaleDateString("pt-BR", { month: "short", year: "2-digit" }) : "alvo"} (mensal)`}
+            value={totals.targetYearEnd}
+            color="gold"
+            tooltip={
+              totals.monthsToTarget > 0
+                ? `Quanto você quer estar ganhando POR MÊS na data alvo. Faltam ${totals.monthsToTarget} ${totals.monthsToTarget === 1 ? "mês" : "meses"}.`
+                : totals.monthsToTarget === 0
+                ? "Data alvo é este mês — definir próximo alvo!"
+                : `⚠️ Data alvo passou há ${Math.abs(totals.monthsToTarget)} ${Math.abs(totals.monthsToTarget) === 1 ? "mês" : "meses"}. Editar negócios para definir nova meta.`
+            }
+          />
+          <KpiCard
+            label={`Acumulado ${currentYear} (YTD)`}
+            value={totals.realizedYTD}
+            color={totals.realizedYTD >= totals.expectedYTD ? "green" : "gold"}
+            tooltip={`Soma realizado jan-${month.split("-")[1]}/${currentYear}\nEsperado conservador: ${totals.expectedYTD > 0 ? "R$ " + totals.expectedYTD.toLocaleString("pt-BR", { minimumFractionDigits: 2 }) : "—"}\n(monthly_target × meses decorridos)`}
+          />
         </div>
+
+        {/* Alerta data alvo vencida */}
+        {totals.earliestTargetDate && totals.monthsToTarget < 0 && (
+          <div className="rounded-xl px-4 py-3 flex items-center gap-3 text-xs"
+            style={{ background: "rgba(244,63,94,0.08)", border: "1px solid rgba(244,63,94,0.3)" }}>
+            <AlertTriangle className="w-4 h-4 flex-shrink-0" style={{ color: "#F43F5E" }} />
+            <div className="flex-1" style={{ color: "#FCA5A5" }}>
+              <span style={{ fontWeight: 600 }}>Meta alvo vencida</span> — a data alvo mais próxima ({new Date(totals.earliestTargetDate).toLocaleDateString("pt-BR")}) já passou. Edite cada negócio e cadastre nova meta mensal + nova data alvo.
+            </div>
+          </div>
+        )}
 
         {/* Banner de reconciliação — receitas sem vínculo (Gap 1) */}
         {recon && recon.unlinkedCount > 0 && (
