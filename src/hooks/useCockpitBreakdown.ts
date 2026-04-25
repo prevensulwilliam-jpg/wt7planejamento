@@ -97,13 +97,15 @@ export function useCockpitBreakdown(month: string) {
       if (paidInvIds.length > 0) {
         const cardRes = await supabase
           .from("card_transactions")
-          .select("id, amount, description, merchant_normalized, transaction_date, vector, counts_as_investment, card_id, invoice_id")
+          .select("id, amount, description, merchant_normalized, transaction_date, vector, counts_as_investment, card_id, invoice_id, custom_categories ( slug )")
           .in("invoice_id", paidInvIds);
-        // Aplica ratio na hora — amount já vem prorrateado pra UI
-        cards = (cardRes.data ?? []).map((c: any) => ({
-          ...c,
-          amount: Number(c.amount ?? 0) * (ratioByInv[c.invoice_id] ?? 1),
-        }));
+        // Exclui tx com category 'ignorar' (PGTO CASH, estornos, etc) e aplica ratio
+        cards = (cardRes.data ?? [])
+          .filter((c: any) => c.custom_categories?.slug !== "ignorar")
+          .map((c: any) => ({
+            ...c,
+            amount: Number(c.amount ?? 0) * (ratioByInv[c.invoice_id] ?? 1),
+          }));
       }
 
       // Faturas open (informativo — vão como excluded no custeio)

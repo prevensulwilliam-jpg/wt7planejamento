@@ -127,10 +127,12 @@ export function useSobraReinvestida(month: string) {
       if (paidInvIds.length > 0) {
         const { data: txs, error: et } = await supabase
           .from("card_transactions")
-          .select("amount, counts_as_investment, vector, invoice_id")
+          .select("amount, counts_as_investment, vector, invoice_id, custom_categories ( slug )")
           .in("invoice_id", paidInvIds);
         if (et) throw et;
         for (const t of txs || []) {
+          // Categoria "🚫 Ignorar" — não conta nem custeio nem investimento
+          if ((t as any).custom_categories?.slug === "ignorar") continue;
           const ratio = ratioByInv[(t as any).invoice_id] ?? 1;
           const v = Number((t as any).amount) * ratio;
           if ((t as any).counts_as_investment) {
@@ -155,12 +157,14 @@ export function useSobraReinvestida(month: string) {
       const openIds = (openInvs || []).filter((i: any) => i.closed_at === null).map((i: any) => i.id);
 
       // Em andamento: soma das tx das invoices in_progress (closed_at null, paid_at null)
+      // Exclui tx com category 'ignorar' (PGTO CASH, estornos, etc).
       if (openIds.length > 0) {
         const { data: openTxs } = await supabase
           .from("card_transactions")
-          .select("amount, invoice_id")
+          .select("amount, invoice_id, custom_categories ( slug )")
           .in("invoice_id", openIds);
         for (const t of openTxs || []) {
+          if ((t as any).custom_categories?.slug === "ignorar") continue;
           cartao_em_andamento += Number((t as any).amount);
         }
       }
