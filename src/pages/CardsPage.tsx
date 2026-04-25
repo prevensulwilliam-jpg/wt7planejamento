@@ -11,7 +11,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Gem, X, ArrowUp, ArrowDown, Filter, FileText, Zap, Clock } from "lucide-react";
+import { Gem, X, ArrowUp, ArrowDown, Filter, FileText, Zap, Clock, ChevronLeft, ChevronRight } from "lucide-react";
+import { formatMonth } from "@/lib/formatters";
 
 type Card = {
   id: string;
@@ -1016,27 +1017,35 @@ export default function CardsPage() {
 
         {/* ════════════════ ABA 2 — FATURAS FECHADAS ════════════════ */}
         <TabsContent value="closed" className="space-y-6 mt-6">
-          {/* Sub-tabs por mês (ref_month das faturas fechadas) */}
-          {availableClosedMonths.length > 0 && (
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs uppercase tracking-wider" style={{ color: "#94A3B8" }}>Mês:</span>
-              {availableClosedMonths.map((m) => (
+          {/* Navegador de mês (igual kitnets) — < Abril 2026 > */}
+          {availableClosedMonths.length > 0 && (() => {
+            const currentIdx = availableClosedMonths.indexOf(selectedClosedMonth);
+            const isOldest = currentIdx === availableClosedMonths.length - 1;
+            const isNewest = currentIdx === 0;
+            return (
+              <div className="flex items-center justify-center gap-3 py-2">
                 <button
-                  key={m}
-                  onClick={() => setSelectedClosedMonth(m)}
-                  className="text-xs px-3 py-1.5 rounded-md transition-all font-mono"
-                  style={{
-                    background: selectedClosedMonth === m ? "#C9A84C" : "rgba(201,168,76,0.1)",
-                    color: selectedClosedMonth === m ? "#000" : "#C9A84C",
-                    border: `1px solid ${selectedClosedMonth === m ? "#C9A84C" : "rgba(201,168,76,0.3)"}`,
-                    fontWeight: selectedClosedMonth === m ? 600 : 400,
-                  }}
+                  onClick={() => !isOldest && setSelectedClosedMonth(availableClosedMonths[currentIdx + 1])}
+                  disabled={isOldest}
+                  className="p-2 rounded-md hover:bg-white/5 transition-colors disabled:opacity-25 disabled:cursor-not-allowed"
+                  aria-label="Mês anterior"
                 >
-                  {m}
+                  <ChevronLeft className="w-5 h-5" style={{ color: "#C9A84C" }} />
                 </button>
-              ))}
-            </div>
-          )}
+                <span className="text-xl font-bold tracking-wide capitalize" style={{ color: "#F0F4F8", minWidth: 220, textAlign: "center" }}>
+                  {selectedClosedMonth ? formatMonth(selectedClosedMonth) : "—"}
+                </span>
+                <button
+                  onClick={() => !isNewest && setSelectedClosedMonth(availableClosedMonths[currentIdx - 1])}
+                  disabled={isNewest}
+                  className="p-2 rounded-md hover:bg-white/5 transition-colors disabled:opacity-25 disabled:cursor-not-allowed"
+                  aria-label="Próximo mês"
+                >
+                  <ChevronRight className="w-5 h-5" style={{ color: "#C9A84C" }} />
+                </button>
+              </div>
+            );
+          })()}
 
           <PremiumCard>
             <div className="p-6">
