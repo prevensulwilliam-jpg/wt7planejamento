@@ -277,8 +277,7 @@ export default function CardsPage() {
     onError: (e: any) => toast.error(e.message || "Erro ao fechar fatura"),
   });
 
-  // Mutation: apagar todas tx da fatura (mantém invoice + closed_at + payments)
-  // Usada pra re-importar OFX/PDF do zero quando dataset tá sujo.
+  // Mutation SOFT: apagar apenas tx (mantém invoice + closed_at + payments)
   const resetInvoice = useMutation({
     mutationFn: async (invId: string) => {
       const { error: e1 } = await supabase
@@ -301,6 +300,23 @@ export default function CardsPage() {
       qc.invalidateQueries({ queryKey: ["cockpit_breakdown"] });
     },
     onError: (e: any) => toast.error(e.message || "Erro ao apagar tx"),
+  });
+
+  // Mutation HARD: apaga a fatura completamente (CASCADE remove tx + payments)
+  const deleteInvoice = useMutation({
+    mutationFn: async (invId: string) => {
+      const { error } = await supabase.from("card_invoices").delete().eq("id", invId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Fatura excluída completamente");
+      qc.invalidateQueries({ queryKey: ["card_txs"] });
+      qc.invalidateQueries({ queryKey: ["card_invoices_closed"] });
+      qc.invalidateQueries({ queryKey: ["card_invoices_in_progress"] });
+      qc.invalidateQueries({ queryKey: ["sobra_reinvestida"] });
+      qc.invalidateQueries({ queryKey: ["cockpit_breakdown"] });
+    },
+    onError: (e: any) => toast.error(e.message || "Erro ao excluir fatura"),
   });
 
   // Hook: invoices in_progress (Aba 1) — pra mostrar lista com botão "Apagar tx"
@@ -682,18 +698,32 @@ export default function CardsPage() {
                       <td className="py-2 px-2 font-mono text-xs">{inv.reference_month}</td>
                       <td className="py-2 px-2 text-right font-mono">{money(Number(inv.total_amount))}</td>
                       <td className="py-2 px-2 text-center">
-                        <button
-                          onClick={() => {
-                            if (confirm(`Apagar todas as tx da fatura ${inv.cards?.name} ${inv.reference_month} (in_progress)?\n\nVocê pode reimportar OFX/CSV depois.`)) {
-                              resetInvoice.mutate(inv.id);
-                            }
-                          }}
-                          disabled={resetInvoice.isPending}
-                          className="text-xs px-2 py-1 rounded transition-colors hover:opacity-80"
-                          style={{ background: "rgba(244,63,94,0.1)", border: "1px solid rgba(244,63,94,0.3)", color: "#F43F5E" }}
-                        >
-                          Apagar tx
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => {
+                              if (confirm(`🧹 LIMPAR tx da fatura ${inv.cards?.name} ${inv.reference_month}?\n\nApaga só as transações. Mantém a invoice (vazia).\nUsa pra reimportar OFX/CSV.`)) {
+                                resetInvoice.mutate(inv.id);
+                              }
+                            }}
+                            disabled={resetInvoice.isPending}
+                            className="text-xs px-2 py-1 rounded transition-colors hover:opacity-80"
+                            style={{ background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.3)", color: "#F59E0B" }}
+                          >
+                            🧹 Limpar tx
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (confirm(`🗑️ EXCLUIR fatura ${inv.cards?.name} ${inv.reference_month}?\n\nApaga TUDO: invoice + tx + payments.\nFica como se nunca tivesse existido. Irreversível.`)) {
+                                deleteInvoice.mutate(inv.id);
+                              }
+                            }}
+                            disabled={deleteInvoice.isPending}
+                            className="text-xs px-2 py-1 rounded transition-colors hover:opacity-80"
+                            style={{ background: "rgba(244,63,94,0.1)", border: "1px solid rgba(244,63,94,0.3)", color: "#F43F5E" }}
+                          >
+                            🗑️ Excluir
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1040,7 +1070,7 @@ export default function CardsPage() {
                               {inv.paid_amount ? money(Number(inv.paid_amount)) : "—"}
                             </td>
                             <td className="py-2 px-2 text-center">
-                              <div className="flex items-center justify-center gap-2">
+                              <div className="flex items-center justify-center gap-1.5">
                                 {!isPaid && (
                                   <button
                                     onClick={() => setPayDialogInv(inv)}
@@ -1052,16 +1082,29 @@ export default function CardsPage() {
                                 )}
                                 <button
                                   onClick={() => {
-                                    if (confirm(`Apagar todas as tx da fatura ${inv.cards?.name} ${inv.reference_month}?\n\nA invoice + closed_at + payments serão preservados. Você pode reimportar.`)) {
+                                    if (confirm(`🧹 LIMPAR tx da fatura ${inv.cards?.name} ${inv.reference_month}?\n\nApaga só as transações. Mantém: status pago, closed_at, payments.\nUsa pra reimportar PDF/OFX corrigido.`)) {
                                       resetInvoice.mutate(inv.id);
                                     }
                                   }}
                                   disabled={resetInvoice.isPending}
                                   className="text-xs px-2 py-1 rounded transition-colors hover:opacity-80"
-                                  style={{ background: "rgba(244,63,94,0.1)", border: "1px solid rgba(244,63,94,0.3)", color: "#F43F5E" }}
-                                  title="Apaga todas tx da fatura (mantém invoice e payments). Pra reimportar do zero."
+                                  style={{ background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.3)", color: "#F59E0B" }}
+                                  title="Apaga só as transações. Mantém status pago + payments."
                                 >
-                                  Apagar tx
+                                  🧹 Limpar tx
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    if (confirm(`🗑️ EXCLUIR fatura ${inv.cards?.name} ${inv.reference_month}?\n\nApaga TUDO: invoice + tx + payments + auto-match.\nFica como se nunca tivesse existido. Irreversível.`)) {
+                                      deleteInvoice.mutate(inv.id);
+                                    }
+                                  }}
+                                  disabled={deleteInvoice.isPending}
+                                  className="text-xs px-2 py-1 rounded transition-colors hover:opacity-80"
+                                  style={{ background: "rgba(244,63,94,0.1)", border: "1px solid rgba(244,63,94,0.3)", color: "#F43F5E" }}
+                                  title="Apaga TUDO: invoice, tx, payments, auto-match. Irreversível."
+                                >
+                                  🗑️ Excluir
                                 </button>
                               </div>
                             </td>
