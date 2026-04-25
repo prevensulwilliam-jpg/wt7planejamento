@@ -130,6 +130,7 @@ export default function CardsPage() {
   const [expandedInvoiceId, setExpandedInvoiceId] = useState<string | null>(null);
   const [payDialogInv, setPayDialogInv] = useState<ClosedInvoice | null>(null);
   const [closedUploadOpen, setClosedUploadOpen] = useState(false);
+  const [selectedClosedMonth, setSelectedClosedMonth] = useState<string>("");
 
   // ── Filtros ───────────────────────────────────────────
   const [search, setSearch] = useState("");
@@ -486,9 +487,36 @@ export default function CardsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [txs, search, filterCard, filterHolder, filterCategory, filterVector, minAmount, maxAmount, onlyInstallments, sortBy, sortDir]);
 
-  const filteredClosedTxs = useMemo(() => applyFiltersTo(closedTxs),
+  // Meses únicos das faturas fechadas (pra sub-tabs)
+  const availableClosedMonths = useMemo(() => {
+    const months = new Set<string>();
+    for (const inv of closedInvoices) months.add(inv.reference_month);
+    return Array.from(months).sort().reverse(); // mais recente primeiro
+  }, [closedInvoices]);
+
+  // Auto-seleciona o mês mais recente quando carregar
+  useEffect(() => {
+    if (availableClosedMonths.length > 0 && !availableClosedMonths.includes(selectedClosedMonth)) {
+      setSelectedClosedMonth(availableClosedMonths[0]);
+    }
+  }, [availableClosedMonths, selectedClosedMonth]);
+
+  // Filtra invoices closed pelo mês selecionado
+  const closedInvoicesByMonth = useMemo(() => {
+    if (!selectedClosedMonth) return closedInvoices;
+    return closedInvoices.filter(inv => inv.reference_month === selectedClosedMonth);
+  }, [closedInvoices, selectedClosedMonth]);
+
+  // Filtra closedTxs pelas invoices do mês
+  const closedTxsByMonth = useMemo(() => {
+    if (!selectedClosedMonth) return closedTxs;
+    const invIds = new Set(closedInvoicesByMonth.map(i => i.id));
+    return closedTxs.filter(t => invIds.has(t.invoice_id));
+  }, [closedTxs, closedInvoicesByMonth, selectedClosedMonth]);
+
+  const filteredClosedTxs = useMemo(() => applyFiltersTo(closedTxsByMonth),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [closedTxs, search, filterCard, filterHolder, filterCategory, filterVector, minAmount, maxAmount, onlyInstallments, sortBy, sortDir]);
+    [closedTxsByMonth, search, filterCard, filterHolder, filterCategory, filterVector, minAmount, maxAmount, onlyInstallments, sortBy, sortDir]);
 
   const filteredClosedTotal = useMemo(() => filteredClosedTxs.reduce((s, t) => s + Number(t.amount), 0), [filteredClosedTxs]);
 
@@ -988,16 +1016,41 @@ export default function CardsPage() {
 
         {/* ════════════════ ABA 2 — FATURAS FECHADAS ════════════════ */}
         <TabsContent value="closed" className="space-y-6 mt-6">
+          {/* Sub-tabs por mês (ref_month das faturas fechadas) */}
+          {availableClosedMonths.length > 0 && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs uppercase tracking-wider" style={{ color: "#94A3B8" }}>Mês:</span>
+              {availableClosedMonths.map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setSelectedClosedMonth(m)}
+                  className="text-xs px-3 py-1.5 rounded-md transition-all font-mono"
+                  style={{
+                    background: selectedClosedMonth === m ? "#C9A84C" : "rgba(201,168,76,0.1)",
+                    color: selectedClosedMonth === m ? "#000" : "#C9A84C",
+                    border: `1px solid ${selectedClosedMonth === m ? "#C9A84C" : "rgba(201,168,76,0.3)"}`,
+                    fontWeight: selectedClosedMonth === m ? 600 : 400,
+                  }}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+          )}
+
           <PremiumCard>
             <div className="p-6">
               <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                 <h2 className="text-lg font-semibold flex items-center gap-2" style={{ color: "#F0F4F8" }}>
                   <FileText className="w-4 h-4" style={{ color: "#C9A84C" }} />
-                  Faturas fechadas
+                  Faturas fechadas{selectedClosedMonth && ` · ${selectedClosedMonth}`}
                 </h2>
                 <div className="flex items-center gap-3">
                   <span className="text-sm" style={{ color: "#94A3B8" }}>
-                    {closedInvoices.length} fatura{closedInvoices.length !== 1 ? "s" : ""}
+                    {closedInvoicesByMonth.length} fatura{closedInvoicesByMonth.length !== 1 ? "s" : ""}
+                    {availableClosedMonths.length > 0 && closedInvoicesByMonth.length !== closedInvoices.length && (
+                      <span className="ml-1 opacity-70">de {closedInvoices.length}</span>
+                    )}
                   </span>
                   <Button
                     onClick={() => setClosedUploadOpen(true)}
@@ -1010,9 +1063,11 @@ export default function CardsPage() {
                 </div>
               </div>
 
-              {closedInvoices.length === 0 ? (
+              {closedInvoicesByMonth.length === 0 ? (
                 <div className="text-sm py-8 text-center" style={{ color: "#94A3B8" }}>
-                  Nenhuma fatura fechada ainda. Faturas com <span style={{ color: "#C9A84C" }}>closed_at</span> preenchido aparecem aqui.
+                  {closedInvoices.length === 0
+                    ? <>Nenhuma fatura fechada ainda. Faturas com <span style={{ color: "#C9A84C" }}>closed_at</span> preenchido aparecem aqui.</>
+                    : <>Nenhuma fatura fechada no mês {selectedClosedMonth}.</>}
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -1030,7 +1085,7 @@ export default function CardsPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {closedInvoices.map((inv) => {
+                      {closedInvoicesByMonth.map((inv) => {
                         const isPaid = !!inv.paid_at;
                         const isReconciled = !!inv.bank_tx_id;
                         const statusColor = isPaid ? "#10B981" : "#F59E0B";
@@ -1098,14 +1153,14 @@ export default function CardsPage() {
               <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                 <h2 className="text-lg font-semibold flex items-center gap-2" style={{ color: "#F0F4F8" }}>
                   <Filter className="w-4 h-4" style={{ color: "#C9A84C" }} />
-                  Transações das faturas fechadas
+                  Transações das faturas fechadas{selectedClosedMonth && ` · ${selectedClosedMonth}`}
                 </h2>
                 <div className="text-sm flex items-center gap-3" style={{ color: "#94A3B8" }}>
                   {loadingClosedTxs ? "Carregando..." : (
                     <>
                       <span>
                         <span style={{ color: "#F0F4F8", fontWeight: 600 }}>{filteredClosedTxs.length}</span>
-                        {filteredClosedTxs.length !== closedTxs.length && <span> de {closedTxs.length}</span>} lançamentos
+                        {filteredClosedTxs.length !== closedTxsByMonth.length && <span> de {closedTxsByMonth.length}</span>} lançamentos
                       </span>
                       <span className="font-mono" style={{ color: "#C9A84C" }}>{money(filteredClosedTotal)}</span>
                     </>
@@ -1114,7 +1169,7 @@ export default function CardsPage() {
               </div>
 
               {/* Barra de filtros — compartilha state com Aba 1 */}
-              {closedTxs.length > 0 && (
+              {closedTxsByMonth.length > 0 && (
                 <div className="mb-4 space-y-3 p-3 rounded-lg" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
                     <Input
@@ -1205,9 +1260,11 @@ export default function CardsPage() {
                 </div>
               )}
 
-              {closedTxs.length === 0 ? (
+              {closedTxsByMonth.length === 0 ? (
                 <div className="text-sm py-8 text-center" style={{ color: "#94A3B8" }}>
-                  Nenhuma fatura fechada importada. Use o botão "+ Importar fatura fechada" acima.
+                  {closedTxs.length === 0
+                    ? <>Nenhuma fatura fechada importada. Use o botão "+ Importar fatura fechada" acima.</>
+                    : <>Nenhuma transação no mês {selectedClosedMonth}.</>}
                 </div>
               ) : filteredClosedTxs.length === 0 ? (
                 <div className="text-sm py-8 text-center" style={{ color: "#94A3B8" }}>
