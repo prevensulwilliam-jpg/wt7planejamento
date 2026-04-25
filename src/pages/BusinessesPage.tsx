@@ -24,6 +24,7 @@ import {
   useDeleteRevenueEntry,
   useBusinessRealized,
   useBusinessYTDRealized,
+  useMonthNeutralEntries,
   useBusinessBreakdown,
   useUnlinkedRevenuesForMonth,
   useLinkRevenueToBusiness,
@@ -516,6 +517,9 @@ export default function BusinessesPage() {
   const { data: realizedMap = new Map() } = useBusinessRealized(month);
   const currentYear = parseInt(month.split("-")[0]);
   const { data: ytdMap = new Map() } = useBusinessYTDRealized(currentYear);
+  // Total real de entradas neutras do mês (independente de business_id)
+  // — pega revenues órfãs também (sem business ou apontando pra deletado).
+  const { data: monthNeutral } = useMonthNeutralEntries(month);
   const { data: recon } = useMonthRevenueReconciliation(month);
   const { data: kitnetOrphans } = useKitnetOrphans(month);
   const createBiz = useCreateBusiness();
@@ -902,8 +906,11 @@ export default function BusinessesPage() {
           />
         </div>
 
-        {/* Banner: entradas neutras consolidadas (transfer/reembolso/estorno) */}
-        {totals.neutralMonth > 0 && (
+        {/* Banner: entradas neutras consolidadas (transfer/reembolso/estorno).
+            Usa total REAL do mês (useMonthNeutralEntries) — pega revenues
+            órfãs também (sem business_id ou apontando pra business deletado).
+            Diferente de totals.neutralMonth que só agrega o que está linkado. */}
+        {(monthNeutral?.total ?? 0) > 0 && (
           <div
             className="rounded-xl px-4 py-2.5 flex items-center gap-3 text-xs"
             style={{ background: "rgba(45,212,191,0.06)", border: "1px solid rgba(45,212,191,0.25)" }}
@@ -911,7 +918,8 @@ export default function BusinessesPage() {
             <span style={{ color: "#2DD4BF" }}>🔁</span>
             <div className="flex-1" style={{ color: "#94A3B8" }}>
               <span style={{ color: "#F0F4F8", fontWeight: 600 }}>Entradas neutras do mês: </span>
-              <span className="font-mono" style={{ color: "#2DD4BF" }}>{formatCurrency(totals.neutralMonth)}</span>
+              <span className="font-mono" style={{ color: "#2DD4BF" }}>{formatCurrency(monthNeutral!.total)}</span>
+              <span style={{ color: "#64748B" }}> ({monthNeutral!.count} {monthNeutral!.count === 1 ? "lançamento" : "lançamentos"})</span>
               <span> — transferências interconta, reembolsos de sócio, estornos. </span>
               <span style={{ color: "#64748B" }}>Não somam no Realizado, só rastreabilidade.</span>
             </div>

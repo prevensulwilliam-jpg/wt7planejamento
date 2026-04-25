@@ -254,6 +254,28 @@ export function useLinkRevenueToBusiness() {
   });
 }
 
+// ─── Entradas neutras TOTAIS do mês (independente de business_id) ───────────
+// Usado pro banner consolidado em /negocios. Diferente do `neutral` por business
+// no useBusinessRealized: este pega TODAS as revenues com counts_as_income=false
+// do mês, mesmo as órfãs (sem business_id ou apontando pra business deletado).
+//
+// Espelha exatamente o KPI "Entradas Neutras" de /revenues.
+export function useMonthNeutralEntries(month: string) {
+  return useQuery({
+    queryKey: ["month_neutral_entries", month],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("revenues")
+        .select("amount, business_id, description, source, nature")
+        .eq("reference_month", month)
+        .eq("counts_as_income", false);
+      if (error) throw error;
+      const total = (data ?? []).reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0);
+      return { total, count: (data ?? []).length, items: data ?? [] };
+    },
+  });
+}
+
 // ─── Acumulado Year-To-Date (jan/Y → mês corrente) ──────────────────────────
 // Soma realizado de todos os meses do ano corrente, por negócio. Usado pra KPI
 // "Acumulado 2026" no /negocios. Mesmo critério de useBusinessRealized:
