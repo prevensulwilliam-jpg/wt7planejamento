@@ -1,7 +1,10 @@
+import { useState } from "react";
 import { useSobraReinvestida, SOBRA_META_PCT } from "@/hooks/useSobraReinvestida";
 import { PremiumCard } from "./PremiumCard";
 import { formatCurrency } from "@/lib/formatters";
 import { Skeleton } from "@/components/ui/skeleton";
+import { CockpitDrillDownModal } from "./CockpitDrillDownModal";
+import { ChevronRight } from "lucide-react";
 
 type Props = { month: string };
 
@@ -39,6 +42,7 @@ function Ring({ pct, color, radius, stroke, track = "#1A2535" }: {
 
 export function ThreeRingsCockpit({ month }: Props) {
   const { data: sobra, isLoading } = useSobraReinvestida(month);
+  const [drillDown, setDrillDown] = useState<"receita" | "custeio" | "investimento" | null>(null);
 
   if (isLoading) return <Skeleton className="h-64 rounded-2xl" />;
   if (!sobra) return null;
@@ -106,12 +110,18 @@ export function ThreeRingsCockpit({ month }: Props) {
             </p>
           </div>
 
-          {/* Linha Receita */}
-          <div className="flex items-center justify-between p-2.5 rounded-lg" style={{ background: "rgba(201,168,76,0.05)", border: `1px solid ${corReceita}33` }}>
+          {/* Linha Receita — clicável (abre drill-down) */}
+          <button
+            type="button"
+            onClick={() => setDrillDown("receita")}
+            className="w-full flex items-center justify-between p-2.5 rounded-lg text-left transition-all hover:scale-[1.01] hover:shadow-lg cursor-pointer group"
+            style={{ background: "rgba(201,168,76,0.05)", border: `1px solid ${corReceita}33` }}
+          >
             <div>
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full" style={{ background: corReceita }} />
                 <span className="text-xs font-mono uppercase tracking-wider" style={{ color: "#94A3B8" }}>Receita Real</span>
+                <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: corReceita }} />
               </div>
               <p className="text-lg font-mono font-bold mt-0.5" style={{ color: corReceita }}>
                 {formatCurrency(sobra.receita)}
@@ -126,14 +136,20 @@ export function ThreeRingsCockpit({ month }: Props) {
               <p className="text-xl font-mono font-bold" style={{ color: corReceita }}>{receitaPct.toFixed(0)}%</p>
               <p className="text-[10px]" style={{ color: "#64748B" }}>de {formatCurrency(RECEITA_META_MENSAL)}</p>
             </div>
-          </div>
+          </button>
 
-          {/* Linha Custeio */}
-          <div className="flex items-center justify-between p-2.5 rounded-lg" style={{ background: "rgba(244,63,94,0.05)", border: `1px solid ${corCusteio}33` }}>
+          {/* Linha Custeio — clicável (abre drill-down) */}
+          <button
+            type="button"
+            onClick={() => setDrillDown("custeio")}
+            className="w-full flex items-center justify-between p-2.5 rounded-lg text-left transition-all hover:scale-[1.01] hover:shadow-lg cursor-pointer group"
+            style={{ background: "rgba(244,63,94,0.05)", border: `1px solid ${corCusteio}33` }}
+          >
             <div>
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full" style={{ background: corCusteio }} />
                 <span className="text-xs font-mono uppercase tracking-wider" style={{ color: "#94A3B8" }}>Custeio</span>
+                <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: corCusteio }} />
               </div>
               <p className="text-lg font-mono font-bold mt-0.5" style={{ color: corCusteio }}>
                 {formatCurrency(sobra.custeio_total)}
@@ -146,14 +162,20 @@ export function ThreeRingsCockpit({ month }: Props) {
               <p className="text-xl font-mono font-bold" style={{ color: corCusteio }}>{custeioPctReceita.toFixed(0)}%</p>
               <p className="text-[10px]" style={{ color: "#64748B" }}>da receita · alvo &lt;50%</p>
             </div>
-          </div>
+          </button>
 
-          {/* Linha Investimento (meta canônica) */}
-          <div className="flex items-center justify-between p-2.5 rounded-lg" style={{ background: "rgba(16,185,129,0.05)", border: `1px solid ${corInvest}33` }}>
+          {/* Linha Investimento — clicável (abre drill-down) */}
+          <button
+            type="button"
+            onClick={() => setDrillDown("investimento")}
+            className="w-full flex items-center justify-between p-2.5 rounded-lg text-left transition-all hover:scale-[1.01] hover:shadow-lg cursor-pointer group"
+            style={{ background: "rgba(16,185,129,0.05)", border: `1px solid ${corInvest}33` }}
+          >
             <div>
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full" style={{ background: corInvest }} />
                 <span className="text-xs font-mono uppercase tracking-wider" style={{ color: "#94A3B8" }}>Investimento</span>
+                <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: corInvest }} />
               </div>
               <p className="text-lg font-mono font-bold mt-0.5" style={{ color: corInvest }}>
                 {formatCurrency(sobra.investimento_total)}
@@ -168,7 +190,7 @@ export function ThreeRingsCockpit({ month }: Props) {
               <p className="text-xl font-mono font-bold" style={{ color: corInvest }}>{investidoPct.toFixed(0)}%</p>
               <p className="text-[10px]" style={{ color: "#64748B" }}>da receita · meta ≥{SOBRA_META_PCT}%</p>
             </div>
-          </div>
+          </button>
 
           {/* Veredito curto — paleta canônica */}
           <div className="pt-2 text-xs">
@@ -180,6 +202,16 @@ export function ThreeRingsCockpit({ month }: Props) {
           </div>
         </div>
       </div>
+
+      {/* Drill-down modal: clica num KPI → vê composição detalhada */}
+      {drillDown && (
+        <CockpitDrillDownModal
+          open={drillDown !== null}
+          onOpenChange={(v) => !v && setDrillDown(null)}
+          month={month}
+          section={drillDown}
+        />
+      )}
     </PremiumCard>
   );
 }
