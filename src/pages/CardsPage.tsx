@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
@@ -7,9 +7,12 @@ import {
   Select, SelectTrigger, SelectValue, SelectContent,
   SelectGroup, SelectLabel, SelectItem, SelectSeparator,
 } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Gem, X, ArrowUp, ArrowDown, Filter } from "lucide-react";
+import { Gem, X, ArrowUp, ArrowDown, Filter, FileText, Zap } from "lucide-react";
 
 type Card = {
   id: string;
@@ -63,6 +66,18 @@ type Category = {
   vector: string | null;
 };
 
+type ClosedInvoice = {
+  id: string;
+  card_id: string;
+  reference_month: string;
+  total_amount: number;
+  paid_amount: number | null;
+  paid_at: string | null;
+  closed_at: string | null;
+  bank_tx_id: string | null;
+  cards: { name: string; bank: string } | null;
+};
+
 /** Extrai um pattern genérico a partir do merchant_normalized (primeiras 2 palavras >= 3 chars). */
 function extractPattern(merchant: string): string {
   const words = merchant.split(" ").filter(w => w.length >= 3);
@@ -114,10 +129,13 @@ function money(v: number): string {
 
 export default function CardsPage() {
   const qc = useQueryClient();
+  const [tab, setTab] = useState<"in_progress" | "closed">("in_progress");
   const [refMonth, setRefMonth] = useState<string>(currentRefMonth());
   const [selectedCardId, setSelectedCardId] = useState<string>("");
   const [uploading, setUploading] = useState(false);
   const [lastResult, setLastResult] = useState<ParseResult | null>(null);
+  const [expandedInvoiceId, setExpandedInvoiceId] = useState<string | null>(null);
+  const [payDialogInv, setPayDialogInv] = useState<ClosedInvoice | null>(null);
 
   // ── Filtros ───────────────────────────────────────────
   const [search, setSearch] = useState("");
@@ -203,6 +221,59 @@ export default function CardsPage() {
       if (error) throw error;
       return data as Category[];
     },
+  });
+
+  // Faturas fechadas (closed_at IS NOT NULL) — Aba 2
+  const { data: closedInvoices = [] } = useQuery<ClosedInvoice[]>({
+    queryKey: ["card_invoices_closed"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("card_invoices")
+        .select(`
+          id, card_id, reference_month, total_amount, paid_amount, paid_at, closed_at, bank_tx_id,
+          cards ( name, bank )
+        `)
+        .not("closed_at", "is", null)
+        .order("reference_month", { ascending: false });
+      if (error) throw error;
+      return (data || []) as any[];
+    },
+  });
+
+  // Mutation: marcar fatura como paga
+  const markPaid = useMutation({
+    mutationFn: async ({ invId, paid_at, paid_amount }: { invId: string; paid_at: string; paid_amount: number }) => {
+      const { error } = await supabase
+        .from("card_invoices")
+        .update({ paid_at, paid_amount })
+        .eq("id", invId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Fatura marcada como paga");
+      qc.invalidateQueries({ queryKey: ["card_invoices_closed"] });
+      qc.invalidateQueries({ queryKey: ["sobra_reinvestida"] });
+      qc.invalidateQueries({ queryKey: ["cockpit_breakdown"] });
+      setPayDialogInv(null);
+    },
+    onError: (e: any) => toast.error(e.message || "Erro ao marcar pago"),
+  });
+
+  // Mutation: fechar fatura (set closed_at = now)
+  const closeInvoice = useMutation({
+    mutationFn: async (invId: string) => {
+      const { error } = await supabase
+        .from("card_invoices")
+        .update({ closed_at: new Date().toISOString() })
+        .eq("id", invId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Fatura fechada — agora aparece na aba 'Faturas fechadas'");
+      qc.invalidateQueries({ queryKey: ["card_invoices_closed"] });
+      qc.invalidateQueries({ queryKey: ["card_txs"] });
+    },
+    onError: (e: any) => toast.error(e.message || "Erro ao fechar fatura"),
   });
 
   // Mutation: reclassificar transação + aprender pattern
@@ -422,14 +493,24 @@ export default function CardsPage() {
         <div>
           <h1 className="text-3xl font-bold" style={{ color: "#F0F4F8" }}>Cartões</h1>
           <p className="text-sm mt-1" style={{ color: "#94A3B8" }}>
-            Consolidação BB + XP do mês de vencimento selecionado.
+            Compras em andamento → análise · Faturas fechadas → conciliação de pagamento.
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <label className="text-sm" style={{ color: "#94A3B8" }}>Mês-ref (venc.)</label>
-          <MonthPicker value={refMonth} onChange={setRefMonth} className="w-44" />
-        </div>
+        {tab === "in_progress" && (
+          <div className="flex items-center gap-3">
+            <label className="text-sm" style={{ color: "#94A3B8" }}>Mês-ref (venc.)</label>
+            <MonthPicker value={refMonth} onChange={setRefMonth} className="w-44" />
+          </div>
+        )}
       </div>
+
+      <Tabs value={tab} onValueChange={(v) => setTab(v as "in_progress" | "closed")}>
+        <TabsList className="grid w-full grid-cols-2 max-w-md">
+          <TabsTrigger value="in_progress">Compras em andamento</TabsTrigger>
+          <TabsTrigger value="closed">Faturas fechadas</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="in_progress" className="space-y-6 mt-6">
 
       {/* KPIs topo */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -783,7 +864,170 @@ export default function CardsPage() {
           )}
         </div>
       </PremiumCard>
+        </TabsContent>
+
+        {/* ════════════════ ABA 2 — FATURAS FECHADAS ════════════════ */}
+        <TabsContent value="closed" className="space-y-6 mt-6">
+          <PremiumCard>
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                <h2 className="text-lg font-semibold flex items-center gap-2" style={{ color: "#F0F4F8" }}>
+                  <FileText className="w-4 h-4" style={{ color: "#C9A84C" }} />
+                  Faturas fechadas
+                </h2>
+                <span className="text-sm" style={{ color: "#94A3B8" }}>
+                  {closedInvoices.length} fatura{closedInvoices.length !== 1 ? "s" : ""}
+                </span>
+              </div>
+
+              {closedInvoices.length === 0 ? (
+                <div className="text-sm py-8 text-center" style={{ color: "#94A3B8" }}>
+                  Nenhuma fatura fechada ainda. Faturas com <span style={{ color: "#C9A84C" }}>closed_at</span> preenchido aparecem aqui.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-white/10" style={{ color: "#94A3B8" }}>
+                        <th className="text-left py-2 px-2">Cartão</th>
+                        <th className="text-left py-2 px-2">Ref. mês</th>
+                        <th className="text-right py-2 px-2">Total</th>
+                        <th className="text-center py-2 px-2">Status</th>
+                        <th className="text-left py-2 px-2">Fechou</th>
+                        <th className="text-left py-2 px-2">Pago em</th>
+                        <th className="text-right py-2 px-2">Valor pago</th>
+                        <th className="text-center py-2 px-2">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {closedInvoices.map((inv) => {
+                        const isPaid = !!inv.paid_at;
+                        const isReconciled = !!inv.bank_tx_id;
+                        const statusColor = isPaid ? "#10B981" : "#F59E0B";
+                        const statusLabel = isPaid ? "✓ pago" : "⏳ a pagar";
+                        return (
+                          <tr key={inv.id} className="border-b border-white/5 hover:bg-white/5" style={{ color: "#F0F4F8" }}>
+                            <td className="py-2 px-2">
+                              {inv.cards?.name ?? "—"}
+                              {isReconciled && (
+                                <Zap className="inline-block w-3 h-3 ml-2" style={{ color: "#10B981" }} aria-label="Conciliado com extrato" />
+                              )}
+                            </td>
+                            <td className="py-2 px-2 font-mono text-xs">{inv.reference_month}</td>
+                            <td className="py-2 px-2 text-right font-mono">{money(Number(inv.total_amount))}</td>
+                            <td className="py-2 px-2 text-center text-xs font-medium" style={{ color: statusColor }}>
+                              {statusLabel}
+                            </td>
+                            <td className="py-2 px-2 text-xs" style={{ color: "#94A3B8" }}>
+                              {inv.closed_at ? new Date(inv.closed_at).toLocaleDateString("pt-BR") : "—"}
+                            </td>
+                            <td className="py-2 px-2 text-xs" style={{ color: "#94A3B8" }}>
+                              {inv.paid_at ? new Date(inv.paid_at + "T00:00:00").toLocaleDateString("pt-BR") : "—"}
+                            </td>
+                            <td className="py-2 px-2 text-right font-mono text-xs" style={{ color: isPaid ? "#10B981" : "#94A3B8" }}>
+                              {inv.paid_amount ? money(Number(inv.paid_amount)) : "—"}
+                            </td>
+                            <td className="py-2 px-2 text-center">
+                              {!isPaid && (
+                                <button
+                                  onClick={() => setPayDialogInv(inv)}
+                                  className="text-xs px-2 py-1 rounded transition-colors hover:opacity-80"
+                                  style={{ background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.3)", color: "#10B981" }}
+                                >
+                                  Marcar pago
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </PremiumCard>
+        </TabsContent>
+      </Tabs>
+
+      {/* Dialog: marcar fatura como paga */}
+      <PayInvoiceDialog
+        invoice={payDialogInv}
+        open={!!payDialogInv}
+        onClose={() => setPayDialogInv(null)}
+        onSubmit={(paid_at, paid_amount) => {
+          if (payDialogInv) markPaid.mutate({ invId: payDialogInv.id, paid_at, paid_amount });
+        }}
+        isPending={markPaid.isPending}
+      />
     </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// PayInvoiceDialog — modal pra marcar fatura como paga
+// ═══════════════════════════════════════════════════════════════════
+
+interface PayInvoiceDialogProps {
+  invoice: ClosedInvoice | null;
+  open: boolean;
+  onClose: () => void;
+  onSubmit: (paid_at: string, paid_amount: number) => void;
+  isPending: boolean;
+}
+
+function PayInvoiceDialog({ invoice, open, onClose, onSubmit, isPending }: PayInvoiceDialogProps) {
+  const today = new Date().toISOString().split("T")[0];
+  const [paidAt, setPaidAt] = useState(today);
+  const [paidAmount, setPaidAmount] = useState("");
+
+  // Quando abre o dialog, pré-preenche com total_amount
+  useEffect(() => {
+    if (invoice) {
+      setPaidAmount(String(Number(invoice.total_amount).toFixed(2)));
+      setPaidAt(today);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoice?.id]);
+
+  if (!invoice) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent style={{ background: "#0D1318", border: "1px solid rgba(16,185,129,0.4)" }}>
+        <DialogHeader>
+          <DialogTitle style={{ color: "#10B981" }}>
+            Marcar fatura como paga
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="text-sm" style={{ color: "#94A3B8" }}>
+            <span className="font-mono">{invoice.cards?.name}</span> · ref {invoice.reference_month} · total{" "}
+            <span className="font-mono" style={{ color: "#C9A84C" }}>{`R$ ${Number(invoice.total_amount).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`}</span>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs uppercase tracking-wider" style={{ color: "#94A3B8" }}>Data do pagamento</label>
+            <Input type="date" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} className="h-9" />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs uppercase tracking-wider" style={{ color: "#94A3B8" }}>Valor pago (R$)</label>
+            <Input type="number" step="0.01" value={paidAmount} onChange={(e) => setPaidAmount(e.target.value)} className="h-9" />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button
+            onClick={() => onSubmit(paidAt, Number(paidAmount))}
+            disabled={isPending || !paidAt || !paidAmount}
+            style={{ background: "#10B981", color: "#000" }}
+          >
+            {isPending ? "Salvando..." : "Marcar pago"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
