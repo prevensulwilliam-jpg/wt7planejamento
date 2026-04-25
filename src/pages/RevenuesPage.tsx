@@ -68,7 +68,12 @@ export default function RevenuesPage() {
   const [filterSrcSearch, setFilterSrcSearch] = useState("");
   const filterSrcRef = useRef<HTMLDivElement>(null);
   const [filterBank, setFilterBank] = useState("all");
-  const [onlyRealIncome, setOnlyRealIncome] = useState(false);
+  // Filtro por nature: "all" | "income" | "neutral" | "transfer" | "reimbursement" | "refund"
+  // - all: tudo
+  // - income: só counts_as_income=true (receita real)
+  // - neutral: só counts_as_income=false (transfers + reembolsos + refunds agrupados)
+  // - transfer/reimbursement/refund: filtra por nature específica
+  const [filterNature, setFilterNature] = useState<"all" | "income" | "neutral" | "transfer" | "reimbursement" | "refund">("all");
   const [bankFilterOpen, setBankFilterOpen] = useState(false);
   const bankFilterRef = useRef<HTMLDivElement>(null);
 
@@ -131,8 +136,12 @@ export default function RevenuesPage() {
     if (filterBank !== "all") {
       data = data.filter(r => extractBank(r.description ?? "") === filterBank);
     }
-    if (onlyRealIncome) {
+    if (filterNature === "income") {
       data = data.filter((r: any) => r.counts_as_income !== false);
+    } else if (filterNature === "neutral") {
+      data = data.filter((r: any) => r.counts_as_income === false);
+    } else if (filterNature === "transfer" || filterNature === "reimbursement" || filterNature === "refund") {
+      data = data.filter((r: any) => r.nature === filterNature);
     }
     if (sortField) {
       data.sort((a, b) => {
@@ -145,7 +154,7 @@ export default function RevenuesPage() {
       });
     }
     return data;
-  }, [revenues, sortField, sortDir, filterType, filterSource, filterBank, onlyRealIncome]);
+  }, [revenues, sortField, sortDir, filterType, filterSource, filterBank, filterNature]);
 
   // Nature helpers
   const NATURE_META: Record<string, { emoji: string; label: string; color: string }> = {
@@ -466,18 +475,28 @@ export default function RevenuesPage() {
               </div>
             )}
 
-            <button onClick={() => setOnlyRealIncome(v => !v)}
-              className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg outline-none"
-              style={{
-                background: onlyRealIncome ? "rgba(16,185,129,0.15)" : "#080C10",
-                border: `1px solid ${onlyRealIncome ? "rgba(16,185,129,0.4)" : "#1A2535"}`,
-                color: onlyRealIncome ? "#10B981" : "#64748B",
-              }}>
-              💰 {onlyRealIncome ? "Só receita real" : "Todas entradas"}
-            </button>
+            <Select value={filterNature} onValueChange={(v: any) => setFilterNature(v)}>
+              <SelectTrigger
+                className="h-auto px-3 py-1.5 text-xs gap-1 rounded-lg outline-none w-auto"
+                style={{
+                  background: filterNature === "all" ? "#080C10" : "rgba(16,185,129,0.15)",
+                  border: `1px solid ${filterNature === "all" ? "#1A2535" : "rgba(16,185,129,0.4)"}`,
+                  color: filterNature === "all" ? "#64748B" : "#10B981",
+                }}>
+                <SelectValue placeholder="Todas entradas" />
+              </SelectTrigger>
+              <SelectContent style={{ background: "#0D1318", borderColor: "#1A2535" }}>
+                <SelectItem value="all" style={{ color: "#F0F4F8" }}>💰 Todas entradas</SelectItem>
+                <SelectItem value="income" style={{ color: "#10B981" }}>✅ Só receita real (income)</SelectItem>
+                <SelectItem value="neutral" style={{ color: "#64748B" }}>🔕 Só entradas neutras (todas)</SelectItem>
+                <SelectItem value="transfer" style={{ color: "#64748B" }}>🔄 Só transferências</SelectItem>
+                <SelectItem value="reimbursement" style={{ color: "#F59E0B" }}>💳 Só reembolsos</SelectItem>
+                <SelectItem value="refund" style={{ color: "#94A3B8" }}>↩️ Só estornos</SelectItem>
+              </SelectContent>
+            </Select>
 
-            {(filterType !== "all" || filterSource !== "all" || filterBank !== "all" || sortField || onlyRealIncome) && (
-              <button onClick={() => { setFilterType("all"); setFilterSource("all"); setFilterBank("all"); setSortField(null); setOnlyRealIncome(false); }}
+            {(filterType !== "all" || filterSource !== "all" || filterBank !== "all" || sortField || filterNature !== "all") && (
+              <button onClick={() => { setFilterType("all"); setFilterSource("all"); setFilterBank("all"); setSortField(null); setFilterNature("all"); }}
                 className="px-3 py-1.5 text-xs rounded-lg"
                 style={{ background: "rgba(244,63,94,0.1)", color: "#F43F5E", border: "1px solid rgba(244,63,94,0.2)" }}>
                 Limpar filtros
