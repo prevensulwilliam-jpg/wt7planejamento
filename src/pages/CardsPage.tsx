@@ -387,34 +387,48 @@ export default function CardsPage() {
     onError: (e: any) => toast.error(e.message || "Erro ao reclassificar"),
   });
 
-  // Agregações
+  // Agregações — exclui tx com category 'ignorar' (não conta no total/invest/custo)
   const kpis = useMemo(() => {
-    const total = txs.reduce((s, t) => s + Number(t.amount), 0);
-    const invest = txs.filter(t => t.counts_as_investment).reduce((s, t) => s + Number(t.amount), 0);
+    const validTxs = txs.filter(t => t.custom_categories?.slug !== "ignorar");
+    const total = validTxs.reduce((s, t) => s + Number(t.amount), 0);
+    const invest = validTxs.filter(t => t.counts_as_investment).reduce((s, t) => s + Number(t.amount), 0);
     const custo = total - invest;
     const pctInvest = total > 0 ? (invest / total) * 100 : 0;
+    const ignoredAmount = txs
+      .filter(t => t.custom_categories?.slug === "ignorar")
+      .reduce((s, t) => s + Number(t.amount), 0);
 
     // por vetor (só os que contam como investimento)
     const byVector: Record<string, number> = {};
-    for (const t of txs) {
+    for (const t of validTxs) {
       if (t.counts_as_investment && t.vector) {
         byVector[t.vector] = (byVector[t.vector] || 0) + Number(t.amount);
       }
     }
 
-    // por cartão
+    // por cartão (exclui ignoradas)
     const byCard: Record<string, { name: string; total: number; count: number }> = {};
-    for (const t of txs) {
+    for (const t of validTxs) {
       const k = t.card_id;
       if (!byCard[k]) byCard[k] = { name: t.cards?.name || "—", total: 0, count: 0 };
       byCard[k].total += Number(t.amount);
       byCard[k].count += 1;
     }
 
-    // a investigar
+    // a investigar (sem categoria)
     const semCategoria = txs.filter(t => !t.custom_categories).length;
 
-    return { total, invest, custo, pctInvest, byVector, byCard: Object.values(byCard), semCategoria };
+    return { total, invest, custo, pctInvest, byVector, byCard: Object.values(byCard), semCategoria, ignoredAmount };
+  }, [txs]);
+
+  // Total efetivo por invoice (exclui ignoradas) — pra lista "Faturas em andamento"
+  const inProgressEffectiveTotals = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const t of txs) {
+      if (t.custom_categories?.slug === "ignorar") continue;
+      map[t.invoice_id] = (map[t.invoice_id] || 0) + Number(t.amount);
+    }
+    return map;
   }, [txs]);
 
   // Lista única de portadores presentes
@@ -723,11 +737,21 @@ export default function CardsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {inProgressInvoices.map((inv) => (
+                  {inProgressInvoices.map((inv) => {
+                    const effective = inProgressEffectiveTotals[inv.id] ?? Number(inv.total_amount);
+                    const ignored = Number(inv.total_amount) - effective;
+                    return (
                     <tr key={inv.id} className="border-b border-white/5 hover:bg-white/5" style={{ color: "#F0F4F8" }}>
                       <td className="py-2 px-2">{inv.cards?.name ?? "—"}</td>
                       <td className="py-2 px-2 font-mono text-xs">{inv.reference_month}</td>
-                      <td className="py-2 px-2 text-right font-mono">{money(Number(inv.total_amount))}</td>
+                      <td className="py-2 px-2 text-right font-mono">
+                        {money(effective)}
+                        {ignored > 0.01 && (
+                          <div className="text-[10px] mt-0.5" style={{ color: "#64748B" }}>
+                            🚫 {money(ignored)} ignorados
+                          </div>
+                        )}
+                      </td>
                       <td className="py-2 px-2 text-center">
                         <button
                           onClick={() => {
@@ -743,7 +767,8 @@ export default function CardsPage() {
                         </button>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
