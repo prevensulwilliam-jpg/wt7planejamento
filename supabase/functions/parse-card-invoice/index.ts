@@ -281,14 +281,22 @@ serve(async (req) => {
       ref = computeInProgressRef();
     }
 
-    // 3) Upsert invoice (manual — select + update/insert)
+    // 3) Upsert invoice — ISOLA in_progress × closed pra não corromper.
+    //    Aba "Em andamento" (sem closed_at): só busca/cria invoice closed_at IS NULL
+    //    Aba "Faturas fechadas" (com closed_at): só busca/cria invoice closed_at IS NOT NULL
     const total_amount = txs.reduce((s, t) => s + Number(t.amount), 0);
-    const { data: existingInv } = await supabase
+    const isInProgressUpload = !closed_at;
+    let existingInvQuery = supabase
       .from("card_invoices")
-      .select("id")
+      .select("id, closed_at")
       .eq("card_id", card_id)
-      .eq("reference_month", ref)
-      .maybeSingle();
+      .eq("reference_month", ref);
+    if (isInProgressUpload) {
+      existingInvQuery = existingInvQuery.is("closed_at", null);
+    } else {
+      existingInvQuery = existingInvQuery.not("closed_at", "is", null);
+    }
+    const { data: existingInv } = await existingInvQuery.maybeSingle();
 
     // Se closed_at foi enviado (upload pela Aba "Faturas fechadas"), seta na invoice.
     // Caso contrário (Aba "Em andamento"), mantém NULL.
