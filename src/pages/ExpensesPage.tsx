@@ -6,6 +6,8 @@ import { GoldButton } from "@/components/wt7/GoldButton";
 import { WtBadge } from "@/components/wt7/WtBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useExpenses, useCreateExpense, useDeleteExpense, useUpdateExpense, exportCSV } from "@/hooks/useFinances";
+import { findCashFlowMatchesNow, type CashFlowMatch } from "@/hooks/useCashFlowMatch";
+import { CashFlowMatchDialog } from "@/components/wt7/CashFlowMatchDialog";
 import { useCategories } from "@/hooks/useCategories";
 import { formatCurrency, formatDate, formatMonth, getCurrentMonth } from "@/lib/formatters";
 import { detectTransactionType } from "@/lib/categorizeTransaction";
@@ -54,6 +56,12 @@ export default function ExpensesPage() {
   const [filterCategory, setFilterCategory] = useState("all");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Record<string, any>>({});
+
+  // Auto-realize state — abre dialog quando há match em cash_flow_items
+  const [matchDialogOpen, setMatchDialogOpen] = useState(false);
+  const [matches, setMatches] = useState<CashFlowMatch[]>([]);
+  const [matchAmount, setMatchAmount] = useState(0);
+  const [matchDate, setMatchDate] = useState("");
 
   const [catSearchOpen, setCatSearchOpen] = useState(false);
   const [catSearch, setCatSearch] = useState("");
@@ -191,10 +199,11 @@ export default function ExpensesPage() {
           : form.counts_as_investment
             ? "investment"
             : "expense";
+      const amountNum = parseFloat(form.amount);
       await createExpense.mutateAsync({
         category: form.category,
         description: form.description,
-        amount: parseFloat(form.amount),
+        amount: amountNum,
         type: form.type,
         paid_at: form.paid_at || null,
         reference_month: form.reference_month,
@@ -205,6 +214,25 @@ export default function ExpensesPage() {
       } as any);
       toast({ title: "Despesa registrada com sucesso" });
       setDialogOpen(false);
+
+      // Auto-realize: busca match em cash_flow_items projetados
+      // Só pra despesas reais (não transfer/card_payment) — esses não têm match esperado
+      if (!form.is_transfer && !form.is_card_payment) {
+        try {
+          const direction = "outflow";
+          const found = await findCashFlowMatchesNow(amountNum, form.reference_month, direction);
+          if (found.length > 0) {
+            setMatches(found);
+            setMatchAmount(amountNum);
+            setMatchDate(form.paid_at || new Date().toISOString().split("T")[0]);
+            setMatchDialogOpen(true);
+          }
+        } catch (e) {
+          // Silencioso — auto-realize é bonus, não bloqueia
+          console.warn("Auto-realize match failed:", e);
+        }
+      }
+
       setForm({ category: "", description: "", amount: "", type: "variable", paid_at: "", reference_month: month, counts_as_investment: false, vector: "", is_card_payment: false, is_transfer: false });
     } catch {
       toast({ title: "Erro ao registrar despesa", variant: "destructive" });
@@ -694,6 +722,15 @@ export default function ExpensesPage() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Auto-realize: sugestão de vincular ao cash_flow_items projetado */}
+      <CashFlowMatchDialog
+        open={matchDialogOpen}
+        onOpenChange={setMatchDialogOpen}
+        matches={matches}
+        realizedAmount={matchAmount}
+        realizedAtDate={matchDate}
+      />
     </div>
   );
 }

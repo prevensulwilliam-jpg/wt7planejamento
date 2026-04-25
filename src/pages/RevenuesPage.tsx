@@ -6,6 +6,8 @@ import { GoldButton } from "@/components/wt7/GoldButton";
 import { WtBadge } from "@/components/wt7/WtBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRevenues, useCreateRevenue, useDeleteRevenue, useUpdateRevenue, exportCSV } from "@/hooks/useFinances";
+import { findCashFlowMatchesNow, type CashFlowMatch } from "@/hooks/useCashFlowMatch";
+import { CashFlowMatchDialog } from "@/components/wt7/CashFlowMatchDialog";
 import { useBusinesses } from "@/hooks/useBusinesses";
 import { useCategories } from "@/hooks/useCategories";
 import { formatCurrency, formatDate, formatMonth, getCurrentMonth } from "@/lib/formatters";
@@ -53,6 +55,12 @@ export default function RevenuesPage() {
   const [filterSource, setFilterSource] = useState("all");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Record<string, any>>({});
+
+  // Auto-realize state
+  const [matchDialogOpen, setMatchDialogOpen] = useState(false);
+  const [matches, setMatches] = useState<CashFlowMatch[]>([]);
+  const [matchAmount, setMatchAmount] = useState(0);
+  const [matchDate, setMatchDate] = useState("");
 
   const [srcSearchOpen, setSrcSearchOpen] = useState(false);
   const [srcSearch, setSrcSearch] = useState("");
@@ -177,10 +185,11 @@ export default function RevenuesPage() {
   const handleSubmit = async () => {
     if (!form.source || !form.amount) return;
     try {
+      const amountNum = parseFloat(form.amount);
       await createRevenue.mutateAsync({
         source: form.source,
         description: form.description || null,
-        amount: parseFloat(form.amount),
+        amount: amountNum,
         type: form.type,
         received_at: form.received_at || null,
         reference_month: form.reference_month,
@@ -190,6 +199,25 @@ export default function RevenuesPage() {
       } as any);
       toast({ title: "Receita registrada com sucesso" });
       setDialogOpen(false);
+
+      // Auto-realize: busca match em cash_flow_items projetados
+      // 'income' → procura em flow_type='income'
+      // 'transfer' → procura em flow_type='transfer_in'
+      // 'reimbursement' / 'refund' → também transfer_in (são reembolsos)
+      const direction =
+        form.nature === "income" ? "inflow_income" : "inflow_transfer";
+      try {
+        const found = await findCashFlowMatchesNow(amountNum, form.reference_month, direction);
+        if (found.length > 0) {
+          setMatches(found);
+          setMatchAmount(amountNum);
+          setMatchDate(form.received_at || new Date().toISOString().split("T")[0]);
+          setMatchDialogOpen(true);
+        }
+      } catch (e) {
+        console.warn("Auto-realize match failed:", e);
+      }
+
       setForm({ source: "", description: "", amount: "", type: "variable", received_at: "", reference_month: month, business_id: "", nature: "income", counts_as_income: true });
     } catch {
       toast({ title: "Erro ao registrar receita", variant: "destructive" });
@@ -672,6 +700,15 @@ export default function RevenuesPage() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Auto-realize: sugere vincular ao cash_flow_items projetado */}
+      <CashFlowMatchDialog
+        open={matchDialogOpen}
+        onOpenChange={setMatchDialogOpen}
+        matches={matches}
+        realizedAmount={matchAmount}
+        realizedAtDate={matchDate}
+      />
     </div>
   );
 }
