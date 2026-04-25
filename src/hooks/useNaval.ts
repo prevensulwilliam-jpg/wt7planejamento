@@ -54,12 +54,16 @@ export function useNavalContext() {
         ? {
             month: formatMonth(month),
             monthKey: month,
-            // IMPORTANTE: totalRevenue = SÓ receita real (counts_as_income=true).
+            // IMPORTANTE: totalRevenue = SÓ receita real (counts_as_income=true)
+            //   + aluguéis kitnets (Modelo A — kitnet_entries.total_liquid).
+            // totalExpenses = custeio_total da Sobra Reinvestida (custeio_expenses
+            //   + custeio_cartao). NÃO usar kpis.totalExpenses, que ignora cartões
+            //   (~74% do custo de vida do William vai por cartões BB+XP).
             // Transferências, reembolsos e estornos estão em entradasNeutras e NÃO
             // contam no denominador da Sobra Reinvestida.
             totalRevenue: kpis.totalRevenue,
-            totalExpenses: kpis.totalExpenses,
-            netResult: kpis.netResult,
+            totalExpenses: sobra ? sobra.custeio_total : kpis.totalExpenses,
+            netResult: kpis.totalRevenue - (sobra ? sobra.custeio_total : kpis.totalExpenses),
             revenueBySource: kpis.revenueBySource,
             expenseByCategory: kpis.expenseByCategory,
             sobraReinvestida: sobra
