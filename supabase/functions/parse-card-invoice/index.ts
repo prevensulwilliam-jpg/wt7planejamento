@@ -343,30 +343,47 @@ serve(async (req) => {
       .eq("card_id", card_id);
     if (exErr) throw exErr;
 
-    const existingFitids = new Set((existing || []).filter(e => e.fitid).map(e => e.fitid));
-    const existingKeys = new Set((existing || []).filter(e => !e.fitid).map(e =>
-      `${e.transaction_date}|${e.description}|${Number(e.amount).toFixed(2)}|${e.cardholder || ""}|${e.installment_current}`
-    ));
+    const normCH = (s: string | null | undefined) => (s || "").trim().toUpperCase();
+    const mkKey = (e: any) =>
+      `${e.transaction_date}|${(e.description || "").trim().toUpperCase()}|${Number(e.amount).toFixed(2)}|${normCH(e.cardholder)}|${e.installment_current}`;
 
-    // 2) Filtra novos
+    const existingFitids = new Set((existing || []).filter(e => e.fitid).map(e => e.fitid));
+    const existingKeys = new Set((existing || []).filter(e => !e.fitid).map(mkKey));
+
+    // 2) Filtra novos (também dedupe dentro do próprio batch)
+    const seenKeys = new Set<string>();
+    const seenFitids = new Set<string>();
     const newRows = rows.filter(r => {
       if (r.fitid) {
-        if (existingFitids.has(r.fitid)) { skipped++; return false; }
+        if (existingFitids.has(r.fitid) || seenFitids.has(r.fitid)) { skipped++; return false; }
+        seenFitids.add(r.fitid);
         return true;
       }
-      const key = `${r.transaction_date}|${r.description}|${Number(r.amount).toFixed(2)}|${r.cardholder || ""}|${r.installment_current}`;
-      if (existingKeys.has(key)) { skipped++; return false; }
+      const key = mkKey(r);
+      if (existingKeys.has(key) || seenKeys.has(key)) { skipped++; return false; }
+      seenKeys.add(key);
       return true;
     });
 
-    // 3) Insert novos
+    // 3) Insert novos (com fallback linha-a-linha em caso de conflito)
     if (newRows.length > 0) {
       const { data, error } = await supabase
         .from("card_transactions")
         .insert(newRows)
         .select("id");
-      if (error) throw error;
-      inserted = data?.length || 0;
+      if (error) {
+        // Fallback: tenta uma a uma, ignorando duplicatas (23505)
+        for (const row of newRows) {
+          const { error: e1 } = await supabase.from("card_transactions").insert(row);
+          if (e1) {
+            if ((e1 as any).code === "23505") { skipped++; continue; }
+            throw e1;
+          }
+          inserted++;
+        }
+      } else {
+        inserted = data?.length || 0;
+      }
     }
 
     return new Response(JSON.stringify({
