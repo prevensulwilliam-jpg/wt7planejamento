@@ -24,11 +24,12 @@ import { getAllPatterns, normalizeDescription, recordClassification } from "@/li
 import { checkRecurrencePromotion } from "@/lib/autoPromoteRecurring";
 import { useCategories } from "@/hooks/useCategories";
 import { formatCurrency, formatDate, formatMonth, getCurrentMonth } from "@/lib/formatters";
-import { Upload, CheckCircle2, XCircle, ArrowLeftRight, FileText, Wifi, Download } from "lucide-react";
+import { Upload, CheckCircle2, XCircle, ArrowLeftRight, FileText, Wifi, Download, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { useBankStatementUpload } from "@/hooks/useBankStatementUpload";
 import { ImportHistoryTab } from "@/components/reconciliation/ImportHistoryTab";
+import { UnreconciledCreditsTab } from "@/components/reconciliation/UnreconciledCreditsTab";
 
 const DESPESA_OPTIONS = [
   { value: "academia", label: "🏋️ Academia/Personal" },
@@ -181,6 +182,9 @@ export default function ReconciliationPage() {
           <TabsTrigger value="reconcile" className="data-[state=active]:text-[#C9A84C]">
             <CheckCircle2 className="w-4 h-4 mr-1" /> Conciliar
           </TabsTrigger>
+          <TabsTrigger value="review" className="data-[state=active]:text-[#C9A84C]">
+            <Sparkles className="w-4 h-4 mr-1" /> Revisar pendentes
+          </TabsTrigger>
           <TabsTrigger value="history" className="data-[state=active]:text-[#C9A84C]">
             <FileText className="w-4 h-4 mr-1" /> Histórico
           </TabsTrigger>
@@ -191,6 +195,9 @@ export default function ReconciliationPage() {
         </TabsContent>
         <TabsContent value="reconcile">
           <ReconcileTab month={month} accounts={accounts} statusFilter={statusFilter} setStatusFilter={setStatusFilter} accountFilter={accountFilter} setAccountFilter={setAccountFilter} />
+        </TabsContent>
+        <TabsContent value="review">
+          <UnreconciledCreditsTab month={month} />
         </TabsContent>
         <TabsContent value="history">
           <ImportHistoryTab accounts={accounts} />
