@@ -36,15 +36,28 @@ export function useSobraReinvestida(month: string) {
     queryKey: ["sobra_reinvestida", month],
     queryFn: async () => {
       // 1. Receitas do mês — SÓ receita real (counts_as_income=true)
-      //    Transferências entre contas, reembolsos e estornos não contam
+      //    Transferências entre contas, reembolsos e estornos não contam.
+      //    + receita kitnets = SUM(kitnet_entries.total_liquid) reconciled
+      //      (Modelo A — William declara, banco valida).
       const { data: revs, error: er } = await supabase
         .from("revenues")
         .select("amount, counts_as_income, nature")
         .eq("reference_month", month);
       if (er) throw er;
-      const receita = (revs || [])
+      const { data: kitEntries, error: ek } = await supabase
+        .from("kitnet_entries")
+        .select("total_liquid, reconciled")
+        .eq("reference_month", month);
+      if (ek) throw ek;
+
+      const receitaAvulsa = (revs || [])
         .filter((r: any) => r.counts_as_income !== false)
         .reduce((s: number, r: any) => s + Number(r.amount), 0);
+      const receitaKitnets = (kitEntries || [])
+        .filter((k: any) => k.reconciled === true)
+        .reduce((s: number, k: any) => s + Number(k.total_liquid ?? 0), 0);
+
+      const receita = receitaAvulsa + receitaKitnets;
       const entradas_neutras = (revs || [])
         .filter((r: any) => r.counts_as_income === false)
         .reduce((s: number, r: any) => s + Number(r.amount), 0);

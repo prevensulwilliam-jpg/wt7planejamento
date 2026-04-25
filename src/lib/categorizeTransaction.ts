@@ -153,6 +153,14 @@ export function categorizeTransaction(
 
   // 3. RECEITA
   if (type === "credit") {
+    // ESTORNO: crédito que anula débito anterior. Não é receita real.
+    // Trigger SQL detect_estorno_pair neutraliza o par automaticamente
+    // quando há 1 débito candidato. Sem match único, fica como
+    // transferência (counts_as_income=false) pra não inflar receita real.
+    if (lower.includes("estorno")) {
+      return { category: "transferencia", intent: "transferencia", confidence: "high", label: "Estorno (PIX/TED)" };
+    }
+
     for (const rule of REVENUE_RULES) {
       if (rule.keywords.some(k => lower.includes(k.normalize("NFD").replace(/[\u0300-\u036f]/g, "")))) {
         return { category: rule.category, intent: "receita", confidence: "high", label: rule.label };

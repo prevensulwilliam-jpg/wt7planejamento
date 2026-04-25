@@ -5,7 +5,7 @@ import { PremiumCard } from "@/components/wt7/PremiumCard";
 import { GoldButton } from "@/components/wt7/GoldButton";
 import { WtBadge } from "@/components/wt7/WtBadge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useRevenues, useCreateRevenue, useDeleteRevenue, useUpdateRevenue, exportCSV } from "@/hooks/useFinances";
+import { useRevenues, useCreateRevenue, useDeleteRevenue, useUpdateRevenue, exportCSV, useKitnetMonthRevenue } from "@/hooks/useFinances";
 import { findCashFlowMatchesNow, type CashFlowMatch } from "@/hooks/useCashFlowMatch";
 import { CashFlowMatchDialog } from "@/components/wt7/CashFlowMatchDialog";
 import { useBusinesses } from "@/hooks/useBusinesses";
@@ -39,6 +39,7 @@ export default function RevenuesPage() {
   const [month, setMonth] = useState(getCurrentMonth());
   const [dialogOpen, setDialogOpen] = useState(false);
   const { data: revenues = [], isLoading } = useRevenues(month);
+  const { data: kitnetRev } = useKitnetMonthRevenue(month);
   const createRevenue = useCreateRevenue();
   const deleteRevenue = useDeleteRevenue();
   const updateRevenue = useUpdateRevenue();
@@ -163,7 +164,14 @@ export default function RevenuesPage() {
     reimbursement: { emoji: "💳", label: "Reembolso", color: "#F59E0B" },
     refund: { emoji: "↩️", label: "Estorno", color: "#94A3B8" },
   };
-  const totalRealIncome = revenues.filter((r: any) => r.counts_as_income !== false).reduce((s, r) => s + (r.amount ?? 0), 0);
+  const totalRealIncomeFromTable = revenues.filter((r: any) => r.counts_as_income !== false).reduce((s, r) => s + (r.amount ?? 0), 0);
+  const totalKitnetRev = kitnetRev?.total ?? 0;
+  const kitnetEntriesCount = kitnetRev?.count ?? 0;
+  const kitnetGap = kitnetRev?.gap ?? 0;
+  const kitnetHasGap = kitnetRev?.hasGap ?? false;
+  const kitnetBankLinked = kitnetRev?.totalBankLinked ?? 0;
+  // Receita real total = lançamentos avulsos + aluguéis kitnets do mês (Modelo A: kitnet_entries é fonte única)
+  const totalRealIncome = totalRealIncomeFromTable + totalKitnetRev;
   const totalNeutral = revenues.filter((r: any) => r.counts_as_income === false).reduce((s, r) => s + (r.amount ?? 0), 0);
 
   const totalMonth = filteredRevenues.reduce((s, r) => s + (r.amount ?? 0), 0);
@@ -379,13 +387,46 @@ export default function RevenuesPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {isLoading ? Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-[120px] rounded-2xl" style={{ background: '#0D1318' }} />) : (
               <>
-                <KpiCard label="Receita Real" value={totalRealIncome} color="gold" />
-                <KpiCard label="Entradas Neutras" value={totalNeutral} color="cyan" />
-                <KpiCard label="Fixas" value={totalFixed} color="green" />
-                <KpiCard label="Quantidade" value={revenues.length} color="cyan" formatAs="number" />
+                <KpiCard label="Receita Real" value={totalRealIncome} color="gold" tooltip={totalKitnetRev > 0 ? `Avulsas: ${formatCurrency(totalRealIncomeFromTable)}\nAluguéis kitnets: ${formatCurrency(totalKitnetRev)}\n(${kitnetEntriesCount} fechamentos)` : "Soma de receitas com counts_as_income=true"} />
+                <KpiCard label="Aluguéis Kitnets" value={totalKitnetRev} color="cyan" tooltip={`${kitnetEntriesCount} fechamentos conciliados (Modelo A)\nFonte: kitnet_entries.total_liquid${kitnetHasGap ? `\n⚠️ banco linkado: ${formatCurrency(kitnetBankLinked)} (gap ${kitnetGap > 0 ? "+" : ""}${formatCurrency(kitnetGap)})` : "\n✓ banco bate com o declarado"}`} />
+                <KpiCard label="Entradas Neutras" value={totalNeutral} color="cyan" tooltip="Transferências, reembolsos, estornos — não contam na Sobra" />
+                <KpiCard label="Quantidade" value={revenues.length + kitnetEntriesCount} color="cyan" formatAs="number" tooltip={`${revenues.length} receitas avulsas + ${kitnetEntriesCount} aluguéis kitnets`} />
               </>
             )}
           </div>
+
+          {/* Banner Modelo A — explica a relação revenues + kitnet_entries */}
+          {kitnetEntriesCount > 0 && (
+            <div className="rounded-xl px-4 py-3 flex items-start gap-3 text-xs"
+              style={{ background: "rgba(45,212,191,0.05)", border: "1px solid rgba(45,212,191,0.2)" }}>
+              <span style={{ color: "#2DD4BF" }}>💡</span>
+              <div className="flex-1 leading-relaxed" style={{ color: "#94A3B8" }}>
+                <span style={{ color: "#F0F4F8", fontWeight: 600 }}>Aluguéis das kitnets vêm da tela /kitnets</span> (Modelo A — fonte única).
+                Este mês: <span className="font-mono" style={{ color: "#2DD4BF" }}>{formatCurrency(totalKitnetRev)}</span> de <span style={{ color: "#F0F4F8" }}>{kitnetEntriesCount} fechamentos conciliados</span> com a Lara (administradora).
+                A tabela abaixo lista apenas receitas <span style={{ color: "#F0F4F8" }}>avulsas</span> (comissões Prevensul, JABPP, NRSX, transferências, etc).
+              </div>
+            </div>
+          )}
+
+          {/* Warning de divergência banco × declarado (linkagem suspeita) */}
+          {kitnetHasGap && (
+            <div className="rounded-xl px-4 py-3 flex items-start gap-3 text-xs"
+              style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.3)" }}>
+              <span style={{ color: "#F59E0B" }}>⚠️</span>
+              <div className="flex-1 leading-relaxed" style={{ color: "#FBD38D" }}>
+                <span style={{ fontWeight: 600 }}>Divergência kitnets × banco:</span>{" "}
+                declarado <span className="font-mono">{formatCurrency(totalKitnetRev)}</span> ·
+                banco linkado <span className="font-mono">{formatCurrency(kitnetBankLinked)}</span> ·
+                gap <span className="font-mono" style={{ color: kitnetGap > 0 ? "#F43F5E" : "#10B981" }}>
+                  {kitnetGap > 0 ? "+" : ""}{formatCurrency(kitnetGap)}
+                </span>.
+                {kitnetGap > 0
+                  ? " Banco infla o declarado — alguma bank_tx pode estar linkada errada a uma kitnet_entry."
+                  : " Banco abaixo do declarado — pode haver fechamento sem depósito vinculado."}
+                {" "}<span style={{ color: "#94A3B8" }}>Verifique em /reconciliation ou /kitnets.</span>
+              </div>
+            </div>
+          )}
 
           {/* Filter bar */}
           <div className="flex items-center gap-3 flex-wrap">

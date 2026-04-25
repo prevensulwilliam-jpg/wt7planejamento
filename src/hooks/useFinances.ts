@@ -149,18 +149,77 @@ export function useUpdateRevenue() {
   });
 }
 
+// ─── ALUGUÉIS KITNETS (Modelo A — fonte única) ───
+// Fonte da verdade = `kitnet_entries.total_liquid` dos fechamentos
+// reconciled (William declara, sistema valida). O banco é validador:
+// se SUM(bank_tx linkadas) ≠ SUM(total_liquid), há linkagem errada
+// (auto-match capturou tx que não era aluguel) ou entry com valor errado.
+//
+//   - total           = soma kitnet_entries.total_liquid reconciled (Modelo A)
+//   - totalBankLinked = soma bank_transactions linkadas (validador)
+//   - gap             = totalBankLinked - total (positivo = banco infla → bug de linkagem)
+export function useKitnetMonthRevenue(month?: string) {
+  return useQuery({
+    queryKey: ["kitnet_month_revenue", month],
+    queryFn: async () => {
+      let qe = supabase
+        .from("kitnet_entries")
+        .select("id, total_liquid, reference_month, kitnet_id, reconciled, received_at");
+      if (month) qe = qe.eq("reference_month", month);
+      const { data: entries, error: ee } = await qe;
+      if (ee) throw ee;
+
+      const all = entries ?? [];
+      const reconciled = all.filter((e: any) => e.reconciled === true);
+      const total = sumMoney(reconciled.map((e: any) => e.total_liquid));
+
+      // Bank_transactions linkadas a entries do mês (validador, não fonte)
+      const allEntryIds = all.map((e: any) => e.id);
+      let totalBankLinked = 0;
+      let bankTxCount = 0;
+      if (allEntryIds.length > 0) {
+        const { data: btxs, error: be } = await supabase
+          .from("bank_transactions")
+          .select("amount, kitnet_entry_id")
+          .in("kitnet_entry_id", allEntryIds);
+        if (be) throw be;
+        bankTxCount = (btxs ?? []).length;
+        totalBankLinked = sumMoney((btxs ?? []).map((b: any) => b.amount));
+      }
+
+      const gap = totalBankLinked - total;
+      const hasGap = Math.abs(gap) > 5; // tolerância R$ 5
+
+      return {
+        total,             // fonte: total_liquid declarado (Modelo A)
+        totalBankLinked,   // validador: soma bank_tx linkadas
+        gap,               // diferença (positivo = banco infla → linkagem errada)
+        hasGap,
+        count: reconciled.length,
+        bankTxCount,
+        entries: reconciled,
+        all,
+      };
+    },
+  });
+}
+
 // ─── KPIs DO DASHBOARD ───
 // Receitas: filtra counts_as_income=true (exclui transfer/reimbursement/refund).
+//           + soma kitnet_entries.total_liquid conciliadas do mês (Modelo A)
 // Despesas: filtra nature='expense' + !is_card_payment + !counts_as_investment
 // (exclui transferência entre contas, pagamento de fatura, aportes).
 export function useDashboardKPIs(month: string) {
   const revenues = useRevenues(month);
   const expenses = useExpenses(month);
+  const kitnetRev = useKitnetMonthRevenue(month);
 
   const actualRevenues = (revenues.data ?? []).filter(isActualIncome);
   const actualExpenses = (expenses.data ?? []).filter(isActualExpense);
 
-  const totalRevenue = sumMoney(actualRevenues.map((r: any) => r.amount));
+  const revenuesTableTotal = sumMoney(actualRevenues.map((r: any) => r.amount));
+  const kitnetTotal = kitnetRev.data?.total ?? 0;
+  const totalRevenue = sumMoney([revenuesTableTotal, kitnetTotal]);
   const totalExpenses = sumMoney(actualExpenses.map((e: any) => e.amount));
   const netResult = totalRevenue - totalExpenses;
 
@@ -169,6 +228,9 @@ export function useDashboardKPIs(month: string) {
     acc[src] = sumMoney([acc[src], r.amount]);
     return acc;
   }, {} as Record<string, number>);
+  if (kitnetTotal > 0) {
+    revenueBySource["aluguel_kitnets"] = sumMoney([revenueBySource["aluguel_kitnets"] ?? 0, kitnetTotal]);
+  }
 
   const expenseByCategory = actualExpenses.reduce((acc, e: any) => {
     const cat = e.category ?? "outros";
@@ -178,11 +240,14 @@ export function useDashboardKPIs(month: string) {
 
   return {
     totalRevenue,
+    revenuesTableTotal,
+    kitnetTotal,
+    kitnetCount: kitnetRev.data?.count ?? 0,
     totalExpenses,
     netResult,
     revenueBySource,
     expenseByCategory,
-    isLoading: revenues.isLoading || expenses.isLoading,
+    isLoading: revenues.isLoading || expenses.isLoading || kitnetRev.isLoading,
   };
 }
 
@@ -197,7 +262,7 @@ export function useRevenueExpenseTrend() {
         d.setMonth(d.getMonth() - i);
         months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
       }
-      const [revRes, expRes] = await Promise.all([
+      const [revRes, expRes, kitRes] = await Promise.all([
         supabase
           .from("revenues")
           .select("amount, reference_month, counts_as_income")
@@ -205,6 +270,10 @@ export function useRevenueExpenseTrend() {
         supabase
           .from("expenses")
           .select("amount, reference_month, nature, is_card_payment, counts_as_investment")
+          .in("reference_month", months),
+        supabase
+          .from("kitnet_entries")
+          .select("total_liquid, reference_month, reconciled")
           .in("reference_month", months),
       ]);
       return months.map(m => {
@@ -216,10 +285,14 @@ export function useRevenueExpenseTrend() {
         const monthExpenses = (expRes.data ?? [])
           .filter((e: any) => e.reference_month === m)
           .filter(isActualExpense);
+        const monthKitnets = (kitRes.data ?? [])
+          .filter((k: any) => k.reference_month === m && k.reconciled === true);
+        const receitaRevenues = sumMoney(monthRevenues.map((r: any) => r.amount));
+        const receitaKitnets = sumMoney(monthKitnets.map((k: any) => k.total_liquid));
         return {
           month: monthNames[parseInt(mm) - 1],
           monthKey: m,
-          receita: sumMoney(monthRevenues.map((r: any) => r.amount)),
+          receita: sumMoney([receitaRevenues, receitaKitnets]),
           despesa: sumMoney(monthExpenses.map((e: any) => e.amount)),
         };
       });
