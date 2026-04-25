@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Gem, X, ArrowUp, ArrowDown, Filter, FileText, Zap } from "lucide-react";
+import { Gem, X, ArrowUp, ArrowDown, Filter, FileText, Zap, Clock } from "lucide-react";
 
 type Card = {
   id: string;
@@ -275,6 +275,49 @@ export default function CardsPage() {
       qc.invalidateQueries({ queryKey: ["card_txs"] });
     },
     onError: (e: any) => toast.error(e.message || "Erro ao fechar fatura"),
+  });
+
+  // Mutation: apagar todas tx da fatura (mantém invoice + closed_at + payments)
+  // Usada pra re-importar OFX/PDF do zero quando dataset tá sujo.
+  const resetInvoice = useMutation({
+    mutationFn: async (invId: string) => {
+      const { error: e1 } = await supabase
+        .from("card_transactions")
+        .delete()
+        .eq("invoice_id", invId);
+      if (e1) throw e1;
+      const { error: e2 } = await supabase
+        .from("card_invoices")
+        .update({ total_amount: 0 })
+        .eq("id", invId);
+      if (e2) throw e2;
+    },
+    onSuccess: () => {
+      toast.success("Tx apagadas — pode reimportar a fatura");
+      qc.invalidateQueries({ queryKey: ["card_txs"] });
+      qc.invalidateQueries({ queryKey: ["card_invoices_closed"] });
+      qc.invalidateQueries({ queryKey: ["card_invoices_in_progress"] });
+      qc.invalidateQueries({ queryKey: ["sobra_reinvestida"] });
+      qc.invalidateQueries({ queryKey: ["cockpit_breakdown"] });
+    },
+    onError: (e: any) => toast.error(e.message || "Erro ao apagar tx"),
+  });
+
+  // Hook: invoices in_progress (Aba 1) — pra mostrar lista com botão "Apagar tx"
+  const { data: inProgressInvoices = [] } = useQuery<ClosedInvoice[]>({
+    queryKey: ["card_invoices_in_progress"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("card_invoices")
+        .select(`
+          id, card_id, reference_month, total_amount, paid_amount, paid_at, closed_at, bank_tx_id,
+          cards ( name, bank )
+        `)
+        .is("closed_at", null)
+        .order("reference_month", { ascending: false });
+      if (error) throw error;
+      return (data || []) as any[];
+    },
   });
 
   // Mutation: reclassificar transação + aprender pattern
@@ -609,6 +652,56 @@ export default function CardsPage() {
             </div>
           </PremiumCard>
         </div>
+      )}
+
+      {/* Faturas em andamento — lista pra resetar/reimportar */}
+      {inProgressInvoices.length > 0 && (
+        <PremiumCard>
+          <div className="p-6">
+            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2" style={{ color: "#F0F4F8" }}>
+              <Clock className="w-4 h-4" style={{ color: "#C9A84C" }} />
+              Faturas em andamento (in_progress)
+            </h2>
+            <p className="text-xs mb-3" style={{ color: "#94A3B8" }}>
+              Faturas do ciclo CORRENTE — sem closed_at. Não entram no custeio.
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-white/10" style={{ color: "#94A3B8" }}>
+                    <th className="text-left py-2 px-2">Cartão</th>
+                    <th className="text-left py-2 px-2">Ref. mês</th>
+                    <th className="text-right py-2 px-2">Total importado</th>
+                    <th className="text-center py-2 px-2">Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {inProgressInvoices.map((inv) => (
+                    <tr key={inv.id} className="border-b border-white/5 hover:bg-white/5" style={{ color: "#F0F4F8" }}>
+                      <td className="py-2 px-2">{inv.cards?.name ?? "—"}</td>
+                      <td className="py-2 px-2 font-mono text-xs">{inv.reference_month}</td>
+                      <td className="py-2 px-2 text-right font-mono">{money(Number(inv.total_amount))}</td>
+                      <td className="py-2 px-2 text-center">
+                        <button
+                          onClick={() => {
+                            if (confirm(`Apagar todas as tx da fatura ${inv.cards?.name} ${inv.reference_month} (in_progress)?\n\nVocê pode reimportar OFX/CSV depois.`)) {
+                              resetInvoice.mutate(inv.id);
+                            }
+                          }}
+                          disabled={resetInvoice.isPending}
+                          className="text-xs px-2 py-1 rounded transition-colors hover:opacity-80"
+                          style={{ background: "rgba(244,63,94,0.1)", border: "1px solid rgba(244,63,94,0.3)", color: "#F43F5E" }}
+                        >
+                          Apagar tx
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </PremiumCard>
       )}
 
       {/* Upload */}
@@ -947,15 +1040,30 @@ export default function CardsPage() {
                               {inv.paid_amount ? money(Number(inv.paid_amount)) : "—"}
                             </td>
                             <td className="py-2 px-2 text-center">
-                              {!isPaid && (
+                              <div className="flex items-center justify-center gap-2">
+                                {!isPaid && (
+                                  <button
+                                    onClick={() => setPayDialogInv(inv)}
+                                    className="text-xs px-2 py-1 rounded transition-colors hover:opacity-80"
+                                    style={{ background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.3)", color: "#10B981" }}
+                                  >
+                                    Marcar pago
+                                  </button>
+                                )}
                                 <button
-                                  onClick={() => setPayDialogInv(inv)}
+                                  onClick={() => {
+                                    if (confirm(`Apagar todas as tx da fatura ${inv.cards?.name} ${inv.reference_month}?\n\nA invoice + closed_at + payments serão preservados. Você pode reimportar.`)) {
+                                      resetInvoice.mutate(inv.id);
+                                    }
+                                  }}
+                                  disabled={resetInvoice.isPending}
                                   className="text-xs px-2 py-1 rounded transition-colors hover:opacity-80"
-                                  style={{ background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.3)", color: "#10B981" }}
+                                  style={{ background: "rgba(244,63,94,0.1)", border: "1px solid rgba(244,63,94,0.3)", color: "#F43F5E" }}
+                                  title="Apaga todas tx da fatura (mantém invoice e payments). Pra reimportar do zero."
                                 >
-                                  Marcar pago
+                                  Apagar tx
                                 </button>
-                              )}
+                              </div>
                             </td>
                           </tr>
                         );
