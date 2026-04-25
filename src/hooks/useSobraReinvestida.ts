@@ -16,6 +16,7 @@ export type SobraSnap = {
   gap_meta: number;              // quanto falta pra bater 50% em R$
   byVector: Record<string, number>;
   card_payments_ignored: number; // R$ em pagamentos de fatura excluídos do cálculo
+  transfers_ignored: number;     // R$ em transferências interconta (entre contas próprias)
   entradas_neutras: number;      // R$ em transferências/reembolsos/estornos (não contam como receita)
 };
 
@@ -63,15 +64,17 @@ export function useSobraReinvestida(month: string) {
         .reduce((s: number, r: any) => s + Number(r.amount), 0);
 
       // 2. Despesas do mês — separar: custeio puro × investimento × pagamento cartão (ignora)
+      //                                × transferência interconta (ignora — entre contas próprias)
       const { data: exps, error: ee } = await supabase
         .from("expenses")
-        .select("amount, counts_as_investment, vector, is_card_payment")
+        .select("amount, counts_as_investment, vector, is_card_payment, nature")
         .eq("reference_month", month);
       if (ee) throw ee;
 
       let custeio_expenses = 0;
       let investimento_expenses = 0;
       let card_payments_ignored = 0;
+      let transfers_ignored = 0;
       const byVector: Record<string, number> = {};
 
       for (const e of exps || []) {
@@ -79,6 +82,10 @@ export function useSobraReinvestida(month: string) {
         if ((e as any).is_card_payment) {
           card_payments_ignored += v;
           continue; // NÃO conta — duplicação com card_transactions
+        }
+        if ((e as any).nature === "transfer") {
+          transfers_ignored += v;
+          continue; // NÃO conta — transferência entre contas próprias do William
         }
         if ((e as any).counts_as_investment) {
           investimento_expenses += v;
@@ -140,6 +147,7 @@ export function useSobraReinvestida(month: string) {
         gap_meta,
         byVector,
         card_payments_ignored,
+        transfers_ignored,
         entradas_neutras,
       };
     },
