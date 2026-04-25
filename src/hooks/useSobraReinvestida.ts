@@ -5,8 +5,8 @@ export type SobraSnap = {
   month: string;
   receita: number;
   custeio_expenses: number;      // despesas tradicionais (tabela expenses, excluindo card_payment e invest)
-  custeio_cartao: number;        // tx de cartão NÃO investimento
-  investimento_cartao: number;   // tx de cartão 💎 (aporte_obra, dev_*, ferramentas, consórcios)
+  custeio_cartao: number;        // faturas PAGAS no mês × tx NÃO investimento (regime caixa)
+  investimento_cartao: number;   // faturas PAGAS no mês × tx 💎 (regime caixa)
   investimento_expenses: number; // despesas marcadas counts_as_investment
   custeio_total: number;
   investimento_total: number;
@@ -18,6 +18,8 @@ export type SobraSnap = {
   card_payments_ignored: number; // R$ em pagamentos de fatura excluídos do cálculo
   transfers_ignored: number;     // R$ em transferências interconta (entre contas próprias)
   entradas_neutras: number;      // R$ em transferências/reembolsos/estornos (não contam como receita)
+  cartao_em_andamento: number;   // R$ na invoice in_progress do mês corrente (não conta no custeio ainda)
+  cartao_a_pagar: number;        // R$ em faturas closed mas não pagas (vão pro custeio quando pagas)
 };
 
 const META_PCT = 50;
@@ -96,24 +98,41 @@ export function useSobraReinvestida(month: string) {
         }
       }
 
-      // 3. Cartões do mês (invoice reference_month)
-      const { data: invs } = await supabase
+      // 3. Cartões — REGIME CAIXA: faturas PAGAS neste mês.
+      //    paid_at no range [mês-01, próximo-mês-01). Invoice in_progress
+      //    e closed-não-paga NÃO entram no custeio (vão em cartao_em_andamento
+      //    e cartao_a_pagar pra exibição informativa).
+      const monthStart = `${month}-01`;
+      const [yy, mm] = month.split("-").map(Number);
+      const nextMonth = mm === 12 ? `${yy + 1}-01-01` : `${yy}-${String(mm + 1).padStart(2, "0")}-01`;
+
+      const { data: paidInvs } = await supabase
         .from("card_invoices")
-        .select("id")
-        .eq("reference_month", month);
-      const invIds = (invs || []).map((i: any) => i.id);
+        .select("id, paid_amount, total_amount")
+        .gte("paid_at", monthStart)
+        .lt("paid_at", nextMonth);
+
+      const paidInvIds = (paidInvs || []).map((i: any) => i.id);
+      // Ratio paid/total pra prorratear caso pagamento parcial (raro, mas blindagem)
+      const ratioByInv: Record<string, number> = {};
+      for (const inv of paidInvs || []) {
+        const total = Number((inv as any).total_amount ?? 0);
+        const paid = Number((inv as any).paid_amount ?? total);
+        ratioByInv[(inv as any).id] = total > 0 ? Math.min(1, paid / total) : 1;
+      }
 
       let custeio_cartao = 0;
       let investimento_cartao = 0;
 
-      if (invIds.length > 0) {
+      if (paidInvIds.length > 0) {
         const { data: txs, error: et } = await supabase
           .from("card_transactions")
-          .select("amount, counts_as_investment, vector")
-          .in("invoice_id", invIds);
+          .select("amount, counts_as_investment, vector, invoice_id")
+          .in("invoice_id", paidInvIds);
         if (et) throw et;
         for (const t of txs || []) {
-          const v = Number((t as any).amount);
+          const ratio = ratioByInv[(t as any).invoice_id] ?? 1;
+          const v = Number((t as any).amount) * ratio;
           if ((t as any).counts_as_investment) {
             investimento_cartao += v;
             const vec = (t as any).vector || "outros_invest";
@@ -121,6 +140,34 @@ export function useSobraReinvestida(month: string) {
           } else {
             custeio_cartao += v;
           }
+        }
+      }
+
+      // 3b. Cartão informativo — em andamento (mês corrente) + a pagar (closed sem paid)
+      //     Não entram no custeio_total. Só pra UI.
+      const { data: openInvs } = await supabase
+        .from("card_invoices")
+        .select("id, total_amount, closed_at, paid_at")
+        .is("paid_at", null);
+
+      let cartao_em_andamento = 0;
+      let cartao_a_pagar = 0;
+      const openIds = (openInvs || []).filter((i: any) => i.closed_at === null).map((i: any) => i.id);
+
+      // Em andamento: soma das tx das invoices in_progress (closed_at null, paid_at null)
+      if (openIds.length > 0) {
+        const { data: openTxs } = await supabase
+          .from("card_transactions")
+          .select("amount, invoice_id")
+          .in("invoice_id", openIds);
+        for (const t of openTxs || []) {
+          cartao_em_andamento += Number((t as any).amount);
+        }
+      }
+      // A pagar: total_amount das invoices closed mas não pagas
+      for (const inv of openInvs || []) {
+        if ((inv as any).closed_at !== null) {
+          cartao_a_pagar += Number((inv as any).total_amount ?? 0);
         }
       }
 
@@ -149,6 +196,8 @@ export function useSobraReinvestida(month: string) {
         card_payments_ignored,
         transfers_ignored,
         entradas_neutras,
+        cartao_em_andamento,
+        cartao_a_pagar,
       };
     },
   });

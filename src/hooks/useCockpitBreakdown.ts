@@ -70,17 +70,48 @@ export function useCockpitBreakdown(month: string) {
         ((kitnetCodes.data ?? []) as any[]).map(k => [k.id, k.code ?? "?"])
       );
 
-      // Cartões do mês
-      const inv = await supabase.from("card_invoices").select("id").eq("reference_month", month);
-      const invIds = ((inv.data ?? []) as any[]).map(i => i.id);
+      // Cartões — REGIME CAIXA: faturas PAGAS neste mês (paid_at no range).
+      // Em andamento (in_progress) e closed-não-pagas ficam de fora.
+      const monthStart = `${month}-01`;
+      const [yy, mm] = month.split("-").map(Number);
+      const nextMonth = mm === 12 ? `${yy + 1}-01-01` : `${yy}-${String(mm + 1).padStart(2, "0")}-01`;
+
+      const paidInvRes = await supabase
+        .from("card_invoices")
+        .select("id, paid_amount, total_amount, paid_at, reference_month")
+        .gte("paid_at", monthStart)
+        .lt("paid_at", nextMonth);
+
+      const paidInvs = (paidInvRes.data ?? []) as any[];
+      const paidInvIds = paidInvs.map(i => i.id);
+
+      // Ratio paid/total pra prorratear caso pagamento parcial
+      const ratioByInv: Record<string, number> = {};
+      for (const inv of paidInvs) {
+        const total = Number(inv.total_amount ?? 0);
+        const paid = Number(inv.paid_amount ?? total);
+        ratioByInv[inv.id] = total > 0 ? Math.min(1, paid / total) : 1;
+      }
+
       let cards: any[] = [];
-      if (invIds.length > 0) {
+      if (paidInvIds.length > 0) {
         const cardRes = await supabase
           .from("card_transactions")
-          .select("id, amount, description, merchant_normalized, transaction_date, vector, counts_as_investment, card_id")
-          .in("invoice_id", invIds);
-        cards = cardRes.data ?? [];
+          .select("id, amount, description, merchant_normalized, transaction_date, vector, counts_as_investment, card_id, invoice_id")
+          .in("invoice_id", paidInvIds);
+        // Aplica ratio na hora — amount já vem prorrateado pra UI
+        cards = (cardRes.data ?? []).map((c: any) => ({
+          ...c,
+          amount: Number(c.amount ?? 0) * (ratioByInv[c.invoice_id] ?? 1),
+        }));
       }
+
+      // Faturas open (informativo — vão como excluded no custeio)
+      const openInvRes = await supabase
+        .from("card_invoices")
+        .select("id, total_amount, closed_at, paid_at, reference_month, card_id, cards ( name, bank )")
+        .is("paid_at", null);
+      const openInvs = (openInvRes.data ?? []) as any[];
 
       // ═══ RECEITA ═══
       const revsAvulsas = ((revRes.data ?? []) as any[]).filter(r => r.counts_as_income !== false);
@@ -181,7 +212,7 @@ export function useCockpitBreakdown(month: string) {
             link: { label: "Ver todas em /expenses", href: "/expenses" },
           },
           {
-            label: "Cartões — custeio",
+            label: "Cartões — faturas pagas no mês (regime caixa)",
             total: custeioCardsTotal,
             count: custeioCardsItems.length,
             items: topN(custeioCardsItems),
@@ -200,6 +231,30 @@ export function useCockpitBreakdown(month: string) {
             total: transfersTotal,
             count: transfersItems.length,
             items: topN(transfersItems, 5),
+          },
+          {
+            label: "Cartões em andamento (mês corrente, ainda consumindo)",
+            total: openInvs.filter(i => i.closed_at === null).reduce((s: number, i: any) => s + Number(i.total_amount ?? 0), 0),
+            count: openInvs.filter(i => i.closed_at === null).length,
+            items: openInvs.filter(i => i.closed_at === null).map((i: any) => ({
+              id: i.id,
+              label: `${i.cards?.name ?? "?"} · ${i.reference_month}`,
+              amount: Number(i.total_amount ?? 0),
+              date: null,
+              source: "in_progress",
+            })),
+          },
+          {
+            label: "Cartões fechados a pagar (entram no custeio quando pagos)",
+            total: openInvs.filter(i => i.closed_at !== null).reduce((s: number, i: any) => s + Number(i.total_amount ?? 0), 0),
+            count: openInvs.filter(i => i.closed_at !== null).length,
+            items: openInvs.filter(i => i.closed_at !== null).map((i: any) => ({
+              id: i.id,
+              label: `${i.cards?.name ?? "?"} · ${i.reference_month}`,
+              amount: Number(i.total_amount ?? 0),
+              date: null,
+              source: "closed",
+            })),
           },
         ],
       };
