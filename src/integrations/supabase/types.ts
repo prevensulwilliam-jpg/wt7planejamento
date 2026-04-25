@@ -453,7 +453,9 @@ export type Database = {
       }
       card_invoices: {
         Row: {
+          bank_tx_id: string | null
           card_id: string
+          closed_at: string | null
           closing_date: string | null
           due_date: string | null
           file_format: string | null
@@ -466,7 +468,9 @@ export type Database = {
           total_amount: number | null
         }
         Insert: {
+          bank_tx_id?: string | null
           card_id: string
+          closed_at?: string | null
           closing_date?: string | null
           due_date?: string | null
           file_format?: string | null
@@ -479,7 +483,9 @@ export type Database = {
           total_amount?: number | null
         }
         Update: {
+          bank_tx_id?: string | null
           card_id?: string
+          closed_at?: string | null
           closing_date?: string | null
           due_date?: string | null
           file_format?: string | null
@@ -492,6 +498,13 @@ export type Database = {
           total_amount?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "card_invoices_bank_tx_id_fkey"
+            columns: ["bank_tx_id"]
+            isOneToOne: false
+            referencedRelation: "bank_transactions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "card_invoices_card_id_fkey"
             columns: ["card_id"]
@@ -700,6 +713,54 @@ export type Database = {
           id?: string
           last4?: string | null
           name?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      cash_flow_items: {
+        Row: {
+          amount: number
+          category: string
+          created_at: string | null
+          display_order: number
+          flow_type: string
+          id: string
+          label: string
+          notes: string | null
+          realized_amount: number | null
+          realized_at: string | null
+          reference_month: string
+          status: string
+          updated_at: string | null
+        }
+        Insert: {
+          amount: number
+          category: string
+          created_at?: string | null
+          display_order?: number
+          flow_type: string
+          id?: string
+          label: string
+          notes?: string | null
+          realized_amount?: number | null
+          realized_at?: string | null
+          reference_month: string
+          status?: string
+          updated_at?: string | null
+        }
+        Update: {
+          amount?: number
+          category?: string
+          created_at?: string | null
+          display_order?: number
+          flow_type?: string
+          id?: string
+          label?: string
+          notes?: string | null
+          realized_amount?: number | null
+          realized_at?: string | null
+          reference_month?: string
+          status?: string
           updated_at?: string | null
         }
         Relationships: []
@@ -1360,32 +1421,44 @@ export type Database = {
         Row: {
           amount: number | null
           category: string | null
+          counts_as_investment: boolean
           created_at: string | null
           description: string | null
           id: string
+          is_card_payment: boolean
+          nature: string
           paid_at: string | null
           reference_month: string | null
           type: string | null
+          vector: string | null
         }
         Insert: {
           amount?: number | null
           category?: string | null
+          counts_as_investment?: boolean
           created_at?: string | null
           description?: string | null
           id?: string
+          is_card_payment?: boolean
+          nature?: string
           paid_at?: string | null
           reference_month?: string | null
           type?: string | null
+          vector?: string | null
         }
         Update: {
           amount?: number | null
           category?: string | null
+          counts_as_investment?: boolean
           created_at?: string | null
           description?: string | null
           id?: string
+          is_card_payment?: boolean
+          nature?: string
           paid_at?: string | null
           reference_month?: string | null
           type?: string | null
+          vector?: string | null
         }
         Relationships: []
       }
@@ -2084,6 +2157,48 @@ export type Database = {
         }
         Relationships: []
       }
+      plan_items: {
+        Row: {
+          amount: number
+          category: string | null
+          created_at: string
+          description: string
+          id: string
+          is_revenue: boolean
+          kind: string
+          locked: boolean
+          month: string
+          notes: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          category?: string | null
+          created_at?: string
+          description: string
+          id?: string
+          is_revenue?: boolean
+          kind: string
+          locked?: boolean
+          month: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          category?: string | null
+          created_at?: string
+          description?: string
+          id?: string
+          is_revenue?: boolean
+          kind?: string
+          locked?: boolean
+          month?: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       pluggy_connections: {
         Row: {
           account_id: string | null
@@ -2381,9 +2496,11 @@ export type Database = {
         Row: {
           amount: number | null
           business_id: string | null
+          counts_as_income: boolean
           created_at: string | null
           description: string | null
           id: string
+          nature: string
           received_at: string | null
           reference_month: string | null
           source: string | null
@@ -2392,9 +2509,11 @@ export type Database = {
         Insert: {
           amount?: number | null
           business_id?: string | null
+          counts_as_income?: boolean
           created_at?: string | null
           description?: string | null
           id?: string
+          nature?: string
           received_at?: string | null
           reference_month?: string | null
           source?: string | null
@@ -2403,9 +2522,11 @@ export type Database = {
         Update: {
           amount?: number | null
           business_id?: string | null
+          counts_as_income?: boolean
           created_at?: string | null
           description?: string | null
           id?: string
+          nature?: string
           received_at?: string | null
           reference_month?: string | null
           source?: string | null
@@ -2454,6 +2575,54 @@ export type Database = {
           reference_year?: number | null
           status?: string | null
           type?: string | null
+        }
+        Relationships: []
+      }
+      travel_plans: {
+        Row: {
+          amount_paid: number
+          counts_as_investment: boolean
+          created_at: string | null
+          destination: string
+          end_date: string | null
+          estimated_cost: number
+          id: string
+          name: string
+          notes: string | null
+          purpose: string
+          start_date: string | null
+          status: string
+          updated_at: string | null
+        }
+        Insert: {
+          amount_paid?: number
+          counts_as_investment?: boolean
+          created_at?: string | null
+          destination: string
+          end_date?: string | null
+          estimated_cost?: number
+          id?: string
+          name: string
+          notes?: string | null
+          purpose?: string
+          start_date?: string | null
+          status?: string
+          updated_at?: string | null
+        }
+        Update: {
+          amount_paid?: number
+          counts_as_investment?: boolean
+          created_at?: string | null
+          destination?: string
+          end_date?: string | null
+          estimated_cost?: number
+          id?: string
+          name?: string
+          notes?: string | null
+          purpose?: string
+          start_date?: string | null
+          status?: string
+          updated_at?: string | null
         }
         Relationships: []
       }
