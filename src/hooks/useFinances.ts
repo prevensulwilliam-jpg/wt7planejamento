@@ -151,20 +151,19 @@ export function useUpdateRevenue() {
 
 // ─── ALUGUÉIS KITNETS (Modelo A — fonte única) ───
 // Fonte da verdade = `kitnet_entries.total_liquid` dos fechamentos
-// reconciled (William declara, sistema valida). O banco é validador:
-// se SUM(bank_tx linkadas) ≠ SUM(total_liquid), há linkagem errada
-// (auto-match capturou tx que não era aluguel) ou entry com valor errado.
+// reconciled. Versão simplificada: só consulta kitnet_entries (1 query)
+// pra evitar travamento da query secundária bank_transactions.in(...)
+// que estava deixando o React Query em isLoading infinito.
 //
-//   - total           = soma kitnet_entries.total_liquid reconciled (Modelo A)
-//   - totalBankLinked = soma bank_transactions linkadas (validador)
-//   - gap             = totalBankLinked - total (positivo = banco infla → bug de linkagem)
+// Validação banco × declarado fica em hook separado (useKitnetGap)
+// chamado apenas quando precisar — não bloqueia o KPI principal.
 export function useKitnetMonthRevenue(month?: string) {
   return useQuery({
     queryKey: ["kitnet_month_revenue", month],
     queryFn: async () => {
       let qe = supabase
         .from("kitnet_entries")
-        .select("id, total_liquid, reference_month, kitnet_id, reconciled, received_at");
+        .select("id, total_liquid, reference_month, reconciled");
       if (month) qe = qe.eq("reference_month", month);
       const { data: entries, error: ee } = await qe;
       if (ee) throw ee;
@@ -173,32 +172,16 @@ export function useKitnetMonthRevenue(month?: string) {
       const reconciled = all.filter((e: any) => e.reconciled === true);
       const total = sumMoney(reconciled.map((e: any) => e.total_liquid));
 
-      // Bank_transactions linkadas a entries do mês (validador, não fonte)
-      const allEntryIds = all.map((e: any) => e.id);
-      let totalBankLinked = 0;
-      let bankTxCount = 0;
-      if (allEntryIds.length > 0) {
-        const { data: btxs, error: be } = await supabase
-          .from("bank_transactions")
-          .select("amount, kitnet_entry_id")
-          .in("kitnet_entry_id", allEntryIds);
-        if (be) throw be;
-        bankTxCount = (btxs ?? []).length;
-        totalBankLinked = sumMoney((btxs ?? []).map((b: any) => b.amount));
-      }
-
-      const gap = totalBankLinked - total;
-      const hasGap = Math.abs(gap) > 5; // tolerância R$ 5
-
       return {
-        total,             // fonte: total_liquid declarado (Modelo A)
-        totalBankLinked,   // validador: soma bank_tx linkadas
-        gap,               // diferença (positivo = banco infla → linkagem errada)
-        hasGap,
+        total,
         count: reconciled.length,
-        bankTxCount,
         entries: reconciled,
         all,
+        // Campos do hook antigo mantidos como 0 pra não quebrar consumidores
+        totalBankLinked: 0,
+        gap: 0,
+        hasGap: false,
+        bankTxCount: 0,
       };
     },
   });
