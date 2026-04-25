@@ -321,14 +321,20 @@ export function useBusinessYTDRealized(year: number) {
 
 // ─── Agregação automática por negócio ────────────────────────────────────────
 // Kitnets: soma kitnet_entries.total_liquid RECONCILED do mês (Modelo A)
-// Demais: soma revenues WHERE business_id = X do mês COM counts_as_income=true
-//         (transferências, reembolsos, estornos NÃO contam como receita do negócio)
-// Override manual: se houver business_revenue_entries do mês, sobrepõe o cálculo
+// Demais: soma revenues WHERE business_id = X do mês:
+//         - amount   = counts_as_income=true (receita REAL — vai pro KPI Realizado)
+//         - neutral  = counts_as_income=false (transfer/reembolso/estorno —
+//                      mostrado no card como informativo, NÃO entra no Realizado)
+// Override manual: se houver business_revenue_entries do mês, sobrepõe cálculo
+//                  do amount (neutral preserva).
+//
+// O campo `neutral` espelha o KPI "Entradas Neutras" do /revenues, mas
+// segmentado por negócio (cada card vê suas próprias).
 export function useBusinessRealized(month: string) {
   return useQuery({
     queryKey: ["business_realized", month],
     queryFn: async () => {
-      const result = new Map<string, { amount: number; source: "auto" | "manual" | "kitnet" }>();
+      const result = new Map<string, { amount: number; neutral: number; source: "auto" | "manual" | "kitnet" }>();
 
       // 1. Kitnets (caso especial — Modelo A: só conta fechamentos reconciled)
       const { data: kitnetBiz } = await (supabase as any)
@@ -341,16 +347,14 @@ export function useBusinessRealized(month: string) {
         const total = ((entries ?? []) as any[])
           .filter(e => e.reconciled === true)
           .reduce((s: number, e: any) => s + Number(e.total_liquid ?? 0), 0);
-        result.set(kitnetBiz.id, { amount: total, source: "kitnet" });
+        result.set(kitnetBiz.id, { amount: total, neutral: 0, source: "kitnet" });
       }
 
-      // 2. Revenues agregados por business_id
+      // 2. Revenues agregados por business_id (com split real × neutral)
       // IMPORTANTE 1: pula revenues linkadas a KITNETS pra evitar dupla contagem
-      //   (KITNETS é agregado por kitnet_entries — revenues são apenas classificação)
-      // IMPORTANTE 2: filtra counts_as_income != false — transferências, reembolsos
-      //   e estornos NÃO são receita real do negócio (mesmo com business_id setado).
-      //   Ex: reembolso Walmir vai pra business_id=KITNETS por categorização, mas
-      //   counts_as_income=false porque é só recuperação de cota de obra.
+      //   no AMOUNT — mas neutral de KITNETS (ex: reembolso Walmir RWT05) é
+      //   contabilizado normalmente pra aparecer no card.
+      // IMPORTANTE 2: separa counts_as_income true (amount) de false (neutral).
       const kitnetBizId = kitnetBiz?.id ?? null;
       const { data: revs, error: revErr } = await (supabase as any)
         .from("revenues")
@@ -360,24 +364,29 @@ export function useBusinessRealized(month: string) {
       if (revErr) throw revErr;
       (revs ?? []).forEach((r: any) => {
         if (!r.business_id) return;
-        if (r.business_id === kitnetBizId) return; // skip — kitnet_entries é fonte da verdade
-        if (r.counts_as_income === false) return;  // skip — entrada neutra (transfer/reembolso/estorno)
-        const existing = result.get(r.business_id);
-        if (existing) {
-          result.set(r.business_id, { amount: existing.amount + Number(r.amount), source: existing.source });
-        } else {
-          result.set(r.business_id, { amount: Number(r.amount), source: "auto" });
+        const isNeutral = r.counts_as_income === false;
+        const isKitnet = r.business_id === kitnetBizId;
+
+        // KITNETS: amount sempre vem de kitnet_entries (Modelo A); só adiciona neutral
+        // Outros: amount soma counts_as_income=true; neutral soma counts_as_income=false
+        const existing = result.get(r.business_id) ?? { amount: 0, neutral: 0, source: "auto" as const };
+        if (isNeutral) {
+          existing.neutral += Number(r.amount);
+        } else if (!isKitnet) {
+          existing.amount += Number(r.amount);
         }
+        result.set(r.business_id, existing);
       });
 
-      // 3. Override manual (business_revenue_entries)
+      // 3. Override manual (business_revenue_entries) — só sobrescreve amount
       const { data: manual } = await (supabase as any)
         .from("business_revenue_entries")
         .select("business_id, amount_william")
         .eq("reference_month", month);
       (manual ?? []).forEach((m: any) => {
-        // Override TOTAL (não soma) quando há manual
-        result.set(m.business_id, { amount: Number(m.amount_william), source: "manual" });
+        // Override TOTAL do amount (não soma); preserva neutral acumulado
+        const existing = result.get(m.business_id) ?? { amount: 0, neutral: 0, source: "manual" as const };
+        result.set(m.business_id, { amount: Number(m.amount_william), neutral: existing.neutral, source: "manual" });
       });
 
       return result;

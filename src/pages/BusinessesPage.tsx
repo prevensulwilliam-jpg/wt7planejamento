@@ -552,6 +552,14 @@ export default function BusinessesPage() {
     return map;
   }, [realizedMap]);
 
+  // Lookup de entradas neutras do mês por business (transfer/reembolso/estorno)
+  // Espelha lógica do KPI "Entradas Neutras" em /revenues, mas segmentado por negócio.
+  const neutralByBiz = useMemo(() => {
+    const map = new Map<string, number>();
+    realizedMap.forEach((v: any, k: string) => map.set(k, v.neutral ?? 0));
+    return map;
+  }, [realizedMap]);
+
   const sourceByBiz = useMemo(() => {
     const map = new Map<string, string>();
     realizedMap.forEach((v: any, k: string) => map.set(k, v.source));
@@ -568,6 +576,7 @@ export default function BusinessesPage() {
   const totals = useMemo(() => {
     let targetMonth = 0, realizedMonth = 0, targetYearEnd = 0;
     let realizedYTD = 0, expectedYTD = 0;
+    let neutralMonth = 0;
     let earliestTargetDate: string | null = null;
     const monthsElapsed = parseInt(month.split("-")[1]); // 1=jan, 4=abr, etc
     businesses.forEach(b => {
@@ -575,6 +584,7 @@ export default function BusinessesPage() {
         targetMonth   += Number(b.monthly_target);
         targetYearEnd += Number(b.target_year_end);
         realizedMonth += revenueByBiz.get(b.id) ?? 0;
+        neutralMonth  += neutralByBiz.get(b.id) ?? 0;
         realizedYTD   += (ytdMap as Map<string, number>).get(b.id) ?? 0;
         expectedYTD   += Number(b.monthly_target) * monthsElapsed;
         const dt = b.target_year_end_date;
@@ -590,12 +600,12 @@ export default function BusinessesPage() {
       monthsToTarget = (targetDt.getFullYear() - nowDt.getFullYear()) * 12 + (targetDt.getMonth() - nowDt.getMonth());
     }
     return {
-      targetMonth, realizedMonth, targetYearEnd,
+      targetMonth, realizedMonth, neutralMonth, targetYearEnd,
       realizedYTD, expectedYTD,
       earliestTargetDate, monthsToTarget,
       pct: targetMonth > 0 ? (realizedMonth / targetMonth) * 100 : 0,
     };
-  }, [businesses, revenueByBiz, ytdMap, month]);
+  }, [businesses, revenueByBiz, neutralByBiz, ytdMap, month]);
 
   const grouped = useMemo(() => {
     const g: Record<string, Business[]> = { recorrente: [], crescimento: [], incubado: [] };
@@ -682,6 +692,7 @@ export default function BusinessesPage() {
 
   const renderCard = (b: Business) => {
     const realized = revenueByBiz.get(b.id) ?? 0;
+    const neutral = neutralByBiz.get(b.id) ?? 0;
     const target = b.monthly_target;
     const pct = target > 0 ? Math.min((realized / target) * 100, 200) : 0;
     const pctDisplay = target > 0 ? (realized / target) * 100 : 0;
@@ -802,6 +813,22 @@ export default function BusinessesPage() {
           </>
         )}
 
+        {/* Entradas neutras (transferências, reembolsos, estornos) — não contam
+            como realizado, mas mostradas pra rastreabilidade. Espelha lógica do
+            KPI "Entradas Neutras" do /revenues, segmentado por negócio. */}
+        {neutral > 0 && (
+          <div
+            className="mt-2 pt-2 text-xs flex justify-between items-center gap-2"
+            style={{ color: "#64748B", borderTop: "1px solid #1A2535" }}
+            title="Transferências, reembolsos e estornos — não somam no Realizado, apenas registrados pra rastreabilidade"
+          >
+            <span className="flex items-center gap-1">
+              <span className="text-[10px] px-1 rounded" style={{ background: "rgba(45,212,191,0.12)", color: "#2DD4BF" }}>🔁 entradas neutras</span>
+            </span>
+            <span className="font-mono" style={{ color: "#2DD4BF" }}>+{formatCurrency(neutral)}</span>
+          </div>
+        )}
+
         {b.target_year_end > 0 && (
           <div className="mt-2 pt-2 text-xs flex justify-between" style={{ color: "#64748B", borderTop: "1px solid #1A2535" }}>
             <span>
@@ -874,6 +901,22 @@ export default function BusinessesPage() {
             tooltip={`Soma realizado jan-${month.split("-")[1]}/${currentYear}\nEsperado conservador: ${totals.expectedYTD > 0 ? "R$ " + totals.expectedYTD.toLocaleString("pt-BR", { minimumFractionDigits: 2 }) : "—"}\n(monthly_target × meses decorridos)`}
           />
         </div>
+
+        {/* Banner: entradas neutras consolidadas (transfer/reembolso/estorno) */}
+        {totals.neutralMonth > 0 && (
+          <div
+            className="rounded-xl px-4 py-2.5 flex items-center gap-3 text-xs"
+            style={{ background: "rgba(45,212,191,0.06)", border: "1px solid rgba(45,212,191,0.25)" }}
+          >
+            <span style={{ color: "#2DD4BF" }}>🔁</span>
+            <div className="flex-1" style={{ color: "#94A3B8" }}>
+              <span style={{ color: "#F0F4F8", fontWeight: 600 }}>Entradas neutras do mês: </span>
+              <span className="font-mono" style={{ color: "#2DD4BF" }}>{formatCurrency(totals.neutralMonth)}</span>
+              <span> — transferências interconta, reembolsos de sócio, estornos. </span>
+              <span style={{ color: "#64748B" }}>Não somam no Realizado, só rastreabilidade.</span>
+            </div>
+          </div>
+        )}
 
         {/* Alerta data alvo vencida */}
         {totals.earliestTargetDate && totals.monthsToTarget < 0 && (
