@@ -320,8 +320,9 @@ export function useBusinessYTDRealized(year: number) {
 }
 
 // ─── Agregação automática por negócio ────────────────────────────────────────
-// Kitnets: soma kitnet_entries.total_liquid do mês
-// Demais: soma revenues WHERE business_id = X do mês
+// Kitnets: soma kitnet_entries.total_liquid RECONCILED do mês (Modelo A)
+// Demais: soma revenues WHERE business_id = X do mês COM counts_as_income=true
+//         (transferências, reembolsos, estornos NÃO contam como receita do negócio)
 // Override manual: se houver business_revenue_entries do mês, sobrepõe o cálculo
 export function useBusinessRealized(month: string) {
   return useQuery({
@@ -329,29 +330,38 @@ export function useBusinessRealized(month: string) {
     queryFn: async () => {
       const result = new Map<string, { amount: number; source: "auto" | "manual" | "kitnet" }>();
 
-      // 1. Kitnets (caso especial)
+      // 1. Kitnets (caso especial — Modelo A: só conta fechamentos reconciled)
       const { data: kitnetBiz } = await (supabase as any)
         .from("businesses").select("id").eq("code", "KITNETS").maybeSingle();
       if (kitnetBiz?.id) {
         const { data: entries } = await (supabase as any)
-          .from("kitnet_entries").select("total_liquid").eq("reference_month", month);
-        const total = (entries ?? []).reduce((s: number, e: any) => s + Number(e.total_liquid ?? 0), 0);
+          .from("kitnet_entries")
+          .select("total_liquid, reconciled")
+          .eq("reference_month", month);
+        const total = ((entries ?? []) as any[])
+          .filter(e => e.reconciled === true)
+          .reduce((s: number, e: any) => s + Number(e.total_liquid ?? 0), 0);
         result.set(kitnetBiz.id, { amount: total, source: "kitnet" });
       }
 
       // 2. Revenues agregados por business_id
-      // IMPORTANTE: pula revenues linkadas a KITNETS pra evitar dupla contagem
-      // (KITNETS é agregado por kitnet_entries — revenues são apenas classificação)
+      // IMPORTANTE 1: pula revenues linkadas a KITNETS pra evitar dupla contagem
+      //   (KITNETS é agregado por kitnet_entries — revenues são apenas classificação)
+      // IMPORTANTE 2: filtra counts_as_income != false — transferências, reembolsos
+      //   e estornos NÃO são receita real do negócio (mesmo com business_id setado).
+      //   Ex: reembolso Walmir vai pra business_id=KITNETS por categorização, mas
+      //   counts_as_income=false porque é só recuperação de cota de obra.
       const kitnetBizId = kitnetBiz?.id ?? null;
       const { data: revs, error: revErr } = await (supabase as any)
         .from("revenues")
-        .select("business_id, amount")
+        .select("business_id, amount, counts_as_income")
         .eq("reference_month", month)
         .not("business_id", "is", null);
       if (revErr) throw revErr;
       (revs ?? []).forEach((r: any) => {
         if (!r.business_id) return;
         if (r.business_id === kitnetBizId) return; // skip — kitnet_entries é fonte da verdade
+        if (r.counts_as_income === false) return;  // skip — entrada neutra (transfer/reembolso/estorno)
         const existing = result.get(r.business_id);
         if (existing) {
           result.set(r.business_id, { amount: existing.amount + Number(r.amount), source: existing.source });
