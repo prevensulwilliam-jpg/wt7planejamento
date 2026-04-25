@@ -75,8 +75,8 @@ export default function HojePage() {
       list.push({
         id: "kit-orphans",
         level: "warn",
-        msg: `${kitnetOrphans.count} depósito${kitnetOrphans.count > 1 ? "s" : ""} de kitnet aguardando fechamento do ADM — ${formatCurrency(kitnetOrphans.total)}`,
-        href: `/kitnets?tab=entries&month=${month}`,
+        msg: `${kitnetOrphans.count} receita${kitnetOrphans.count > 1 ? "s" : ""} marcada${kitnetOrphans.count > 1 ? "s" : ""} como aluguel sem fechamento correspondente em /kitnets — ${formatCurrency(kitnetOrphans.total)}. Pode ser duplicata ou classificação errada.`,
+        href: `/reconciliation?tab=review&month=${month}`,
       });
     }
     if (reconc && reconc.unlinkedCount > 0) {

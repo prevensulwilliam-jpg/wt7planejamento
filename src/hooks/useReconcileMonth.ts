@@ -198,30 +198,30 @@ export function useReconcileMonth() {
 }
 
 /**
- * Query leve pra mostrar o warning "X depósitos de kitnet sem fechamento"
- * no banner do /businesses sem precisar rodar o pipeline completo.
+ * Query leve pra mostrar o warning "X aluguéis sem fechamento mensal".
+ *
+ * Critério de "órfão" (Modelo A):
+ *   - source IN ('aluguel_kitnets', 'kitnets')   ← só aluguel literal
+ *   - counts_as_income != false                   ← exclui reembolsos/transferências
+ *   - amount NÃO bate com nenhum kitnet_entries.total_liquid do mês
+ *
+ * Reembolsos de sócio (ex: Walmir RWT05), cauções, multas — mesmo com
+ * business_id=KITNETS — NÃO são aluguel mensal e por isso NÃO viram alerta.
+ * Esses são repasses extras legítimos fora do fechamento.
  */
 export function useKitnetOrphans(month: string) {
   return useQuery({
     queryKey: ["kitnet_orphans", month],
     queryFn: async () => {
-      // Resolver id do business KITNETS
-      const { data: biz } = await supabase
-        .from("businesses" as any)
-        .select("id")
-        .eq("code", "KITNETS")
-        .maybeSingle();
-      const kitnetsBizId = (biz as any)?.id ?? null;
-
-      // Buscar TODAS as revenues do mês e filtrar por business_id=KITNETS OU source
       const { data: allRevs } = await supabase
         .from("revenues")
-        .select("id, amount, description, received_at, business_id, source")
+        .select("id, amount, description, received_at, business_id, source, counts_as_income, nature")
         .eq("reference_month", month);
 
+      // Filtra SÓ aluguel literal (não reembolso/multa/caução)
       const revs = ((allRevs as any[]) ?? []).filter(r =>
-        (kitnetsBizId && r.business_id === kitnetsBizId) ||
-        ["aluguel_kitnets", "kitnets"].includes(r.source)
+        ["aluguel_kitnets", "kitnets"].includes(r.source) &&
+        r.counts_as_income !== false
       );
 
       const { data: entries } = await supabase
