@@ -224,11 +224,15 @@ serve(async (req) => {
     const closing_day = cardData.closing_day || 25;
     const due_day = cardData.due_day || 5;
 
-    // 3) Determinar reference_month = mês do próximo due_day após a maxDate
-    // Regra simples: a fatura é a que vence no próximo due_day depois da transação mais recente.
-    //  - BB maxDate=06/abr, due=10 → próximo dia 10 = 10/abr → ref=2026-04
-    //  - BB maxDate=11/abr, due=10 → próximo dia 10 = 10/mai → ref=2026-05
-    //  - XP maxDate=17/abr, due=25 → próximo dia 25 = 25/abr → ref=2026-04
+    // 3) Determinar reference_month
+    //
+    // Modo "closed" (closed_at enviado pela Aba "Faturas fechadas"):
+    //   Usa maxDate das tx — fatura é a que vence no próximo due_day após a tx mais recente.
+    //
+    // Modo "in_progress" (sem closed_at, Aba "Compras em andamento"):
+    //   Calcula baseado em TODAY + closing_day — fatura é a que está atualmente consumindo o limite.
+    //   Resolve bug onde CSV "Fatura2026-05-25" tinha maxDate=23/04 e ia pra ref 2026-04 errado.
+
     function computeDueMonth(refDate: string): string {
       const [y, m, d] = refDate.split("-").map(Number);
       let venc_y = y, venc_m = m;
@@ -239,14 +243,42 @@ serve(async (req) => {
       return `${venc_y}-${String(venc_m).padStart(2, "0")}`;
     }
 
+    function computeInProgressRef(): string {
+      // Ciclo atual termina no próximo closing_day. Vencimento depois disso.
+      const now = new Date();
+      const today_d = now.getDate();
+      let cycleEnd_y = now.getFullYear();
+      let cycleEnd_m = now.getMonth() + 1; // 1-12
+
+      // Se hoje já passou do closing_day deste mês, ciclo atual termina próximo mês
+      if (today_d > closing_day) {
+        cycleEnd_m += 1;
+        if (cycleEnd_m > 12) { cycleEnd_m = 1; cycleEnd_y += 1; }
+      }
+
+      // Vencimento: se due_day < closing_day → mês seguinte ao fechamento (ex: BB closing=29 due=10)
+      //             senão → mesmo mês (ex: XP closing=19 due=25)
+      let venc_y = cycleEnd_y, venc_m = cycleEnd_m;
+      if (due_day < closing_day) {
+        venc_m += 1;
+        if (venc_m > 12) { venc_m = 1; venc_y += 1; }
+      }
+
+      return `${venc_y}-${String(venc_m).padStart(2, "0")}`;
+    }
+
     let ref: string;
     if (reference_month) {
       ref = reference_month;
-    } else {
+    } else if (closed_at) {
+      // Aba "Faturas fechadas" — usa maxDate (lógica antiga)
       const nonParc = txs.filter(t => t.installment_total === 1);
       const pool = nonParc.length > 0 ? nonParc : txs;
       const maxDate = pool.map(t => t.transaction_date).sort().at(-1)!;
       ref = computeDueMonth(maxDate);
+    } else {
+      // Aba "Compras em andamento" — usa today + closing_day
+      ref = computeInProgressRef();
     }
 
     // 3) Upsert invoice (manual — select + update/insert)
@@ -391,11 +423,27 @@ serve(async (req) => {
       }
     }
 
+    // 4) Recalcular total_amount = SUM(amount) das tx atuais da invoice.
+    //    Resolve bug onde total_amount era sobrescrito com sum(current import) e
+    //    perdia tx pré-existentes (ex: 89 tx existentes + 25 novas = 114, mas
+    //    total ficava só com sum das 25 novas).
+    const { data: invSumRows } = await supabase
+      .from("card_transactions")
+      .select("amount")
+      .eq("invoice_id", invoice.id);
+    const recalculatedTotal = (invSumRows || []).reduce((s, r: any) => s + Number(r.amount ?? 0), 0);
+    if (Math.abs(recalculatedTotal - total_amount) > 0.01) {
+      await supabase
+        .from("card_invoices")
+        .update({ total_amount: recalculatedTotal })
+        .eq("id", invoice.id);
+    }
+
     return new Response(JSON.stringify({
       ok: true,
       invoice_id: invoice.id,
       reference_month: ref,
-      total_amount,
+      total_amount: recalculatedTotal,
       parsed: txs.length,
       inserted,
       skipped,
