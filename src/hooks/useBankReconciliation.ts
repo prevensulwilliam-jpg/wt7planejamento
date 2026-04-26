@@ -153,10 +153,14 @@ export function useAutoMatchKitnets() {
 
       if (!kitnetEntries?.length) return { matched: 0 };
 
-      const { data: alreadyLinked } = await supabase
-        .from("bank_transactions")
-        .select("kitnet_entry_id")
-        .not("kitnet_entry_id", "is", null);
+      // Restringe aos kitnet_entries do mês (evita full-table-scan em bank_transactions)
+      const monthEntryIds = (kitnetEntries ?? []).map((e: any) => e.id);
+      const { data: alreadyLinked } = monthEntryIds.length > 0
+        ? await supabase
+            .from("bank_transactions")
+            .select("kitnet_entry_id")
+            .in("kitnet_entry_id", monthEntryIds)
+        : { data: [] as any[] };
 
       const usedEntryIds = new Set((alreadyLinked ?? []).map((t: any) => t.kitnet_entry_id));
       const availableEntries = (kitnetEntries ?? []).filter(e => !usedEntryIds.has(e.id));
