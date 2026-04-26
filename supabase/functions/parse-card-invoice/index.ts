@@ -176,6 +176,7 @@ function normalizeMerchant(desc: string): string {
 
 // ── Handler ─────────────────────────────────────────────────────
 serve(async (req) => {
+  console.log("[parse-card-invoice] Request received", { method: req.method, url: req.url });
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
@@ -183,9 +184,19 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
+    console.log("[parse-card-invoice] Supabase client created");
 
-    const { card_id, file_format, file_content, reference_month, file_url, closed_at } = await req.json();
+    const body = await req.json();
+    console.log("[parse-card-invoice] Body parsed", {
+      has_card_id: !!body.card_id,
+      file_format: body.file_format,
+      file_content_length: body.file_content?.length ?? 0,
+      reference_month: body.reference_month,
+      has_closed_at: !!body.closed_at,
+    });
+    const { card_id, file_format, file_content, reference_month, file_url, closed_at } = body;
     if (!card_id || !file_format || !file_content) {
+      console.warn("[parse-card-invoice] Missing params");
       return new Response(JSON.stringify({ ok: false, error: "missing_params" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
@@ -194,6 +205,7 @@ serve(async (req) => {
     let txs: ParsedTx[] = [];
     let cycleEndDate: string | undefined;  // YYYY-MM-DD do fim do ciclo
 
+    console.log(`[parse-card-invoice] Parsing ${file_format}...`);
     if (file_format === "ofx") {
       const { txs: parsed, dtend } = parseOFX(file_content);
       txs = parsed;
@@ -208,8 +220,10 @@ serve(async (req) => {
       return new Response(JSON.stringify({ ok: false, error: "invalid_format" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+    console.log(`[parse-card-invoice] Parsed ${txs.length} txs`);
 
     if (txs.length === 0) {
+      console.warn("[parse-card-invoice] No transactions found");
       return new Response(JSON.stringify({ ok: false, error: "no_transactions_found" }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
@@ -220,9 +234,13 @@ serve(async (req) => {
       .select("closing_day, due_day")
       .eq("id", card_id)
       .single();
-    if (cardErr) throw cardErr;
+    if (cardErr) {
+      console.error("[parse-card-invoice] Card fetch error:", cardErr);
+      throw cardErr;
+    }
     const closing_day = cardData.closing_day || 25;
     const due_day = cardData.due_day || 5;
+    console.log(`[parse-card-invoice] Card: closing=${closing_day}, due=${due_day}`);
 
     // 3) Determinar reference_month
     //
@@ -280,6 +298,7 @@ serve(async (req) => {
       // Aba "Compras em andamento" — usa today + closing_day
       ref = computeInProgressRef();
     }
+    console.log(`[parse-card-invoice] reference_month resolved: ${ref}`);
 
     // 3) Upsert invoice — ISOLA in_progress × closed pra não corromper.
     //    Aba "Em andamento" (sem closed_at): só busca/cria invoice closed_at IS NULL
@@ -296,7 +315,12 @@ serve(async (req) => {
     } else {
       existingInvQuery = existingInvQuery.not("closed_at", "is", null);
     }
-    const { data: existingInv } = await existingInvQuery.maybeSingle();
+    const { data: existingInv, error: existingInvErr } = await existingInvQuery.maybeSingle();
+    if (existingInvErr) {
+      console.error("[parse-card-invoice] existingInv query error:", existingInvErr);
+      throw existingInvErr;
+    }
+    console.log(`[parse-card-invoice] existingInv: ${existingInv ? "found" : "not found"}, isInProgressUpload=${isInProgressUpload}`);
 
     // Se closed_at foi enviado (upload pela Aba "Faturas fechadas"), seta na invoice.
     // Caso contrário (Aba "Em andamento"), mantém NULL.
@@ -430,6 +454,7 @@ serve(async (req) => {
         inserted = data?.length || 0;
       }
     }
+    console.log(`[parse-card-invoice] Insert done: ${inserted} new, ${skipped} skipped`);
 
     // 4) Recalcular total_amount = SUM(amount) das tx atuais da invoice.
     //    Resolve bug onde total_amount era sobrescrito com sum(current import) e
