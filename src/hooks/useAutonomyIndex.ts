@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { isReconciledKitnetEntry, isActualIncomeRevenue } from "@/lib/financialPredicates";
 
 export type AutonomySnapshot = {
   month: string;
@@ -28,22 +29,26 @@ async function computeSnapshot(month: string): Promise<AutonomySnapshot> {
   // 2) Realizado por business (espelha useBusinessRealized)
   const realized = new Map<string, number>();
 
-  // 2a) Kitnets via kitnet_entries
+  // 2a) Kitnets via kitnet_entries — Modelo A (só fechamentos reconciliados)
   const kitnetBiz = (bizs ?? []).find((b: any) => b.code === "KITNETS");
   if (kitnetBiz) {
     const { data: entries } = await (supabase as any)
-      .from("kitnet_entries").select("total_liquid").eq("reference_month", month);
-    const total = (entries ?? []).reduce((s: number, e: any) => s + Number(e.total_liquid ?? 0), 0);
+      .from("kitnet_entries")
+      .select("total_liquid, reconciled")
+      .eq("reference_month", month);
+    const total = (entries ?? [])
+      .filter(isReconciledKitnetEntry)
+      .reduce((s: number, e: any) => s + Number(e.total_liquid ?? 0), 0);
     realized.set(kitnetBiz.id, total);
   }
 
-  // 2b) Demais via revenues (exceto KITNETS pra não duplicar)
+  // 2b) Demais via revenues (exceto KITNETS pra não duplicar) — exclui entradas neutras
   const { data: revs } = await (supabase as any)
     .from("revenues")
-    .select("business_id, amount")
+    .select("business_id, amount, counts_as_income")
     .eq("reference_month", month)
     .not("business_id", "is", null);
-  (revs ?? []).forEach((r: any) => {
+  (revs ?? []).filter(isActualIncomeRevenue).forEach((r: any) => {
     if (!r.business_id || r.business_id === kitnetBiz?.id) return;
     realized.set(r.business_id, (realized.get(r.business_id) ?? 0) + Number(r.amount ?? 0));
   });

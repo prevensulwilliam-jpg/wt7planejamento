@@ -1,5 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  isReconciledKitnetEntry,
+  isActualIncomeRevenue,
+  isNeutralRevenue,
+  isCountableCardTx,
+} from "@/lib/financialPredicates";
 
 export type SobraSnap = {
   month: string;
@@ -44,7 +50,7 @@ export function useSobraReinvestida(month: string) {
       //      (Modelo A — William declara, banco valida).
       const { data: revs, error: er } = await supabase
         .from("revenues")
-        .select("amount, counts_as_income, nature")
+        .select("amount, counts_as_income, nature, source")
         .eq("reference_month", month);
       if (er) throw er;
       const { data: kitEntries, error: ek } = await supabase
@@ -53,16 +59,19 @@ export function useSobraReinvestida(month: string) {
         .eq("reference_month", month);
       if (ek) throw ek;
 
+      // Defensive Modelo A: exclui revenues source='aluguel_kitnets' pra não duplicar
+      // com kitnet_entries (kitnets são fonte ÚNICA via tela /kitnets).
       const receitaAvulsa = (revs || [])
-        .filter((r: any) => r.counts_as_income !== false)
+        .filter(isActualIncomeRevenue)
+        .filter((r: any) => r.source !== "aluguel_kitnets")
         .reduce((s: number, r: any) => s + Number(r.amount), 0);
       const receitaKitnets = (kitEntries || [])
-        .filter((k: any) => k.reconciled === true)
+        .filter(isReconciledKitnetEntry)
         .reduce((s: number, k: any) => s + Number(k.total_liquid ?? 0), 0);
 
       const receita = receitaAvulsa + receitaKitnets;
       const entradas_neutras = (revs || [])
-        .filter((r: any) => r.counts_as_income === false)
+        .filter(isNeutralRevenue)
         .reduce((s: number, r: any) => s + Number(r.amount), 0);
 
       // 2. Despesas do mês — separar: custeio puro × investimento × pagamento cartão (ignora)
@@ -131,8 +140,7 @@ export function useSobraReinvestida(month: string) {
           .in("invoice_id", paidInvIds);
         if (et) throw et;
         for (const t of txs || []) {
-          // Categoria "🚫 Ignorar" — não conta nem custeio nem investimento
-          if ((t as any).custom_categories?.slug === "ignorar") continue;
+          if (!isCountableCardTx(t as any)) continue; // exclui categoria 'ignorar'
           const ratio = ratioByInv[(t as any).invoice_id] ?? 1;
           const v = Number((t as any).amount) * ratio;
           if ((t as any).counts_as_investment) {
@@ -164,7 +172,7 @@ export function useSobraReinvestida(month: string) {
           .select("amount, invoice_id, custom_categories ( slug )")
           .in("invoice_id", openIds);
         for (const t of openTxs || []) {
-          if ((t as any).custom_categories?.slug === "ignorar") continue;
+          if (!isCountableCardTx(t as any)) continue;
           cartao_em_andamento += Number((t as any).amount);
         }
       }
