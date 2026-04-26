@@ -268,7 +268,9 @@ export default function CardsPage() {
     onSuccess: () => {
       toast.success("Fatura fechada — agora aparece na aba 'Faturas fechadas'");
       qc.invalidateQueries({ queryKey: ["card_invoices_closed"] });
-      qc.invalidateQueries({ queryKey: ["card_txs"] });
+      qc.invalidateQueries({ queryKey: ["card_invoices_in_progress"] });
+      qc.invalidateQueries({ queryKey: ["card_txs_in_progress"] });
+      qc.invalidateQueries({ queryKey: ["card_txs_closed"] });
     },
     onError: (e: any) => toast.error(e.message || "Erro ao fechar fatura"),
   });
@@ -281,7 +283,8 @@ export default function CardsPage() {
     },
     onSuccess: () => {
       toast.success("Fatura excluída completamente");
-      qc.invalidateQueries({ queryKey: ["card_txs"] });
+      qc.invalidateQueries({ queryKey: ["card_txs_in_progress"] });
+      qc.invalidateQueries({ queryKey: ["card_txs_closed"] });
       qc.invalidateQueries({ queryKey: ["card_invoices_closed"] });
       qc.invalidateQueries({ queryKey: ["card_invoices_in_progress"] });
       qc.invalidateQueries({ queryKey: ["sobra_reinvestida"] });
@@ -381,8 +384,10 @@ export default function CardsPage() {
     },
     onSuccess: (_, { category }) => {
       toast.success(`Categoria → ${category.emoji || ""} ${category.name}`);
-      qc.invalidateQueries({ queryKey: ["card_txs"] });
+      qc.invalidateQueries({ queryKey: ["card_txs_in_progress"] });
+      qc.invalidateQueries({ queryKey: ["card_txs_closed"] });
       qc.invalidateQueries({ queryKey: ["sobra_reinvestida"] });
+      qc.invalidateQueries({ queryKey: ["cockpit_breakdown"] });
     },
     onError: (e: any) => toast.error(e.message || "Erro ao reclassificar"),
   });
