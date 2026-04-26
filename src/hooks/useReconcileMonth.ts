@@ -73,6 +73,19 @@ export function useReconcileMonth() {
         let expenseId: string | null = null;
 
         if (isAuto && result.intent === "receita" && !tx.matched_revenue_id) {
+          // Defensive Modelo A: aluguéis vêm SOMENTE de kitnet_entries (tela /kitnets).
+          // Se categorizer sugeriu aluguel_kitnets, NÃO cria revenue (evita duplicação).
+          // Deixa bank_tx pending pra William linkar manual em /kitnets.
+          if (result.category === "aluguel_kitnets") {
+            await supabase.from("bank_transactions" as any).update({
+              category_suggestion: result.category,
+              category_intent: result.intent,
+              status: "pending",
+            }).eq("id", tx.id);
+            recategorized++;
+            continue;
+          }
+
           const { data, error } = await supabase.from("revenues").insert({
             source: result.category,
             description: tx.description,

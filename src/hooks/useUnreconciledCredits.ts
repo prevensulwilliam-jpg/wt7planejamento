@@ -126,16 +126,20 @@ export function useApplySuggestion() {
     }) => {
       const { bankTxId, bankTxDescription, bankTxAmount, bankTxDate, category, intent, label, tenant, kitnet_code } = input;
 
+      // Defensive Modelo A: aluguéis vêm SOMENTE de kitnet_entries (tela /kitnets).
+      // Se William escolher aluguel_kitnets aqui, criaria revenue duplicada.
+      // Bloqueia e direciona pra /kitnets.
+      if (category === "aluguel_kitnets") {
+        throw new Error(
+          "Aluguéis vêm de /kitnets (Modelo A — fonte única). " +
+          "Vai em /kitnets, cria/confirma o fechamento mensal, e o link com este crédito acontece automaticamente via auto-match. " +
+          "Se for um repasse FORA de fechamento (caução, reembolso, multa), escolha outra categoria."
+        );
+      }
+
       // 1) Resolve business_id KITNETS se aplicável
       let businessId: string | null = null;
-      if (category === "aluguel_kitnets") {
-        const { data: biz } = await supabase
-          .from("businesses" as any)
-          .select("id")
-          .eq("code", "KITNETS")
-          .maybeSingle();
-        businessId = (biz as any)?.id ?? null;
-      }
+      // Removido bloco que resolvia business_id KITNETS (categoria bloqueada acima)
 
       const refMonth = bankTxDate.slice(0, 7);
       let revenueId: string | null = null;
