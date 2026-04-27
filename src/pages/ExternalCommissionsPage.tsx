@@ -503,7 +503,7 @@ function EditDialog({ commission, onClose }: { commission: OtherCommission; onCl
         source: form.source || null,
         reference_month: form.reference_month,
         amount,
-        commission_rate: rate,
+        commission_rate: 1,
         commission_value: commissionValue,
         notes: form.notes || null,
         issued_at: form.issued_at,
