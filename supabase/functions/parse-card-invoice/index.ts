@@ -300,27 +300,68 @@ serve(async (req) => {
     }
     console.log(`[parse-card-invoice] reference_month resolved: ${ref}`);
 
-    // 3) Upsert invoice — ISOLA in_progress × closed pra não corromper.
-    //    Aba "Em andamento" (sem closed_at): só busca/cria invoice closed_at IS NULL
-    //    Aba "Faturas fechadas" (com closed_at): só busca/cria invoice closed_at IS NOT NULL
+    // 3) Upsert invoice
+    //    Aba "Em andamento" (sem closed_at): só busca/cria invoice in_progress (closed_at IS NULL)
+    //    Aba "Faturas fechadas" (com closed_at):
+    //      a) prefere reusar invoice JÁ fechada (re-upload do mesmo mês)
+    //      b) senão, PROMOVE invoice in_progress preexistente — preservando todas as categorizações
+    //         que o usuário fez quando estava na aba "Em andamento"
+    //      c) se nada existir, cria invoice nova já fechada
     const total_amount = txs.reduce((s, t) => s + Number(t.amount), 0);
     const isInProgressUpload = !closed_at;
-    let existingInvQuery = supabase
-      .from("card_invoices")
-      .select("id, closed_at")
-      .eq("card_id", card_id)
-      .eq("reference_month", ref);
+
+    let existingInv: any = null;
+    let promotedFromInProgress = false;
+
     if (isInProgressUpload) {
-      existingInvQuery = existingInvQuery.is("closed_at", null);
+      const { data, error } = await supabase
+        .from("card_invoices")
+        .select("id, closed_at")
+        .eq("card_id", card_id)
+        .eq("reference_month", ref)
+        .is("closed_at", null)
+        .maybeSingle();
+      if (error) {
+        console.error("[parse-card-invoice] in_progress lookup error:", error);
+        throw error;
+      }
+      existingInv = data;
     } else {
-      existingInvQuery = existingInvQuery.not("closed_at", "is", null);
+      // Upload com closed_at: prioriza invoice já fechada (re-upload), depois promove in_progress
+      const { data: closedExisting, error: errClosed } = await supabase
+        .from("card_invoices")
+        .select("id, closed_at")
+        .eq("card_id", card_id)
+        .eq("reference_month", ref)
+        .not("closed_at", "is", null)
+        .maybeSingle();
+      if (errClosed) {
+        console.error("[parse-card-invoice] closed lookup error:", errClosed);
+        throw errClosed;
+      }
+      if (closedExisting) {
+        existingInv = closedExisting;
+      } else {
+        const { data: inProgressExisting, error: errIp } = await supabase
+          .from("card_invoices")
+          .select("id, closed_at")
+          .eq("card_id", card_id)
+          .eq("reference_month", ref)
+          .is("closed_at", null)
+          .maybeSingle();
+        if (errIp) {
+          console.error("[parse-card-invoice] in_progress lookup error (closed flow):", errIp);
+          throw errIp;
+        }
+        if (inProgressExisting) {
+          existingInv = inProgressExisting;
+          promotedFromInProgress = true;
+          console.log(`[parse-card-invoice] PROMOTING in_progress invoice ${inProgressExisting.id} to closed (preserves existing categorizations)`);
+        }
+      }
     }
-    const { data: existingInv, error: existingInvErr } = await existingInvQuery.maybeSingle();
-    if (existingInvErr) {
-      console.error("[parse-card-invoice] existingInv query error:", existingInvErr);
-      throw existingInvErr;
-    }
-    console.log(`[parse-card-invoice] existingInv: ${existingInv ? "found" : "not found"}, isInProgressUpload=${isInProgressUpload}`);
+
+    console.log(`[parse-card-invoice] existingInv: ${existingInv ? "found id=" + existingInv.id : "not found"}, isInProgressUpload=${isInProgressUpload}, promoted=${promotedFromInProgress}`);
 
     // Se closed_at foi enviado (upload pela Aba "Faturas fechadas"), seta na invoice.
     // Caso contrário (Aba "Em andamento"), mantém NULL.
