@@ -191,10 +191,6 @@ function FormSection({ month }: { month: string }) {
           <Input type="number" value={form.amount} onChange={e => setForm(p => ({ ...p, amount: e.target.value }))} style={inputStyle} placeholder="0,00" />
         </div>
         <div>
-          <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Taxa comissão (%)</label>
-          <Input type="number" value={form.commission_rate} onChange={e => setForm(p => ({ ...p, commission_rate: e.target.value }))} style={inputStyle} />
-        </div>
-        <div>
           <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Data de lançamento *</label>
           <DatePicker value={form.issued_at} onChange={v => setForm(p => ({ ...p, issued_at: v }))} />
         </div>
@@ -203,11 +199,6 @@ function FormSection({ month }: { month: string }) {
           <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Observações</label>
           <Textarea value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} style={inputStyle} rows={2} />
         </div>
-      </div>
-
-      <div className="mt-4 rounded-xl p-4 flex items-center justify-between" style={{ background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.3)' }}>
-        <span className="font-mono text-sm" style={{ color: '#E8C97A' }}>Comissão ({form.commission_rate}%)</span>
-        <span className="font-mono text-xl font-bold" style={{ color: '#C9A84C' }}>{formatCurrency(commissionValue)}</span>
       </div>
 
       {/* Bloco de parcelamento */}
