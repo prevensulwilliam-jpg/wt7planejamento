@@ -3,7 +3,7 @@ import { WT7Logo } from "@/components/wt7/WT7Logo";
 import {
   Bot, TrendingUp, TrendingDown, Landmark,
   Home, Zap, HardHat, Building2, BarChart3, RefreshCw, Heart,
-  Target, Receipt, Radio, ClipboardList, Coins, Users, ArrowLeftRight, Brain, Tag, KeyRound, Banknote, CalendarClock, Briefcase, Compass, BookOpen, CreditCard, Wallet
+  Target, Receipt, Radio, ClipboardList, Coins, Users, ArrowLeftRight, Brain, Tag, KeyRound, Banknote, CalendarClock, Briefcase, Compass, BookOpen, CreditCard, Wallet, Calculator
 } from "lucide-react";
 
 const navGroups = [
@@ -55,6 +55,7 @@ const navGroups = [
     label: "GESTÃO",
     items: [
       { label: "Despesas Recorrentes", icon: CalendarClock, href: "/recurring-bills" },
+      { label: "DRE Mensal", icon: Calculator, href: "/dre" },
       { label: "Metas", icon: Target, href: "/goals" },
       { label: "Plano 2026-28", icon: ClipboardList, href: "/plan" },
       { label: "Impostos & Dívidas", icon: Receipt, href: "/taxes" },

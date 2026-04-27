@@ -41,6 +41,7 @@ import BusinessesPage from "@/pages/BusinessesPage";
 import HojePage from "@/pages/HojePage";
 import CardsPage from "@/pages/CardsPage";
 import CashFlowPage from "@/pages/CashFlowPage";
+import DREPage from "@/pages/DREPage";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -145,6 +146,7 @@ const App = () => (
             <Route path="/taxes" element={<TaxesPage />} />
             <Route path="/projections" element={<ProjectionsPage />} />
             <Route path="/cashflow" element={<CashFlowPage />} />
+            <Route path="/dre" element={<DREPage />} />
             <Route path="/reports/kitnets" element={<KitnetsReportPage />} />
             <Route path="/reports/commissions" element={<CommissionsPage />} />
             <Route path="/commissions/external" element={<ExternalCommissionsPage />} />
