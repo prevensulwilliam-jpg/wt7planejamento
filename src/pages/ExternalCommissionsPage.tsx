@@ -464,7 +464,15 @@ function EditDialog({ commission, onClose }: { commission: OtherCommission; onCl
     issued_at: commission.issued_at ?? todayISO(),
     reference_month: commission.reference_month,
   });
-  const [installments, setInstallments] = useState(
+  type EditInst = {
+    id?: string;
+    installment_number: number;
+    due_date: string;
+    amount: number;
+    paid_at: string | null;
+    paid_amount: number | null;
+  };
+  const [installments, setInstallments] = useState<EditInst[]>(
     commission.installments.map(i => ({
       id: i.id,
       installment_number: i.installment_number,
