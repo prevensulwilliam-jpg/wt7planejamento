@@ -102,7 +102,7 @@ function FormSection({ month }: { month: string }) {
   const createMut = useCreateOtherCommission();
 
   const [form, setForm] = useState({
-    description: "", source: "", amount: "", commission_rate: "3", notes: "",
+    description: "", source: "", amount: "", notes: "",
     issued_at: todayISO(),
     mode: "single" as "single" | "installments",
     installments_count: "3",
@@ -111,13 +111,12 @@ function FormSection({ month }: { month: string }) {
   const [installments, setInstallments] = useState<Array<{ due_date: string; amount: number }>>([]);
 
   const amount = parseFloat(form.amount) || 0;
-  const rate = (parseFloat(form.commission_rate) || 0) / 100;
-  const commissionValue = Math.round(amount * rate * 100) / 100;
+  const commissionValue = Math.round(amount * 100) / 100;
 
   // regenerar parcelas quando o usuário mexe nos inputs principais
   const regen = (next: Partial<typeof form>) => {
     const merged = { ...form, ...next };
-    const cv = (parseFloat(merged.amount) || 0) * ((parseFloat(merged.commission_rate) || 0) / 100);
+    const cv = parseFloat(merged.amount) || 0;
     if (merged.mode === "single") {
       setInstallments([{ due_date: merged.first_due, amount: Math.round(cv * 100) / 100 }]);
     } else {
@@ -126,11 +125,10 @@ function FormSection({ month }: { month: string }) {
     }
   };
 
-  // gera ao montar e quando muda commissionValue / mode / count / first_due
   useMemo(() => {
     regen({});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.amount, form.commission_rate, form.mode, form.installments_count, form.first_due]);
+  }, [form.amount, form.mode, form.installments_count, form.first_due]);
 
   const updateInstallment = (idx: number, patch: Partial<{ due_date: string; amount: number }>) => {
     setInstallments(prev => prev.map((p, i) => i === idx ? { ...p, ...patch } : p));
