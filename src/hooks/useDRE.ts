@@ -106,6 +106,8 @@ function classifyCardTx(t: { vector?: string | null; counts_as_investment?: bool
   if (slug === "aporte_obra") return "obras";
   if (slug === "casamento_2027") return "casamento";
   if (slug === "viagens" || slug === "viagem_educacao" || slug === "viagem_negocios") return "viagens";
+  if (slug === "manutencao_kitnets") return "outros_aportes";
+  if (slug === "consorcios_aporte" || slug === "dev_profissional_agora" || slug === "dev_pessoal_futuro" || slug === "produtividade_ferramentas") return "outros_aportes";
   if (t.counts_as_investment) return "outros_aportes";
   return "custeio";
 }
