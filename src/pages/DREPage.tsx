@@ -108,7 +108,7 @@ function useBudgetTotals() {
         .select("amount, category, is_fixed, active")
         .eq("active", true);
       if (error) throw error;
-      const rows = (data ?? []) as Array<{ amount: number; category: string | null; is_fixed: boolean; active: boolean }>;
+      const rows = (data ?? []) as unknown as Array<{ amount: number; category: string | null; is_fixed: boolean; active: boolean }>;
       const total = rows.reduce((s, r) => s + Number(r.amount ?? 0), 0);
       const byCat: Record<string, number> = {};
       for (const r of rows) {
