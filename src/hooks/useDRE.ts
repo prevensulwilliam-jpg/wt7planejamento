@@ -113,6 +113,13 @@ function classifyCardTx(t: { vector?: string | null; counts_as_investment?: bool
 export function useDRE(month: string) {
   return useQuery<DRE>({
     queryKey: ["dre", month],
+    // DRE é agregação derivada de várias tabelas (revenues, kitnet_entries, other_commissions, expenses,
+    // card_invoices, card_transactions, wedding_installments). Como cada uma tem seu próprio mutation
+    // com invalidação isolada, o DRE precisa sempre buscar fresco quando montado pra refletir mudanças
+    // em qualquer uma delas — caso contrário o staleTime de 5min do QueryClient mantém dados rancheados.
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
     queryFn: async () => {
       const monthStart = `${month}-01`;
       const [yy, mm] = month.split("-").map(Number);

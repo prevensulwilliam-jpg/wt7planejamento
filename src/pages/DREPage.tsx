@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
 import { useDRE, type DREBucket, type DREItem } from "@/hooks/useDRE";
@@ -8,7 +8,7 @@ import { formatMonth, getCurrentMonth } from "@/lib/formatters";
 import {
   ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
   TrendingUp, TrendingDown, Hammer, Heart, Plane, Sparkles,
-  Calculator, BarChart3, Info,
+  Calculator, BarChart3, Info, RefreshCw,
 } from "lucide-react";
 
 // ─── helpers ────────────────────────────────────────────────────────
@@ -147,11 +147,19 @@ function NetWorthFooter() {
 //  PÁGINA PRINCIPAL
 // ═══════════════════════════════════════════════════════════════════
 export default function DREPage() {
+  const qc = useQueryClient();
   const [month, setMonth] = useState<string>(getCurrentMonth());
   const [view, setView] = useState<"single" | "vs_budget" | "ytd">("single");
 
-  const { data: dre, isLoading, error } = useDRE(month);
+  const { data: dre, isLoading, isFetching, error, refetch } = useDRE(month);
   const { data: budget } = useBudgetTotals();
+
+  const handleRefresh = async () => {
+    await qc.invalidateQueries({ queryKey: ["dre"] });
+    await qc.invalidateQueries({ queryKey: ["dre_ytd"] });
+    await qc.invalidateQueries({ queryKey: ["recurring_bills_for_dre"] });
+    await refetch();
+  };
 
   // bounds da navegação livre — guard rails de 2 anos pra trás e 2 pra frente
   const minMonth = "2024-01";
@@ -205,7 +213,7 @@ export default function DREPage() {
         </div>
       </div>
 
-      {/* nav mês central */}
+      {/* nav mês central + refresh */}
       <div className="flex items-center justify-center gap-3 py-1">
         <button
           onClick={() => !isOldest && setMonth(shiftMonth(month, -1))}
@@ -225,6 +233,15 @@ export default function DREPage() {
           aria-label="Próximo mês"
         >
           <ChevronRight className="w-5 h-5" style={{ color: "#C9A84C" }} />
+        </button>
+        <button
+          onClick={handleRefresh}
+          disabled={isFetching}
+          className="p-2 rounded-md hover:bg-white/5 transition-colors disabled:opacity-50"
+          aria-label="Atualizar"
+          title="Recarregar dados (após editar receitas/despesas em outra aba)"
+        >
+          <RefreshCw className={`w-4 h-4 ${isFetching ? "animate-spin" : ""}`} style={{ color: "#94A3B8" }} />
         </button>
       </div>
 
