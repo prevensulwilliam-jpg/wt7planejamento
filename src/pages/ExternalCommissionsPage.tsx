@@ -448,7 +448,6 @@ function EditDialog({ commission, onClose }: { commission: OtherCommission; onCl
     description: commission.description,
     source: commission.source ?? "",
     amount: String(commission.amount ?? 0),
-    commission_rate: String((commission.commission_rate ?? 0) * 100),
     notes: commission.notes ?? "",
     issued_at: commission.issued_at ?? todayISO(),
     reference_month: commission.reference_month,
@@ -473,8 +472,7 @@ function EditDialog({ commission, onClose }: { commission: OtherCommission; onCl
   );
 
   const amount = parseFloat(form.amount) || 0;
-  const rate = (parseFloat(form.commission_rate) || 0) / 100;
-  const commissionValue = Math.round(amount * rate * 100) / 100;
+  const commissionValue = Math.round(amount * 100) / 100;
 
   const updateInst = (idx: number, patch: Partial<typeof installments[number]>) => {
     setInstallments(prev => prev.map((p, i) => i === idx ? { ...p, ...patch } : p));
