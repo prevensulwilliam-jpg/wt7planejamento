@@ -130,7 +130,7 @@ export function useDRE(month: string) {
         .select("id, amount, source, description, received_at, counts_as_income, business_id")
         .eq("reference_month", month);
       const { data: kitEntries } = await supabase.from("kitnet_entries")
-        .select("id, total_liquid, tenant_name, kitnet_id, reconciled, received_at")
+        .select("id, total_liquid, tenant_name, kitnet_id, reconciled, reconciled_at, period_end")
         .eq("reference_month", month);
 
       // Comissões externas — REGIME CAIXA por parcela.
@@ -311,7 +311,7 @@ export function useDRE(month: string) {
       const receitas = {
         total: receitaTotal,
         renda_ativa: { label: "Renda Ativa Prevensul", total: rendaAtivaTotal, items: rendaAtivaItems.map((r: any) => ({ label: r.description || r.source || "Prevensul", amount: Number(r.amount ?? 0), date: r.received_at, source: r.source })).sort((a, b) => b.amount - a.amount) },
-        renda_passiva: { label: "Renda Passiva (Kitnets — Modelo A)", total: rendaPassivaTotal, items: kitReconciled.map((k: any) => ({ label: `Aluguel — ${k.tenant_name || "(vago)"}`, amount: Number(k.total_liquid ?? 0), date: k.received_at, source: "kitnets" })).sort((a, b) => b.amount - a.amount) },
+        renda_passiva: { label: "Renda Passiva (Kitnets — Modelo A)", total: rendaPassivaTotal, items: kitReconciled.map((k: any) => ({ label: `Aluguel — ${k.tenant_name || "(vago)"}`, amount: Number(k.total_liquid ?? 0), date: k.reconciled_at ?? k.period_end ?? null, source: "kitnets" })).sort((a, b) => b.amount - a.amount) },
         comissoes_extras: {
           label: "Comissões Extras (parcelas recebidas no mês)",
           total: extrasTotal,
