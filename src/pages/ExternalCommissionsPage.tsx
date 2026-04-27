@@ -102,7 +102,7 @@ function FormSection({ month }: { month: string }) {
   const createMut = useCreateOtherCommission();
 
   const [form, setForm] = useState({
-    description: "", source: "", amount: "", commission_rate: "3", notes: "",
+    description: "", source: "", amount: "", notes: "",
     issued_at: todayISO(),
     mode: "single" as "single" | "installments",
     installments_count: "3",
@@ -111,13 +111,12 @@ function FormSection({ month }: { month: string }) {
   const [installments, setInstallments] = useState<Array<{ due_date: string; amount: number }>>([]);
 
   const amount = parseFloat(form.amount) || 0;
-  const rate = (parseFloat(form.commission_rate) || 0) / 100;
-  const commissionValue = Math.round(amount * rate * 100) / 100;
+  const commissionValue = Math.round(amount * 100) / 100;
 
   // regenerar parcelas quando o usuário mexe nos inputs principais
   const regen = (next: Partial<typeof form>) => {
     const merged = { ...form, ...next };
-    const cv = (parseFloat(merged.amount) || 0) * ((parseFloat(merged.commission_rate) || 0) / 100);
+    const cv = parseFloat(merged.amount) || 0;
     if (merged.mode === "single") {
       setInstallments([{ due_date: merged.first_due, amount: Math.round(cv * 100) / 100 }]);
     } else {
@@ -126,11 +125,10 @@ function FormSection({ month }: { month: string }) {
     }
   };
 
-  // gera ao montar e quando muda commissionValue / mode / count / first_due
   useMemo(() => {
     regen({});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.amount, form.commission_rate, form.mode, form.installments_count, form.first_due]);
+  }, [form.amount, form.mode, form.installments_count, form.first_due]);
 
   const updateInstallment = (idx: number, patch: Partial<{ due_date: string; amount: number }>) => {
     setInstallments(prev => prev.map((p, i) => i === idx ? { ...p, ...patch } : p));
@@ -153,7 +151,7 @@ function FormSection({ month }: { month: string }) {
         source: form.source || null,
         reference_month: month,
         amount,
-        commission_rate: rate,
+        commission_rate: 1,
         commission_value: commissionValue,
         notes: form.notes || null,
         created_by: user?.id ?? null,
@@ -162,7 +160,7 @@ function FormSection({ month }: { month: string }) {
       });
       toast({ title: "Comissão registrada!" });
       setForm({
-        description: "", source: "", amount: "", commission_rate: "3", notes: "",
+        description: "", source: "", amount: "", notes: "",
         issued_at: todayISO(), mode: "single", installments_count: "3", first_due: todayISO(),
       });
       setInstallments([]);
@@ -193,10 +191,6 @@ function FormSection({ month }: { month: string }) {
           <Input type="number" value={form.amount} onChange={e => setForm(p => ({ ...p, amount: e.target.value }))} style={inputStyle} placeholder="0,00" />
         </div>
         <div>
-          <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Taxa comissão (%)</label>
-          <Input type="number" value={form.commission_rate} onChange={e => setForm(p => ({ ...p, commission_rate: e.target.value }))} style={inputStyle} />
-        </div>
-        <div>
           <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Data de lançamento *</label>
           <DatePicker value={form.issued_at} onChange={v => setForm(p => ({ ...p, issued_at: v }))} />
         </div>
@@ -205,11 +199,6 @@ function FormSection({ month }: { month: string }) {
           <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Observações</label>
           <Textarea value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} style={inputStyle} rows={2} />
         </div>
-      </div>
-
-      <div className="mt-4 rounded-xl p-4 flex items-center justify-between" style={{ background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.3)' }}>
-        <span className="font-mono text-sm" style={{ color: '#E8C97A' }}>Comissão ({form.commission_rate}%)</span>
-        <span className="font-mono text-xl font-bold" style={{ color: '#C9A84C' }}>{formatCurrency(commissionValue)}</span>
       </div>
 
       {/* Bloco de parcelamento */}
@@ -459,7 +448,6 @@ function EditDialog({ commission, onClose }: { commission: OtherCommission; onCl
     description: commission.description,
     source: commission.source ?? "",
     amount: String(commission.amount ?? 0),
-    commission_rate: String((commission.commission_rate ?? 0) * 100),
     notes: commission.notes ?? "",
     issued_at: commission.issued_at ?? todayISO(),
     reference_month: commission.reference_month,
@@ -484,8 +472,7 @@ function EditDialog({ commission, onClose }: { commission: OtherCommission; onCl
   );
 
   const amount = parseFloat(form.amount) || 0;
-  const rate = (parseFloat(form.commission_rate) || 0) / 100;
-  const commissionValue = Math.round(amount * rate * 100) / 100;
+  const commissionValue = Math.round(amount * 100) / 100;
 
   const updateInst = (idx: number, patch: Partial<typeof installments[number]>) => {
     setInstallments(prev => prev.map((p, i) => i === idx ? { ...p, ...patch } : p));
@@ -516,7 +503,7 @@ function EditDialog({ commission, onClose }: { commission: OtherCommission; onCl
         source: form.source || null,
         reference_month: form.reference_month,
         amount,
-        commission_rate: rate,
+        commission_rate: 1,
         commission_value: commissionValue,
         notes: form.notes || null,
         issued_at: form.issued_at,
@@ -553,10 +540,6 @@ function EditDialog({ commission, onClose }: { commission: OtherCommission; onCl
             <Input type="number" value={form.amount} onChange={e => setForm(p => ({ ...p, amount: e.target.value }))} style={inputStyle} />
           </div>
           <div>
-            <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Taxa (%)</label>
-            <Input type="number" value={form.commission_rate} onChange={e => setForm(p => ({ ...p, commission_rate: e.target.value }))} style={inputStyle} />
-          </div>
-          <div>
             <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Data lançamento</label>
             <DatePicker value={form.issued_at} onChange={v => setForm(p => ({ ...p, issued_at: v }))} />
           </div>
@@ -564,11 +547,6 @@ function EditDialog({ commission, onClose }: { commission: OtherCommission; onCl
             <label className="text-xs font-mono uppercase mb-1 block" style={{ color: '#94A3B8' }}>Observações</label>
             <Textarea value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} style={inputStyle} rows={2} />
           </div>
-        </div>
-
-        <div className="rounded-xl p-4 flex items-center justify-between mt-3" style={{ background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.3)' }}>
-          <span className="font-mono text-sm" style={{ color: '#E8C97A' }}>Comissão ({form.commission_rate}%)</span>
-          <span className="font-mono text-xl font-bold" style={{ color: '#C9A84C' }}>{formatCurrency(commissionValue)}</span>
         </div>
 
         <div className="mt-4">
