@@ -151,7 +151,7 @@ function FormSection({ month }: { month: string }) {
         source: form.source || null,
         reference_month: month,
         amount,
-        commission_rate: rate,
+        commission_rate: 1,
         commission_value: commissionValue,
         notes: form.notes || null,
         created_by: user?.id ?? null,
@@ -160,7 +160,7 @@ function FormSection({ month }: { month: string }) {
       });
       toast({ title: "Comissão registrada!" });
       setForm({
-        description: "", source: "", amount: "", commission_rate: "3", notes: "",
+        description: "", source: "", amount: "", notes: "",
         issued_at: todayISO(), mode: "single", installments_count: "3", first_due: todayISO(),
       });
       setInstallments([]);
