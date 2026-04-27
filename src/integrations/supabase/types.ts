@@ -2166,6 +2166,50 @@ export type Database = {
         }
         Relationships: []
       }
+      other_commission_installments: {
+        Row: {
+          amount: number
+          commission_id: string
+          created_at: string | null
+          due_date: string
+          id: string
+          installment_number: number
+          notes: string | null
+          paid_amount: number | null
+          paid_at: string | null
+        }
+        Insert: {
+          amount: number
+          commission_id: string
+          created_at?: string | null
+          due_date: string
+          id?: string
+          installment_number: number
+          notes?: string | null
+          paid_amount?: number | null
+          paid_at?: string | null
+        }
+        Update: {
+          amount?: number
+          commission_id?: string
+          created_at?: string | null
+          due_date?: string
+          id?: string
+          installment_number?: number
+          notes?: string | null
+          paid_amount?: number | null
+          paid_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "other_commission_installments_commission_id_fkey"
+            columns: ["commission_id"]
+            isOneToOne: false
+            referencedRelation: "other_commissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       other_commissions: {
         Row: {
           amount: number
@@ -2175,6 +2219,8 @@ export type Database = {
           created_by: string | null
           description: string
           id: string
+          installments_count: number
+          issued_at: string | null
           notes: string | null
           reference_month: string
           source: string | null
@@ -2187,6 +2233,8 @@ export type Database = {
           created_by?: string | null
           description: string
           id?: string
+          installments_count?: number
+          issued_at?: string | null
           notes?: string | null
           reference_month: string
           source?: string | null
@@ -2199,6 +2247,8 @@ export type Database = {
           created_by?: string | null
           description?: string
           id?: string
+          installments_count?: number
+          issued_at?: string | null
           notes?: string | null
           reference_month?: string
           source?: string | null

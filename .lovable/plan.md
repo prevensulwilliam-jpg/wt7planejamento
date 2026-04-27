@@ -1,23 +1,87 @@
+# Comissões Externas — Datas, Parcelas, Edição e KPIs ajustados
 
-O usuário aprovou a estratégia de adicionar `GEMINI_API_KEY`, mas ao verificar `<secrets>` no contexto, vejo que **a chave NÃO foi adicionada ainda**. Os secrets atuais são apenas: `LOVABLE_API_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`, `SUPABASE_PUBLISHABLE_KEY`.
+## O que muda na tela `/commissions/external`
 
-Então preciso solicitar o secret de novo no modo default e depois fazer o ajuste no código + redeploy.
+### 1. KPIs (3 cards)
+- **Comissões Geradas** (R$) — soma de `commission_value` de todos os lançamentos do mês
+- **Comissões Recebidas** (R$) — soma das parcelas pagas (`paid_at` preenchido) cuja data de pagamento cai no mês
+- **Registros** — número inteiro puro (ex: `2`, não `R$ 2,00`)
 
-Olhando `naval-embed/index.ts`, ele já está escrito pra usar `GEMINI_API_KEY` direto na API nativa do Google (`generativelanguage.googleapis.com`), não no gateway Lovable. Mas o erro do log mostra "Embeddings gateway error 400" — ou seja, **a versão deployada ainda é a antiga** que tentava usar o gateway. O código atual no repo já está correto, só falta:
+### 2. Formulário "Registrar Comissão" (atualizado)
+Mantém: Descrição, Origem, Valor, Taxa comissão (%), Observações.
+Acrescenta:
+- **Data do lançamento** (DatePicker) — obrigatória
+- **Forma de recebimento:**
+  - À vista → 1 campo "Data de pagamento prevista"
+  - Parcelado → input "Nº de parcelas" (ex: 3) + "Data 1ª parcela" → o sistema gera N parcelas com mesmo valor (`commission_value / N`) e datas mensais consecutivas
+  - Tabela editável das parcelas geradas (data + valor) antes de salvar — usuário pode ajustar cada uma
 
-1. Adicionar o secret `GEMINI_API_KEY`
-2. Redeploy do `naval-embed` pra pegar a versão nova que usa a API nativa do Gemini
+Exemplo: comissão R$ 30.000 em 3x → cria 3 parcelas de R$ 10.000 nas datas 27/04, 27/05, 27/06.
 
-## Plano
+### 3. Histórico — nova UX
+Tabela agrupada por lançamento, com expansão para ver parcelas:
+- Linha principal: Descrição | Origem | Valor | Comissão Total | Data Lançamento | Status (ex: "2/3 pagas") | Ações
+- Ações: **Editar** (abre modal) | **Excluir**
+- Expandir mostra parcelas com: Data prevista | Valor | Status (Paga / Pendente) | botão "Marcar como paga" (define `paid_at = hoje`) ou DatePicker para informar data real
+- O agrupamento por mês continua filtrando pela `reference_month` do lançamento principal
 
-**Status atual:** A chave `GEMINI_API_KEY` ainda não foi adicionada — só os secrets padrão do Supabase/Lovable existem. Sem ela, o `naval-embed` continua quebrado.
+### 4. Modal de Edição
+Mesmos campos do formulário de criação. Permite:
+- Editar dados do lançamento
+- Adicionar/remover/ajustar parcelas individualmente
+- Marcar parcelas como pagas/pendentes
 
-**Passos:**
+---
 
-1. **Solicitar o secret `GEMINI_API_KEY`** — você pega grátis em [aistudio.google.com/apikey](https://aistudio.google.com/apikey) (login Google, "Create API key", copia). Limite generoso pra `text-embedding-004` (768 dims).
+## Mudanças técnicas
 
-2. **Redeploy do `naval-embed`** — o código no repo (commit `d9a52fb`) já está correto: chama a API nativa do Gemini (`generativelanguage.googleapis.com/v1beta/models/text-embedding-004:batchEmbedContents`) usando `GEMINI_API_KEY`, não o gateway Lovable. Mas o erro nos logs ("Embeddings gateway error 400") indica que a versão atualmente em produção é a antiga — então preciso fazer o redeploy depois que a chave estiver lá.
+### Banco — nova migration
+```sql
+-- Campos no lançamento principal
+ALTER TABLE public.other_commissions
+  ADD COLUMN IF NOT EXISTS issued_at date,        -- data de lançamento
+  ADD COLUMN IF NOT EXISTS installments_count int DEFAULT 1;
 
-3. **Testar** invocando `naval-embed` com `{ query: "teste" }` — deve retornar `{ ok: true, embedding: [...768 floats] }`.
+-- Nova tabela de parcelas
+CREATE TABLE IF NOT EXISTS public.other_commission_installments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  commission_id uuid NOT NULL REFERENCES public.other_commissions(id) ON DELETE CASCADE,
+  installment_number int NOT NULL,
+  due_date date NOT NULL,
+  amount numeric(12,2) NOT NULL,
+  paid_at date,
+  notes text,
+  created_at timestamptz DEFAULT now(),
+  UNIQUE (commission_id, installment_number)
+);
+ALTER TABLE public.other_commission_installments ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Admin full access oc_installments"
+  ON public.other_commission_installments FOR ALL TO authenticated
+  USING (public.has_role(auth.uid(),'admin'::public.app_role))
+  WITH CHECK (public.has_role(auth.uid(),'admin'::public.app_role));
+```
 
-4. **Re-embedar as sources existentes** (se houver) — chamar `naval-embed` com `{ source_id: "..." }` pra cada source ativa, populando `naval_principle_vectors` pro RAG do `wisely-ai` voltar a funcionar.
+### Hook (`src/hooks/useOtherCommissions.ts`)
+- Estender query para trazer parcelas (`select("*, installments:other_commission_installments(*)")`)
+- Adicionar: `useUpdateOtherCommission`, `useUpsertInstallments`, `useMarkInstallmentPaid`
+- `useOtherCommissionsSummary(month)` recalcula:
+  - `totalCommission` = soma de `commission_value` dos lançamentos do mês
+  - `totalReceived` = soma de `installments.amount` onde `paid_at` está dentro do mês
+
+### Página (`src/pages/ExternalCommissionsPage.tsx`)
+- KpiCard "Registros": usar `formatNumber` simples (não currency). Pode ser via prop nova `format="number"` ou texto direto
+- FormSection: adicionar DatePickers + bloco de parcelas (radio À vista/Parcelado + tabela)
+- HistorySection: linhas expansíveis (usar `Collapsible` ou estado local) + botões Editar/Excluir
+- Novo componente `EditCommissionDialog` reutilizando lógica do form
+
+### KpiCard
+Verificar se já aceita formato numérico puro; senão adicionar prop `format?: "currency" | "number"` (default currency).
+
+---
+
+## Checklist de entrega
+1. Migration SQL (campos novos + tabela parcelas + RLS)
+2. Hook atualizado com CRUD de parcelas
+3. Form com geração automática de parcelas + edição inline
+4. Histórico com expansão, edit modal, marcar como paga
+5. KPIs corrigidos (Geradas / Recebidas / Registros como inteiro)
