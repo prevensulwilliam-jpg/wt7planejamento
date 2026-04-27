@@ -132,9 +132,18 @@ export function useDRE(month: string) {
       const { data: kitEntries } = await supabase.from("kitnet_entries")
         .select("id, total_liquid, tenant_name, kitnet_id, reconciled, received_at")
         .eq("reference_month", month);
-      const { data: otherComms } = await supabase.from("other_commissions")
-        .select("id, description, amount, commission_value, source")
-        .eq("reference_month", month);
+
+      // Comissões externas — REGIME CAIXA por parcela.
+      // Conta apenas parcelas com paid_at dentro do mês, independente do reference_month
+      // ou issued_at do lançamento-mãe. Isso casa com /commissions/external "Comissões Recebidas".
+      const lastDay = new Date(yy, mm, 0).getDate();
+      const monthEnd = `${yy}-${String(mm).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+      const { data: paidInstallments } = await (supabase as any).from("other_commission_installments")
+        .select("amount, paid_amount, paid_at, due_date, installment_number, other_commissions(id, description, source)")
+        .not("paid_at", "is", null)
+        .gte("paid_at", monthStart)
+        .lte("paid_at", monthEnd);
+
       const { data: businesses } = await supabase.from("businesses").select("id, code, name");
       const bizById = new Map<string, { code: string; name: string }>();
       (businesses ?? []).forEach((b: any) => bizById.set(b.id, { code: b.code, name: b.name }));
@@ -157,8 +166,11 @@ export function useDRE(month: string) {
       const kitReconciled = (kitEntries ?? []).filter((k: any) => k.reconciled === true);
       const rendaPassivaTotal = kitReconciled.reduce((s: number, k: any) => s + Number(k.total_liquid ?? 0), 0);
 
-      // Comissões extras
-      const extrasTotal = (otherComms ?? []).reduce((s: number, r: any) => s + Number(r.commission_value ?? 0), 0);
+      // Comissões extras — soma das parcelas pagas no mês (regime caixa)
+      const extrasTotal = (paidInstallments ?? []).reduce(
+        (s: number, p: any) => s + Number(p.paid_amount ?? p.amount ?? 0),
+        0,
+      );
 
       // Avulsas — restantes de revenues
       const avulsasItems = validRevs.filter((r: any) => !isRendaAtiva(r) && r.source !== "aluguel_kitnets");
@@ -300,7 +312,16 @@ export function useDRE(month: string) {
         total: receitaTotal,
         renda_ativa: { label: "Renda Ativa Prevensul", total: rendaAtivaTotal, items: rendaAtivaItems.map((r: any) => ({ label: r.description || r.source || "Prevensul", amount: Number(r.amount ?? 0), date: r.received_at, source: r.source })).sort((a, b) => b.amount - a.amount) },
         renda_passiva: { label: "Renda Passiva (Kitnets — Modelo A)", total: rendaPassivaTotal, items: kitReconciled.map((k: any) => ({ label: `Aluguel — ${k.tenant_name || "(vago)"}`, amount: Number(k.total_liquid ?? 0), date: k.received_at, source: "kitnets" })).sort((a, b) => b.amount - a.amount) },
-        comissoes_extras: { label: "Comissões Extras", total: extrasTotal, items: (otherComms ?? []).map((r: any) => ({ label: r.description, amount: Number(r.commission_value ?? 0), source: r.source })).sort((a, b) => b.amount - a.amount) },
+        comissoes_extras: {
+          label: "Comissões Extras (parcelas recebidas no mês)",
+          total: extrasTotal,
+          items: (paidInstallments ?? []).map((p: any) => ({
+            label: `${p.other_commissions?.description ?? "Comissão"} · parcela ${p.installment_number}`,
+            amount: Number(p.paid_amount ?? p.amount ?? 0),
+            date: p.paid_at,
+            source: p.other_commissions?.source ?? null,
+          })).sort((a: any, b: any) => b.amount - a.amount),
+        },
         avulsas: { label: "Outras Receitas Avulsas", total: avulsasTotal, items: avulsasItems.map((r: any) => ({ label: r.description || r.source, amount: Number(r.amount ?? 0), date: r.received_at, source: r.source })).sort((a, b) => b.amount - a.amount) },
         entradas_neutras: entradasNeutras,
       };

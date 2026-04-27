@@ -505,10 +505,12 @@ function useYTD(months: string[], enabled: boolean) {
         const [yy, mm] = m.split("-").map(Number);
         const nextMonth = mm === 12 ? `${yy + 1}-01-01` : `${yy}-${String(mm + 1).padStart(2, "0")}-01`;
 
-        const [revsQ, kitQ, otherQ, expsQ, invQ] = await Promise.all([
+        const lastDay = new Date(yy, mm, 0).getDate();
+        const monthEnd = `${yy}-${String(mm).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+        const [revsQ, kitQ, paidInstQ, expsQ, invQ] = await Promise.all([
           supabase.from("revenues").select("amount, source, counts_as_income, business_id, description").eq("reference_month", m),
           supabase.from("kitnet_entries").select("total_liquid, reconciled").eq("reference_month", m),
-          supabase.from("other_commissions").select("commission_value").eq("reference_month", m),
+          (supabase as any).from("other_commission_installments").select("amount, paid_amount, paid_at").not("paid_at", "is", null).gte("paid_at", monthStart).lte("paid_at", monthEnd),
           supabase.from("expenses").select("amount, category, vector, counts_as_investment, description, is_card_payment, nature").eq("reference_month", m),
           supabase.from("card_invoices").select("id, paid_amount, total_amount").gte("paid_at", monthStart).lt("paid_at", nextMonth),
         ]);
@@ -519,7 +521,7 @@ function useYTD(months: string[], enabled: boolean) {
         };
         const rendaAtiva = revs.filter(isPrev).reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
         const rendaPassiva = (kitQ.data ?? []).filter((k: any) => k.reconciled).reduce((s: number, k: any) => s + Number(k.total_liquid || 0), 0);
-        const extras = (otherQ.data ?? []).reduce((s: number, r: any) => s + Number(r.commission_value || 0), 0);
+        const extras = (paidInstQ.data ?? []).reduce((s: number, p: any) => s + Number(p.paid_amount ?? p.amount ?? 0), 0);
         const avulsas = revs.filter((r: any) => !isPrev(r) && r.source !== "aluguel_kitnets").reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
         const receita = rendaAtiva + rendaPassiva + extras + avulsas;
 
