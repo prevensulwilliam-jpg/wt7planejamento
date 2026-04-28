@@ -7,7 +7,7 @@ import { useNetWorth } from "@/hooks/useFinances";
 import { formatMonth, getCurrentMonth } from "@/lib/formatters";
 import {
   ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
-  TrendingUp, TrendingDown, Hammer, Heart, Plane, Sparkles,
+  TrendingUp, TrendingDown, Hammer, Heart, PartyPopper, Sparkles,
   Calculator, BarChart3, Info, RefreshCw,
 } from "lucide-react";
 
@@ -336,11 +336,11 @@ function SingleMonthView({ dre, dreLast, budget }: { dre: any; dreLast: any; bud
       </Block>
 
       {/* ── 5. VIAGENS ── */}
-      <Block icon={Plane} title="5. Viagens" total={dre.viagens.total} accent="#3B82F6">
+      <Block icon={PartyPopper} title="5. Eventos" total={dre.eventos.total} accent="#3B82F6">
         <div className="space-y-0">
-          {dre.viagens.buckets.length === 0
-            ? <div className="text-xs py-3 text-center" style={{ color: "#4A5568" }}>Nenhuma viagem neste mês.</div>
-            : dre.viagens.buckets.map((b: DREBucket, i: number) => <BucketRow key={i} bucket={b} color="#3B82F6" />)}
+          {dre.eventos.buckets.length === 0
+            ? <div className="text-xs py-3 text-center" style={{ color: "#4A5568" }}>Nenhum evento neste mês. Use slug <span style={{ color: "#C9A84C" }}>evento_*</span> (ex: evento_china_2027) pra rastrear viagens-evento separadas do custeio.</div>
+            : dre.eventos.buckets.map((b: DREBucket, i: number) => <BucketRow key={i} bucket={b} color="#3B82F6" />)}
         </div>
       </Block>
 
@@ -372,7 +372,7 @@ function SingleMonthView({ dre, dreLast, budget }: { dre: any; dreLast: any; bud
           <ResultLine label="(−) Custeio" value={-r.custeio} color="#EF4444" />
           <ResultLine label="(−) Obras" value={-r.obras} color="#C9A84C" />
           <ResultLine label="(−) Casamento" value={-r.casamento} color="#EC4899" />
-          <ResultLine label="(−) Viagens" value={-r.viagens} color="#3B82F6" />
+          <ResultLine label="(−) Eventos" value={-r.eventos} color="#3B82F6" />
           <ResultLine label="(−) Outros Aportes" value={-r.outros_aportes} color="#A78BFA" />
           <div className="h-px my-2" style={{ background: "#1A2535" }} />
           <div className="flex items-center justify-between pt-1">
@@ -395,7 +395,7 @@ function SingleMonthView({ dre, dreLast, budget }: { dre: any; dreLast: any; bud
           <Indicator label="Sobra Operacional" value={r.sobra_operacional_pct} hint="(Receita − Custeio) ÷ Receita" target={50} />
           <Indicator label="Reinvestimento Patrimonial" value={r.reinvestimento_patrimonial_pct} hint="Obras ÷ Receita" />
           <Indicator label="Reinvestimento Total" value={r.reinvestimento_total_pct} hint="(Obras + Outros Aportes) ÷ Receita" target={50} />
-          <Indicator label="Casamento + Viagens" value={r.casamento_viagens_pct} hint="(Casamento + Viagens) ÷ Receita" />
+          <Indicator label="Casamento + Eventos" value={r.casamento_eventos_pct} hint="(Casamento + Eventos) ÷ Receita" />
         </div>
       </PremiumCard>
     </>
@@ -497,7 +497,7 @@ function useYTD(months: string[], enabled: boolean) {
     enabled: enabled && months.length > 0,
     queryKey: ["dre_ytd", months.join(",")],
     queryFn: async () => {
-      const out: Array<{ month: string; receita: number; custeio: number; obras: number; casamento: number; viagens: number; outros: number; sobra: number }> = [];
+      const out: Array<{ month: string; receita: number; custeio: number; obras: number; casamento: number; eventos: number; outros: number; sobra: number }> = [];
       for (const m of months) {
         // Reaproveita queryClient cache se já tem (chamando o hook diretamente não é ideal aqui — replicamos lógica simplificada)
         // Pra não duplicar complexidade, fazemos uma chamada simplificada por mês reaproveitando os agregadores principais.
@@ -540,7 +540,7 @@ function useYTD(months: string[], enabled: boolean) {
           cardTxs = (r.data ?? []).map((t: any) => ({ ...t, amount: Number(t.amount || 0) * (ratio[t.invoice_id] ?? 1) }));
         }
 
-        let custeio = 0, obras = 0, casamento = 0, viagens = 0, outros = 0;
+        let custeio = 0, obras = 0, casamento = 0, eventos = 0, outros = 0;
         for (const e of expsQ.data ?? []) {
           if ((e as any).is_card_payment) continue;
           if (((e as any).nature ?? "expense") === "transfer") continue;
@@ -551,7 +551,7 @@ function useYTD(months: string[], enabled: boolean) {
           const amt = Number((e as any).amount || 0);
           if (c === "obras" || c === "aporte_obra" || c === "terrenos" || v === "WT7_Holding" || v === "aporte_obra") obras += amt;
           else if (c === "casamento" || c === "casamento_2027" || d.includes("villa sonali")) casamento += amt;
-          else if (c === "viagens" || c === "viagem_educacao" || c === "viagem_negocios" || v === "viagens") viagens += amt;
+          else if (c.startsWith("evento_")) eventos += amt;
           else if (ci || c === "consorcio" || c === "consorcios_aporte" || c === "kitnets_manutencao" || c === "manutencao_kitnets" || c === "dev_profissional_agora" || c === "dev_pessoal_futuro" || c === "produtividade_ferramentas") outros += amt;
           else custeio += amt;
         }
@@ -561,12 +561,12 @@ function useYTD(months: string[], enabled: boolean) {
           const amt = Number(t.amount || 0);
           if (slug === "aporte_obra") obras += amt;
           else if (slug === "casamento_2027") casamento += amt;
-          else if (slug === "viagens" || slug === "viagem_educacao" || slug === "viagem_negocios") viagens += amt;
-          else if (t.counts_as_investment || slug === "dev_profissional_agora" || slug === "dev_pessoal_futuro" || slug === "produtividade_ferramentas" || slug === "consorcios_aporte") outros += amt;
+          else if (slug.startsWith("evento_")) eventos += amt;
+          else if (t.counts_as_investment || slug === "manutencao_kitnets" || slug === "dev_profissional_agora" || slug === "dev_pessoal_futuro" || slug === "produtividade_ferramentas" || slug === "consorcios_aporte") outros += amt;
           else custeio += amt;
         }
 
-        out.push({ month: m, receita, custeio, obras, casamento, viagens, outros, sobra: receita - custeio - obras - casamento - viagens - outros });
+        out.push({ month: m, receita, custeio, obras, casamento, eventos, outros, sobra: receita - custeio - obras - casamento - eventos - outros });
       }
       return out;
     },
@@ -577,16 +577,16 @@ function YTDView({ months, data }: { months: string[]; data: any }) {
   if (data.isLoading || !data.data) {
     return <div className="text-center py-12 text-sm" style={{ color: "#94A3B8" }}>Calculando YTD…</div>;
   }
-  const rows = data.data as Array<{ month: string; receita: number; custeio: number; obras: number; casamento: number; viagens: number; outros: number; sobra: number }>;
+  const rows = data.data as Array<{ month: string; receita: number; custeio: number; obras: number; casamento: number; eventos: number; outros: number; sobra: number }>;
   const totals = rows.reduce((acc, r) => ({
     receita: acc.receita + r.receita,
     custeio: acc.custeio + r.custeio,
     obras: acc.obras + r.obras,
     casamento: acc.casamento + r.casamento,
-    viagens: acc.viagens + r.viagens,
+    eventos: acc.eventos + r.eventos,
     outros: acc.outros + r.outros,
     sobra: acc.sobra + r.sobra,
-  }), { receita: 0, custeio: 0, obras: 0, casamento: 0, viagens: 0, outros: 0, sobra: 0 });
+  }), { receita: 0, custeio: 0, obras: 0, casamento: 0, eventos: 0, outros: 0, sobra: 0 });
 
   return (
     <PremiumCard>
@@ -605,7 +605,7 @@ function YTDView({ months, data }: { months: string[]; data: any }) {
               <th className="text-right py-2 px-2">Custeio</th>
               <th className="text-right py-2 px-2">Obras</th>
               <th className="text-right py-2 px-2">Casamento</th>
-              <th className="text-right py-2 px-2">Viagens</th>
+              <th className="text-right py-2 px-2">Eventos</th>
               <th className="text-right py-2 px-2">Outros</th>
               <th className="text-right py-2 px-2">Sobra</th>
             </tr>
@@ -618,7 +618,7 @@ function YTDView({ months, data }: { months: string[]; data: any }) {
                 <td className="py-2 px-2 text-right tabular-nums" style={{ color: "#EF4444" }}>{moneyShort(r.custeio)}</td>
                 <td className="py-2 px-2 text-right tabular-nums" style={{ color: "#C9A84C" }}>{moneyShort(r.obras)}</td>
                 <td className="py-2 px-2 text-right tabular-nums" style={{ color: "#EC4899" }}>{moneyShort(r.casamento)}</td>
-                <td className="py-2 px-2 text-right tabular-nums" style={{ color: "#3B82F6" }}>{moneyShort(r.viagens)}</td>
+                <td className="py-2 px-2 text-right tabular-nums" style={{ color: "#3B82F6" }}>{moneyShort(r.eventos)}</td>
                 <td className="py-2 px-2 text-right tabular-nums" style={{ color: "#A78BFA" }}>{moneyShort(r.outros)}</td>
                 <td className="py-2 px-2 text-right tabular-nums font-bold" style={{ color: r.sobra >= 0 ? "#10B981" : "#EF4444" }}>{moneyShort(r.sobra)}</td>
               </tr>
@@ -629,7 +629,7 @@ function YTDView({ months, data }: { months: string[]; data: any }) {
               <td className="py-3 px-2 text-right tabular-nums font-bold" style={{ color: "#EF4444" }}>{moneyShort(totals.custeio)}</td>
               <td className="py-3 px-2 text-right tabular-nums font-bold" style={{ color: "#C9A84C" }}>{moneyShort(totals.obras)}</td>
               <td className="py-3 px-2 text-right tabular-nums font-bold" style={{ color: "#EC4899" }}>{moneyShort(totals.casamento)}</td>
-              <td className="py-3 px-2 text-right tabular-nums font-bold" style={{ color: "#3B82F6" }}>{moneyShort(totals.viagens)}</td>
+              <td className="py-3 px-2 text-right tabular-nums font-bold" style={{ color: "#3B82F6" }}>{moneyShort(totals.eventos)}</td>
               <td className="py-3 px-2 text-right tabular-nums font-bold" style={{ color: "#A78BFA" }}>{moneyShort(totals.outros)}</td>
               <td className="py-3 px-2 text-right tabular-nums font-bold" style={{ color: totals.sobra >= 0 ? "#10B981" : "#EF4444" }}>{moneyShort(totals.sobra)}</td>
             </tr>

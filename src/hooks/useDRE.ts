@@ -42,7 +42,9 @@ export type DRE = {
     total: number;
     buckets: DREBucket[];
   };
-  viagens: {
+  eventos: {
+    // Viagens-evento (China, EUA, Europa, lua de mel) e outros eventos pontuais.
+    // Detecção: slug ou category com prefixo `evento_`. Casamento é bucket próprio.
     total: number;
     buckets: DREBucket[];
   };
@@ -58,13 +60,13 @@ export type DRE = {
     custeio: number;
     obras: number;
     casamento: number;
-    viagens: number;
+    eventos: number;
     outros_aportes: number;
     sobra_liquida: number;
     sobra_operacional_pct: number;       // (receita - custeio) / receita
     reinvestimento_patrimonial_pct: number;  // obras / receita
     reinvestimento_total_pct: number;    // (obras + outros_aportes) / receita
-    casamento_viagens_pct: number;       // (casamento + viagens) / receita
+    casamento_eventos_pct: number;       // (casamento + eventos) / receita
   };
 };
 
@@ -76,7 +78,7 @@ type ExpenseLike = {
   counts_as_investment?: boolean | null;
 };
 
-function classifyExpense(e: ExpenseLike): "obras" | "casamento" | "viagens" | "outros_aportes" | "custeio" {
+function classifyExpense(e: ExpenseLike): "obras" | "casamento" | "eventos" | "outros_aportes" | "custeio" {
   const c = (e.category || "").toLowerCase();
   const d = (e.description || "").toLowerCase();
 
@@ -84,31 +86,33 @@ function classifyExpense(e: ExpenseLike): "obras" | "casamento" | "viagens" | "o
   if (c === "obras" || c === "aporte_obra" || c === "terrenos") return "obras";
   if (e.vector === "WT7_Holding" || e.vector === "aporte_obra") return "obras";
 
-  // CASAMENTO
+  // CASAMENTO (bucket próprio — wedding_installments + tx marcadas)
   if (c === "casamento" || c === "casamento_2027") return "casamento";
   if (d.includes("villa sonali") || d.includes("casamento")) return "casamento";
 
-  // VIAGENS
-  if (c === "viagens" || c === "viagem_educacao" || c === "viagem_negocios") return "viagens";
-  if (e.vector === "viagens") return "viagens";
+  // EVENTOS PONTUAIS (China, EUA, Europa, lua de mel, etc) — slug/category com prefixo `evento_`
+  if (c.startsWith("evento_")) return "eventos";
 
   // OUTROS APORTES
   if (e.counts_as_investment === true) return "outros_aportes";
   if (c === "consorcio" || c === "consorcios_aporte") return "outros_aportes";
   if (c === "kitnets_manutencao" || c === "manutencao_kitnets") return "outros_aportes";
 
+  // Viagens curtas/trabalho/estudo (slug `viagens`, `viagem_educacao`, `viagem_negocios`,
+  // vector `viagens`) ficam em CUSTEIO — são consumo corrente, não evento patrimonial.
   return "custeio";
 }
 
-function classifyCardTx(t: { vector?: string | null; counts_as_investment?: boolean | null; custom_categories?: { slug?: string | null; vector?: string | null } | null }): "obras" | "casamento" | "viagens" | "outros_aportes" | "custeio" | "ignorar" {
+function classifyCardTx(t: { vector?: string | null; counts_as_investment?: boolean | null; custom_categories?: { slug?: string | null; vector?: string | null } | null }): "obras" | "casamento" | "eventos" | "outros_aportes" | "custeio" | "ignorar" {
   const slug = t.custom_categories?.slug || "";
   if (slug === "ignorar") return "ignorar";
   if (slug === "aporte_obra") return "obras";
   if (slug === "casamento_2027") return "casamento";
-  if (slug === "viagens" || slug === "viagem_educacao" || slug === "viagem_negocios") return "viagens";
+  if (slug.startsWith("evento_")) return "eventos";
   if (slug === "manutencao_kitnets") return "outros_aportes";
   if (slug === "consorcios_aporte" || slug === "dev_profissional_agora" || slug === "dev_pessoal_futuro" || slug === "produtividade_ferramentas") return "outros_aportes";
   if (t.counts_as_investment) return "outros_aportes";
+  // Viagens curtas/trabalho/estudo: slug `viagens`, `viagem_educacao`, `viagem_negocios` → CUSTEIO
   return "custeio";
 }
 
@@ -214,7 +218,7 @@ export function useDRE(month: string) {
       const custeioGroup: Group = new Map();
       const obrasGroup: Group = new Map();
       const casamentoGroup: Group = new Map();
-      const viagensGroup: Group = new Map();
+      const eventosGroup: Group = new Map();
       const consorciosGroup: Group = new Map();
       const devProGroup: Group = new Map();
       const devPessoalGroup: Group = new Map();
@@ -251,8 +255,8 @@ export function useDRE(month: string) {
           }
         } else if (bloc === "casamento") {
           addItem(casamentoGroup, cat, item);
-        } else if (bloc === "viagens") {
-          addItem(viagensGroup, cat, item);
+        } else if (bloc === "eventos") {
+          addItem(eventosGroup, cat, item);
         } else if (bloc === "outros_aportes") {
           if (cat.toLowerCase().includes("consorcio") || cat === "consorcios_aporte") addItem(consorciosGroup, "Consórcios", item);
           else if (cat === "dev_profissional_agora") addItem(devProGroup, "Dev Profissional", item);
@@ -277,7 +281,7 @@ export function useDRE(month: string) {
         };
         if (bloc === "obras") addItem(obrasGroup, "Cartão · Obras", item);
         else if (bloc === "casamento") addItem(casamentoGroup, "Cartão · Casamento", item);
-        else if (bloc === "viagens") addItem(viagensGroup, "Cartão · Viagens", item);
+        else if (bloc === "eventos") addItem(eventosGroup, "Cartão · " + (t.custom_categories?.slug || "Evento"), item);
         else if (bloc === "outros_aportes") {
           const slug = t.custom_categories?.slug;
           if (slug === "dev_profissional_agora") addItem(devProGroup, "Dev Profissional (cartão)", item);
@@ -342,7 +346,7 @@ export function useDRE(month: string) {
           terrenos: terrenosArr[0] ?? { label: "Terrenos NRSX", total: 0, items: [] },
         },
         casamento: { total: sumGroup(casamentoGroup), buckets: toArr(casamentoGroup) },
-        viagens: { total: sumGroup(viagensGroup), buckets: toArr(viagensGroup) },
+        eventos: { total: sumGroup(eventosGroup), buckets: toArr(eventosGroup) },
         outros_aportes: {
           total: sumGroup(consorciosGroup) + sumGroup(devProGroup) + sumGroup(devPessoalGroup) + sumGroup(ferramentasGroup),
           consorcios: toArr(consorciosGroup)[0] ?? { label: "Consórcios", total: 0, items: [] },
@@ -350,7 +354,7 @@ export function useDRE(month: string) {
           dev_pessoal: toArr(devPessoalGroup)[0] ?? { label: "Dev Pessoal", total: 0, items: [] },
           ferramentas: toArr(ferramentasGroup)[0] ?? { label: "Ferramentas", total: 0, items: [] },
         },
-        resultado: { receita: 0, custeio: 0, obras: 0, casamento: 0, viagens: 0, outros_aportes: 0, sobra_liquida: 0, sobra_operacional_pct: 0, reinvestimento_patrimonial_pct: 0, reinvestimento_total_pct: 0, casamento_viagens_pct: 0 },
+        resultado: { receita: 0, custeio: 0, obras: 0, casamento: 0, eventos: 0, outros_aportes: 0, sobra_liquida: 0, sobra_operacional_pct: 0, reinvestimento_patrimonial_pct: 0, reinvestimento_total_pct: 0, casamento_eventos_pct: 0 },
       };
 
       // Resultado
@@ -358,13 +362,13 @@ export function useDRE(month: string) {
       dre.resultado.custeio = dre.custeio.total;
       dre.resultado.obras = dre.obras.total;
       dre.resultado.casamento = dre.casamento.total;
-      dre.resultado.viagens = dre.viagens.total;
+      dre.resultado.eventos = dre.eventos.total;
       dre.resultado.outros_aportes = dre.outros_aportes.total;
-      dre.resultado.sobra_liquida = receitaTotal - dre.custeio.total - dre.obras.total - dre.casamento.total - dre.viagens.total - dre.outros_aportes.total;
+      dre.resultado.sobra_liquida = receitaTotal - dre.custeio.total - dre.obras.total - dre.casamento.total - dre.eventos.total - dre.outros_aportes.total;
       dre.resultado.sobra_operacional_pct = receitaTotal > 0 ? ((receitaTotal - dre.custeio.total) / receitaTotal) * 100 : 0;
       dre.resultado.reinvestimento_patrimonial_pct = receitaTotal > 0 ? (dre.obras.total / receitaTotal) * 100 : 0;
       dre.resultado.reinvestimento_total_pct = receitaTotal > 0 ? ((dre.obras.total + dre.outros_aportes.total) / receitaTotal) * 100 : 0;
-      dre.resultado.casamento_viagens_pct = receitaTotal > 0 ? ((dre.casamento.total + dre.viagens.total) / receitaTotal) * 100 : 0;
+      dre.resultado.casamento_eventos_pct = receitaTotal > 0 ? ((dre.casamento.total + dre.eventos.total) / receitaTotal) * 100 : 0;
 
       return dre;
     },
