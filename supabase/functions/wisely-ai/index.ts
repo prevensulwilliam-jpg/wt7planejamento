@@ -62,7 +62,18 @@ Quando a pergunta for puramente tática (número, cálculo, decisão operacional
 - CAGR exigido: 17,3% a.a.
 
 ═══ DADOS EM TEMPO REAL ═══
-Quando a mensagem incluir "Dados da página:" ou "Snapshot:", usar esses números exatos. Sem eles, trabalhar com memória e sinalizar.
+Quando a mensagem incluir "Dados da página:" ou "Snapshot:", usar esses números como ponto de partida.
+
+═══ FERRAMENTA DE BUSCA — USE QUANDO PRECISAR DE NÚMERO EXATO ═══
+Você tem acesso à ferramenta **get_breakdown(month, bucket?)** que retorna os lançamentos reais do mês agrupados por categoria, com os top 5 itens de cada (data + valor + descrição). Use SEMPRE que:
+- For citar valor específico de uma categoria (ex: "Lazer R$ X")
+- For listar transações de um bloco
+- Precisar validar uma soma antes de afirmar
+- A pergunta envolver classificar custos (essencial/luxo, etc)
+- Quiser comparar sub-categorias dentro de um bloco
+
+**Buckets possíveis:** receitas, custeio, obras, casamento, eventos, outros_aportes.
+**Não chute somas.** Se o snapshot só tem agregado e a pergunta exige granularidade, chame a tool. É barato e a resposta fica auditável. Após chamar a tool, cite valores **exatos** e mostre as categorias top 3-5 de cada bucket.
 
 PT-BR, direto, executivo. **Negrito** em números. Trate William pelo nome. Máximo 4 parágrafos — a menos que ele peça profundidade.`;
 
@@ -385,27 +396,257 @@ function safeParseJson(raw: string): Record<string, unknown> {
   }
 }
 
+// ─── Naval Tools — funções que Claude Haiku pode chamar pra buscar dado real ──
+// MVP: só get_breakdown(month, bucket?) — retorna lançamentos do DRE agrupados
+// por categoria. Replica a lógica de useDRE.ts (regime caixa pra cartão, Modelo A
+// pra kitnets) pra Naval ter os mesmos números que aparecem em /dre.
+
+const NAVAL_TOOLS: ClaudeTool[] = [
+  {
+    name: "get_breakdown",
+    description:
+      "Retorna o detalhe dos lançamentos do mês, agrupados por categoria, dentro de um bloco do DRE. " +
+      "Use sempre que precisar citar valores específicos, listar transações de uma categoria, ou validar somas. " +
+      "Regime caixa: cartão = fatura paga no mês (paid_at). Kitnets = entries reconciled (Modelo A). " +
+      "Retorna JSON com totais por categoria + top 5 itens de cada categoria (data/valor/descrição).",
+    input_schema: {
+      type: "object",
+      properties: {
+        month: {
+          type: "string",
+          description: "Mês no formato YYYY-MM (ex: 2026-04). Sempre obrigatório.",
+        },
+        bucket: {
+          type: "string",
+          enum: ["receitas", "custeio", "obras", "casamento", "eventos", "outros_aportes"],
+          description:
+            "Bloco do DRE pra detalhar. Omitir = retorna todos os blocos (resposta maior).",
+        },
+      },
+      required: ["month"],
+    },
+  },
+];
+
+// Classifica expense em bucket DRE (idêntico ao classifyExpense do useDRE.ts)
+function classifyExpense(e: any): "obras" | "casamento" | "eventos" | "outros_aportes" | "custeio" {
+  const c = (e.category || "").toLowerCase();
+  const d = (e.description || "").toLowerCase();
+  const v = e.vector || "";
+  if (c === "obras" || c === "aporte_obra" || c === "terrenos") return "obras";
+  if (v === "WT7_Holding" || v === "aporte_obra") return "obras";
+  if (c === "casamento" || c === "casamento_2027") return "casamento";
+  if (d.includes("villa sonali") || d.includes("casamento")) return "casamento";
+  if (c.startsWith("evento_")) return "eventos";
+  if (e.counts_as_investment === true) return "outros_aportes";
+  if (c === "consorcio" || c === "consorcios_aporte") return "outros_aportes";
+  if (c === "kitnets_manutencao" || c === "manutencao_kitnets") return "outros_aportes";
+  if (c === "dev_profissional_agora" || c === "dev_pessoal_futuro" || c === "produtividade_ferramentas") return "outros_aportes";
+  return "custeio";
+}
+
+function classifyCardTx(t: any): "obras" | "casamento" | "eventos" | "outros_aportes" | "custeio" | "ignorar" {
+  const slug = t.custom_categories?.slug || "";
+  if (slug === "ignorar") return "ignorar";
+  if (slug === "aporte_obra") return "obras";
+  if (slug === "casamento_2027") return "casamento";
+  if (slug.startsWith("evento_")) return "eventos";
+  if (slug === "manutencao_kitnets") return "outros_aportes";
+  if (slug === "consorcios_aporte" || slug === "dev_profissional_agora" || slug === "dev_pessoal_futuro" || slug === "produtividade_ferramentas") return "outros_aportes";
+  if (t.counts_as_investment) return "outros_aportes";
+  return "custeio";
+}
+
+async function handleGetBreakdown(input: Record<string, unknown>, supabaseUrl: string, serviceKey: string): Promise<string> {
+  const month = String(input.month ?? "").trim();
+  const bucketFilter = input.bucket ? String(input.bucket) : null;
+  if (!/^\d{4}-\d{2}$/.test(month)) {
+    return JSON.stringify({ error: "month deve ser YYYY-MM" });
+  }
+
+  const sb = createClient(supabaseUrl, serviceKey);
+  const monthStart = `${month}-01`;
+  const [yy, mm] = month.split("-").map(Number);
+  const lastDay = new Date(yy, mm, 0).getDate();
+  const monthEnd = `${yy}-${String(mm).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+  const nextMonth = mm === 12 ? `${yy + 1}-01-01` : `${yy}-${String(mm + 1).padStart(2, "0")}-01`;
+
+  // ── RECEITAS (se filtro for receitas ou null) ──
+  type AggItem = { date: string | null; amount: number; label: string };
+  type AggCat = { total: number; count: number; items: AggItem[] };
+  const buckets: Record<string, Record<string, AggCat>> = {
+    receitas: {},
+    custeio: {},
+    obras: {},
+    casamento: {},
+    eventos: {},
+    outros_aportes: {},
+  };
+
+  const addItem = (bucket: string, cat: string, item: AggItem) => {
+    const b = buckets[bucket];
+    if (!b[cat]) b[cat] = { total: 0, count: 0, items: [] };
+    b[cat].total += item.amount;
+    b[cat].count += 1;
+    b[cat].items.push(item);
+  };
+
+  // RECEITAS
+  if (!bucketFilter || bucketFilter === "receitas") {
+    const { data: revs } = await sb.from("revenues")
+      .select("amount, source, description, received_at, counts_as_income, business_id")
+      .eq("reference_month", month);
+    const { data: kit } = await sb.from("kitnet_entries")
+      .select("total_liquid, tenant_name, reconciled, reconciled_at, period_end")
+      .eq("reference_month", month);
+    const { data: paidInst } = await (sb as any).from("other_commission_installments")
+      .select("amount, paid_amount, paid_at, installment_number, other_commissions(description, source)")
+      .not("paid_at", "is", null).gte("paid_at", monthStart).lte("paid_at", monthEnd);
+
+    for (const r of revs ?? []) {
+      if ((r as any).counts_as_income === false) continue;
+      if ((r as any).source === "aluguel_kitnets") continue;
+      const src = ((r as any).source || "").toLowerCase();
+      const desc = ((r as any).description || "").toLowerCase();
+      const isPrev = src.includes("prevensul") || src.includes("comiss") || src.includes("salar") || src.includes("clt") ||
+                     desc.includes("prevensul") || desc.includes("salár") || desc.includes("comiss");
+      addItem("receitas", isPrev ? "renda_ativa_prevensul" : "avulsas", {
+        date: (r as any).received_at,
+        amount: Number((r as any).amount ?? 0),
+        label: (r as any).description || (r as any).source || "?",
+      });
+    }
+    for (const k of kit ?? []) {
+      if ((k as any).reconciled !== true) continue;
+      addItem("receitas", "renda_passiva_kitnets", {
+        date: (k as any).reconciled_at ?? (k as any).period_end ?? null,
+        amount: Number((k as any).total_liquid ?? 0),
+        label: `Aluguel — ${(k as any).tenant_name || "(vago)"}`,
+      });
+    }
+    for (const p of paidInst ?? []) {
+      addItem("receitas", "comissoes_extras", {
+        date: (p as any).paid_at,
+        amount: Number((p as any).paid_amount ?? (p as any).amount ?? 0),
+        label: `${(p as any).other_commissions?.description ?? "Comissão"} · parc ${(p as any).installment_number}`,
+      });
+    }
+  }
+
+  // DESPESAS (expenses + cartão)
+  const needExpenses = !bucketFilter || ["custeio","obras","casamento","eventos","outros_aportes"].includes(bucketFilter);
+  if (needExpenses) {
+    const { data: exps } = await sb.from("expenses")
+      .select("amount, category, description, vector, counts_as_investment, paid_at, is_card_payment, nature")
+      .eq("reference_month", month);
+    for (const e of exps ?? []) {
+      if ((e as any).is_card_payment) continue;
+      if (((e as any).nature ?? "expense") === "transfer") continue;
+      const bucket = classifyExpense(e);
+      addItem(bucket, (e as any).category || "outros", {
+        date: (e as any).paid_at,
+        amount: Number((e as any).amount ?? 0),
+        label: (e as any).description || "?",
+      });
+    }
+
+    const { data: paidInvs } = await sb.from("card_invoices")
+      .select("id, paid_amount, total_amount")
+      .gte("paid_at", monthStart).lt("paid_at", nextMonth);
+    const ratio: Record<string, number> = {};
+    for (const inv of paidInvs ?? []) {
+      const t = Number((inv as any).total_amount ?? 0);
+      const p = Number((inv as any).paid_amount ?? t);
+      ratio[(inv as any).id] = t > 0 ? Math.min(1, p / t) : 1;
+    }
+    const invIds = (paidInvs ?? []).map((i: any) => i.id);
+    if (invIds.length > 0) {
+      const { data: txs } = await sb.from("card_transactions")
+        .select("amount, description, transaction_date, vector, counts_as_investment, invoice_id, custom_categories(slug, name)")
+        .in("invoice_id", invIds);
+      for (const t of txs ?? []) {
+        const bucket = classifyCardTx(t);
+        if (bucket === "ignorar") continue;
+        const amt = Number((t as any).amount ?? 0) * (ratio[(t as any).invoice_id] ?? 1);
+        const cat = (t as any).custom_categories?.slug || "cartao_outros";
+        addItem(bucket, `cartao__${cat}`, {
+          date: (t as any).transaction_date,
+          amount: amt,
+          label: (t as any).description || "?",
+        });
+      }
+    }
+  }
+
+  // Monta retorno compacto
+  const formatBucket = (b: Record<string, AggCat>) => {
+    const cats = Object.entries(b)
+      .map(([cat, v]) => ({
+        category: cat,
+        total: Math.round(v.total * 100) / 100,
+        count: v.count,
+        top_items: v.items
+          .sort((a, b2) => b2.amount - a.amount)
+          .slice(0, 5)
+          .map((i) => ({ date: i.date, amount: Math.round(i.amount * 100) / 100, label: i.label.slice(0, 70) })),
+      }))
+      .sort((a, b2) => b2.total - a.total);
+    const total = cats.reduce((s, c) => s + c.total, 0);
+    return { total: Math.round(total * 100) / 100, by_category: cats };
+  };
+
+  const out: Record<string, unknown> = { month };
+  if (bucketFilter) {
+    out.bucket = bucketFilter;
+    out.data = formatBucket(buckets[bucketFilter]);
+  } else {
+    out.all_buckets = {
+      receitas: formatBucket(buckets.receitas),
+      custeio: formatBucket(buckets.custeio),
+      obras: formatBucket(buckets.obras),
+      casamento: formatBucket(buckets.casamento),
+      eventos: formatBucket(buckets.eventos),
+      outros_aportes: formatBucket(buckets.outros_aportes),
+    };
+  }
+  return JSON.stringify(out);
+}
+
 // ─── Claude Haiku 4.5 — usado pelo Naval (chat conversacional) ────────────
 // Tenta Lovable Gateway primeiro (formato OpenAI-compatible). Se falhar com
 // erro de modelo não suportado, faz fallback pra API Anthropic direta usando
 // ANTHROPIC_API_KEY (configurada como secret do projeto).
 //
-// Diferenças chave:
-//   - Lovable Gateway: messages com system role inline, formato OpenAI
-//   - API Anthropic: system separado do messages array
+// Tool-use (function calling) só funciona via API Anthropic direta — Lovable
+// Gateway no formato OpenAI não tem o mesmo loop de tool_use/tool_result.
+// Quando tools são passadas, callClaudeHaiku VAI direto pra API Anthropic e
+// roda o loop interno até stop_reason === "end_turn".
+type ClaudeTool = {
+  name: string;
+  description: string;
+  input_schema: Record<string, unknown>;
+};
+type ClaudeToolHandler = (input: Record<string, unknown>) => Promise<string>;
 type ClaudeResult = { ok: true; text: string } | { ok: false; status: number; error: string };
 
 async function callClaudeHaiku(
   systemPrompt: string,
-  messages: Array<{ role: string; content: string | unknown }>,
-  opts: { maxTokens?: number; lovableKey?: string; anthropicKey?: string },
+  messages: Array<{ role: string; content: unknown }>,
+  opts: {
+    maxTokens?: number;
+    lovableKey?: string;
+    anthropicKey?: string;
+    tools?: ClaudeTool[];
+    toolHandlers?: Record<string, ClaudeToolHandler>;
+  },
 ): Promise<ClaudeResult> {
   const maxTokens = opts.maxTokens ?? 1500;
   const MODEL_GW = "anthropic/claude-haiku-4-5";
   const MODEL_NATIVE = "claude-haiku-4-5";
+  const useTools = (opts.tools?.length ?? 0) > 0;
 
-  // 1) Lovable Gateway primeiro (mesmo path do Gemini, só troca o model)
-  if (opts.lovableKey) {
+  // 1) Lovable Gateway — só funciona SEM tools (formato OpenAI não bate com loop Anthropic)
+  if (!useTools && opts.lovableKey) {
     try {
       const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
@@ -423,69 +664,118 @@ async function callClaudeHaiku(
         const data = await res.json();
         const text = data.choices?.[0]?.message?.content ?? "";
         if (text) {
-          console.log("[wisely-ai] Naval via Lovable Gateway · Claude Haiku 4.5 ✓");
+          console.log("[wisely-ai] Naval via Lovable Gateway · Claude Haiku 4.5 (sem tools) ✓");
           return { ok: true, text };
         }
       } else {
         const errText = await res.text().catch(() => "");
         console.warn(`[wisely-ai] Lovable Gateway Claude falhou: ${res.status} ${errText.slice(0, 200)}`);
-        // 4xx que não seja rate limit/credit → provável "modelo não suportado", tenta fallback
         if (res.status === 429 || res.status === 402) {
           return { ok: false, status: res.status, error: errText };
         }
-        // segue pro fallback
       }
     } catch (e) {
       console.warn("[wisely-ai] Lovable Gateway exception:", e instanceof Error ? e.message : String(e));
     }
   }
 
-  // 2) Fallback: API Anthropic nativa (precisa ANTHROPIC_API_KEY)
+  // 2) API Anthropic direta — único caminho com tool-use
   if (!opts.anthropicKey) {
     return {
       ok: false,
       status: 500,
-      error: "ANTHROPIC_API_KEY não configurada e Lovable Gateway falhou. Adicione a key como secret do projeto.",
+      error: useTools
+        ? "Tool-use exige ANTHROPIC_API_KEY configurada como secret do projeto."
+        : "ANTHROPIC_API_KEY não configurada e Lovable Gateway falhou.",
     };
   }
 
   try {
-    // Anthropic native: system separado do messages, role só user/assistant
-    const cleanMsgs = messages
+    // Anthropic native: system separado, messages role user/assistant
+    // Mantém content como array (necessário pra tool_use/tool_result)
+    let conversation = messages
       .filter((m) => m.role === "user" || m.role === "assistant")
       .map((m) => ({
         role: m.role,
-        content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
-      }));
+        content: typeof m.content === "string" ? m.content : (m.content as unknown),
+      })) as Array<{ role: string; content: unknown }>;
 
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": opts.anthropicKey,
-        "anthropic-version": "2023-06-01",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
+    // Loop tool-use — máximo 5 iterações pra evitar runaway
+    const MAX_TOOL_ITER = 5;
+    for (let iter = 0; iter < MAX_TOOL_ITER; iter++) {
+      const reqBody: Record<string, unknown> = {
         model: MODEL_NATIVE,
         max_tokens: maxTokens,
         system: systemPrompt,
-        messages: cleanMsgs,
-      }),
-    });
+        messages: conversation,
+      };
+      if (useTools) reqBody.tools = opts.tools;
 
-    if (!res.ok) {
-      const errText = await res.text().catch(() => "");
-      console.error(`[wisely-ai] Anthropic API error: ${res.status} ${errText.slice(0, 300)}`);
-      return { ok: false, status: res.status, error: errText };
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": opts.anthropicKey,
+          "anthropic-version": "2023-06-01",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(reqBody),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "");
+        console.error(`[wisely-ai] Anthropic API error (iter ${iter}): ${res.status} ${errText.slice(0, 300)}`);
+        return { ok: false, status: res.status, error: errText };
+      }
+
+      const data = await res.json();
+      const content = Array.isArray(data.content) ? data.content : [];
+      const stopReason = data.stop_reason as string | undefined;
+
+      // Se Claude pediu tool_use, executa todas as ferramentas pedidas e devolve resultados
+      if (stopReason === "tool_use") {
+        const toolUses = content.filter((c: any) => c.type === "tool_use");
+        if (toolUses.length === 0) break;
+
+        // Append assistant message com o conteúdo completo (texto + tool_use blocks)
+        conversation = [...conversation, { role: "assistant", content }];
+
+        // Executa cada tool e monta tool_result
+        const toolResults: Array<{ type: string; tool_use_id: string; content: string }> = [];
+        for (const tu of toolUses) {
+          const handler = opts.toolHandlers?.[tu.name];
+          if (!handler) {
+            toolResults.push({
+              type: "tool_result",
+              tool_use_id: tu.id,
+              content: `ERROR: tool ${tu.name} não tem handler registrado.`,
+            });
+            continue;
+          }
+          try {
+            const result = await handler(tu.input ?? {});
+            toolResults.push({ type: "tool_result", tool_use_id: tu.id, content: result });
+            console.log(`[wisely-ai] tool ${tu.name} executada · input=${JSON.stringify(tu.input).slice(0, 100)}`);
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : "erro desconhecido";
+            console.error(`[wisely-ai] tool ${tu.name} exception:`, msg);
+            toolResults.push({
+              type: "tool_result",
+              tool_use_id: tu.id,
+              content: `ERROR ao executar ${tu.name}: ${msg}`,
+            });
+          }
+        }
+        conversation = [...conversation, { role: "user", content: toolResults }];
+        continue; // próxima iteração — Claude vê o resultado e responde
+      }
+
+      // Resposta final (end_turn ou stop_sequence)
+      const text = content.filter((c: any) => c.type === "text").map((c: any) => c.text).join("");
+      console.log(`[wisely-ai] Naval via Anthropic API · Haiku 4.5 ${useTools ? `(tools, ${iter} iter)` : "(sem tools)"} ✓`);
+      return { ok: true, text };
     }
 
-    const data = await res.json();
-    // formato: { content: [{ type: "text", text: "..." }] }
-    const text = Array.isArray(data.content)
-      ? data.content.filter((c: any) => c.type === "text").map((c: any) => c.text).join("")
-      : "";
-    console.log("[wisely-ai] Naval via Anthropic API direta · Claude Haiku 4.5 ✓");
-    return { ok: true, text };
+    return { ok: false, status: 500, error: "Loop de tool-use excedeu MAX_TOOL_ITER" };
   } catch (e) {
     return {
       ok: false,
@@ -905,12 +1195,26 @@ Gere a leitura estratégica seguindo o formato obrigatório.`;
     // Naval roda no Claude Haiku 4.5 — qualidade de raciocínio significativamente
     // melhor pra conselhos financeiros vs Gemini Flash (que continua nas extrações
     // de PDF, parse de fatura, reconcile, etc — mais barato e cumpre bem o papel).
-    // Streaming desabilitado por enquanto — wt7 já passa stream:false do client.
+    //
+    // Tool-use: Naval pode chamar get_breakdown(month, bucket?) pra buscar
+    // lançamentos detalhados do DRE em vez de chutar somas. Só funciona via
+    // API Anthropic direta (precisa ANTHROPIC_API_KEY) — sem ela, degrada
+    // gracefully pro modo sem tools via Lovable Gateway.
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+
+    const useTools = !!ANTHROPIC_API_KEY && !!supabaseUrl && !!serviceKey;
     const result = await callClaudeHaiku(systemPrompt, messages, {
-      maxTokens: 1500,
+      maxTokens: 2000,
       lovableKey: LOVABLE_API_KEY,
       anthropicKey: ANTHROPIC_API_KEY,
+      tools: useTools ? NAVAL_TOOLS : undefined,
+      toolHandlers: useTools
+        ? {
+            get_breakdown: (input) => handleGetBreakdown(input, supabaseUrl, serviceKey),
+          }
+        : undefined,
     });
 
     if (!result.ok) {
