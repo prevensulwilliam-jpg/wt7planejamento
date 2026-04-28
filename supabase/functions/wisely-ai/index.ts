@@ -64,8 +64,9 @@ Quando a pergunta for puramente tática (número, cálculo, decisão operacional
 ═══ DADOS EM TEMPO REAL ═══
 Quando a mensagem incluir "Dados da página:" ou "Snapshot:", usar esses números como ponto de partida.
 
-═══ FERRAMENTA DE BUSCA — USE QUANDO PRECISAR DE NÚMERO EXATO ═══
-Você tem acesso à ferramenta **get_breakdown(month, bucket?, only_card?)** que retorna os lançamentos reais do mês agrupados por categoria, com os top 5 itens de cada (data + valor + descrição). Use SEMPRE que:
+═══ FERRAMENTAS DE BUSCA — USE QUANDO PRECISAR DE NÚMERO EXATO ═══
+
+**Tool 1: get_breakdown(month, bucket?, only_card?)** — lançamentos reais do mês agrupados por categoria, com os top 5 itens de cada (data + valor + descrição). Use SEMPRE que:
 - For citar valor específico de uma categoria (ex: "Lazer R$ X")
 - For listar transações de um bloco
 - Precisar validar uma soma antes de afirmar
@@ -81,6 +82,27 @@ Ex: pergunta "5 maiores gastos do meu cartão" → chame get_breakdown(month="20
 Ex: pergunta "essencial vs luxo" → chame get_breakdown(month="2026-04") → tudo, pra ter visão completa.
 
 **Não chute somas.** Se o snapshot só tem agregado e a pergunta exige granularidade, chame a tool. É barato e a resposta fica auditável. Após chamar a tool, cite valores **exatos** das categorias retornadas — nunca invente número que não veio na resposta da tool.
+
+**Tool 2: get_prevensul_pipeline(client_filter?, include_paid?)** — pipeline FUTURO de comissões Prevensul direto da tabela prevensul_billing. Retorna saldo a receber, comissão futura, concentração por cliente. USE SEMPRE que a pergunta envolver:
+- "comissões futuras", "pipeline", "quanto vou receber"
+- "GRAND FOOD" ou "concentração de cliente"
+- "saldo a receber" Prevensul
+- Detalhe de pipeline por cliente específico (use client_filter)
+
+⚠ **CRÍTICO — números do pipeline na memoria/metas.md e memoria/negocios.md estão DESATUALIZADOS** (eram do 1º trimestre 2026, não refletem contratos novos). SEMPRE use esta tool em vez de citar memória pra pipeline futuro. Os números reais podem estar 3-4x maiores.
+
+═══ REGRAS INVIOLÁVEIS DE CONFLITO COM CENÁRIOS DO USUÁRIO ═══
+Quando o William perguntar "e se eu vender X" ou "e se eu fizer Y" e a memória/metas.md tiver regra inviolável contra essa ação, NÃO MODELE O CENÁRIO ainda. Em vez:
+1. CITE A REGRA EXPLICITAMENTE ("memoria/metas.md regra #4: nunca recomendar vender Blumenau nos próximos 3 anos — colateral de fogo estratégico")
+2. PERGUNTE se ele quer revisar a premissa
+3. SÓ DEPOIS de confirmação, modele o cenário hipotético
+
+Regras-âncora pra cruzar antes de qualquer recomendação:
+- Caixa < R$ 100k → não esvazie
+- Vender Blumenau antes de 2029 → não recomende
+- Comprometer liquidez casamento dez/2027 → não recomende
+- Largar comercial Prevensul antes de SDR rodar → não recomende
+- Qualquer ação que viole memoria/metas.md "Restrições defensivas" → cite a regra primeiro
 
 PT-BR, direto, executivo. **Negrito** em números. Trate William pelo nome. Máximo 4 parágrafos — a menos que ele peça profundidade.`;
 
@@ -447,6 +469,32 @@ const NAVAL_TOOLS: ClaudeTool[] = [
       required: ["month"],
     },
   },
+  {
+    name: "get_prevensul_pipeline",
+    description:
+      "Retorna o pipeline COMPLETO de comissões futuras Prevensul — saldo a receber por cliente, " +
+      "comissão futura calculada (balance_remaining × commission_rate), concentração de risco. " +
+      "USE SEMPRE que a pergunta envolver: pipeline, comissões futuras, saldo a receber, GRAND FOOD, " +
+      "concentração de cliente, ou 'quanto vou receber'. Os números da memória (memoria/metas.md, " +
+      "memoria/negocios.md) podem estar desatualizados — esta tool tem o dado VIVO da tabela " +
+      "prevensul_billing. Top 15 clientes + total geral. Filtro opcional por nome do cliente.",
+    input_schema: {
+      type: "object",
+      properties: {
+        client_filter: {
+          type: "string",
+          description:
+            "Filtra por nome do cliente (busca parcial, case-insensitive). " +
+            "Ex: 'GRAND' retorna só GRAND FOOD. Omitir = todos.",
+        },
+        include_paid: {
+          type: "boolean",
+          description:
+            "Se true, inclui linhas com balance_remaining=0 (já pagas). Default false (só pendentes).",
+        },
+      },
+    },
+  },
 ];
 
 // Classifica expense em bucket DRE (idêntico ao classifyExpense do useDRE.ts)
@@ -635,6 +683,102 @@ async function handleGetBreakdown(input: Record<string, unknown>, supabaseUrl: s
     };
   }
   return JSON.stringify(out);
+}
+
+// ─── Handler: get_prevensul_pipeline ──────────────────────────────────────
+// Lê prevensul_billing e retorna saldo a receber + comissão futura agregados
+// por cliente. Resolve o problema de Naval citar números desatualizados das
+// memórias .md — a fonte da verdade é a tabela viva.
+async function handleGetPrevensulPipeline(
+  input: Record<string, unknown>,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<string> {
+  const sb = createClient(supabaseUrl, serviceKey);
+  const clientFilter = typeof input.client_filter === "string"
+    ? input.client_filter.trim().toUpperCase()
+    : null;
+  const includePaid = input.include_paid === true;
+
+  let query = sb.from("prevensul_billing")
+    .select("client_name, contract_total, balance_remaining, commission_rate, commission_value, status, reference_month, installment_current, installment_total, closing_date");
+
+  if (!includePaid) query = query.gt("balance_remaining", 0);
+
+  const { data, error } = await query;
+  if (error) {
+    return JSON.stringify({ error: `prevensul_billing query failed: ${error.message}` });
+  }
+
+  let rows = (data ?? []) as Array<{
+    client_name: string;
+    contract_total: number | null;
+    balance_remaining: number | null;
+    commission_rate: number | null;
+    commission_value: number | null;
+    status: string | null;
+    reference_month: string | null;
+    installment_current: number | null;
+    installment_total: number | null;
+    closing_date: string | null;
+  }>;
+
+  if (clientFilter) {
+    rows = rows.filter((r) => (r.client_name || "").toUpperCase().includes(clientFilter));
+  }
+
+  // Agrega por cliente
+  type Agg = { balance: number; commFuture: number; commPaid: number; rows: number; contracts: number };
+  const byClient = new Map<string, Agg>();
+  for (const r of rows) {
+    const name = r.client_name || "?";
+    const balance = Number(r.balance_remaining || 0);
+    const rate = Number(r.commission_rate || 0);
+    const commPaid = Number(r.commission_value || 0);
+    const cur = byClient.get(name) ?? { balance: 0, commFuture: 0, commPaid: 0, rows: 0, contracts: 0 };
+    cur.balance += balance;
+    cur.commFuture += balance * rate;
+    cur.commPaid += commPaid;
+    cur.rows += 1;
+    byClient.set(name, cur);
+  }
+
+  // Totais
+  const totalBalance = Array.from(byClient.values()).reduce((s, v) => s + v.balance, 0);
+  const totalCommFuture = Array.from(byClient.values()).reduce((s, v) => s + v.commFuture, 0);
+  const totalCommPaid = Array.from(byClient.values()).reduce((s, v) => s + v.commPaid, 0);
+
+  // Top 15 por saldo
+  const top = Array.from(byClient.entries())
+    .map(([name, v]) => ({
+      client: name,
+      balance_remaining: Math.round(v.balance * 100) / 100,
+      commission_future: Math.round(v.commFuture * 100) / 100,
+      commission_already_paid: Math.round(v.commPaid * 100) / 100,
+      pipeline_pct: totalBalance > 0 ? Math.round((v.balance / totalBalance) * 1000) / 10 : 0,
+      installments_open: v.rows,
+    }))
+    .sort((a, b) => b.balance_remaining - a.balance_remaining)
+    .slice(0, 15);
+
+  // Concentração: % do top cliente
+  const top1Pct = top.length > 0 ? top[0].pipeline_pct : 0;
+  const top1Name = top.length > 0 ? top[0].client : null;
+
+  return JSON.stringify({
+    summary: {
+      total_balance_remaining: Math.round(totalBalance * 100) / 100,
+      total_commission_future: Math.round(totalCommFuture * 100) / 100,
+      total_commission_already_paid: Math.round(totalCommPaid * 100) / 100,
+      total_clients: byClient.size,
+      total_open_rows: rows.length,
+      concentration_top_client: top1Name,
+      concentration_top_client_pct: top1Pct,
+      filtered_by_client: clientFilter,
+      included_paid: includePaid,
+    },
+    by_client: top,
+  });
 }
 
 // ─── Claude Haiku 4.5 — usado pelo Naval (chat conversacional) ────────────
@@ -849,7 +993,7 @@ async function callClaudeHaiku(
 // Versão do código deployado — log inicial em CADA invocação pra confirmar
 // que o deploy do edge function está atualizado. Bumpa toda vez que mudar
 // a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
-const WISELY_AI_VERSION = "2026.04.28-v5-cache-split-only-card";
+const WISELY_AI_VERSION = "2026.04.28-v6-pipeline-tool-regras";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -1281,6 +1425,7 @@ Gere a leitura estratégica seguindo o formato obrigatório.`;
       toolHandlers: useTools
         ? {
             get_breakdown: (input) => handleGetBreakdown(input, supabaseUrl, serviceKey),
+            get_prevensul_pipeline: (input) => handleGetPrevensulPipeline(input, supabaseUrl, serviceKey),
           }
         : undefined,
     });
