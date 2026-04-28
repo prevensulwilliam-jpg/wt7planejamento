@@ -385,6 +385,116 @@ function safeParseJson(raw: string): Record<string, unknown> {
   }
 }
 
+// ─── Claude Haiku 4.5 — usado pelo Naval (chat conversacional) ────────────
+// Tenta Lovable Gateway primeiro (formato OpenAI-compatible). Se falhar com
+// erro de modelo não suportado, faz fallback pra API Anthropic direta usando
+// ANTHROPIC_API_KEY (configurada como secret do projeto).
+//
+// Diferenças chave:
+//   - Lovable Gateway: messages com system role inline, formato OpenAI
+//   - API Anthropic: system separado do messages array
+type ClaudeResult = { ok: true; text: string } | { ok: false; status: number; error: string };
+
+async function callClaudeHaiku(
+  systemPrompt: string,
+  messages: Array<{ role: string; content: string | unknown }>,
+  opts: { maxTokens?: number; lovableKey?: string; anthropicKey?: string },
+): Promise<ClaudeResult> {
+  const maxTokens = opts.maxTokens ?? 1500;
+  const MODEL_GW = "anthropic/claude-haiku-4-5";
+  const MODEL_NATIVE = "claude-haiku-4-5";
+
+  // 1) Lovable Gateway primeiro (mesmo path do Gemini, só troca o model)
+  if (opts.lovableKey) {
+    try {
+      const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${opts.lovableKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: MODEL_GW,
+          max_tokens: maxTokens,
+          messages: [{ role: "system", content: systemPrompt }, ...messages],
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const text = data.choices?.[0]?.message?.content ?? "";
+        if (text) {
+          console.log("[wisely-ai] Naval via Lovable Gateway · Claude Haiku 4.5 ✓");
+          return { ok: true, text };
+        }
+      } else {
+        const errText = await res.text().catch(() => "");
+        console.warn(`[wisely-ai] Lovable Gateway Claude falhou: ${res.status} ${errText.slice(0, 200)}`);
+        // 4xx que não seja rate limit/credit → provável "modelo não suportado", tenta fallback
+        if (res.status === 429 || res.status === 402) {
+          return { ok: false, status: res.status, error: errText };
+        }
+        // segue pro fallback
+      }
+    } catch (e) {
+      console.warn("[wisely-ai] Lovable Gateway exception:", e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  // 2) Fallback: API Anthropic nativa (precisa ANTHROPIC_API_KEY)
+  if (!opts.anthropicKey) {
+    return {
+      ok: false,
+      status: 500,
+      error: "ANTHROPIC_API_KEY não configurada e Lovable Gateway falhou. Adicione a key como secret do projeto.",
+    };
+  }
+
+  try {
+    // Anthropic native: system separado do messages, role só user/assistant
+    const cleanMsgs = messages
+      .filter((m) => m.role === "user" || m.role === "assistant")
+      .map((m) => ({
+        role: m.role,
+        content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
+      }));
+
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": opts.anthropicKey,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: MODEL_NATIVE,
+        max_tokens: maxTokens,
+        system: systemPrompt,
+        messages: cleanMsgs,
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      console.error(`[wisely-ai] Anthropic API error: ${res.status} ${errText.slice(0, 300)}`);
+      return { ok: false, status: res.status, error: errText };
+    }
+
+    const data = await res.json();
+    // formato: { content: [{ type: "text", text: "..." }] }
+    const text = Array.isArray(data.content)
+      ? data.content.filter((c: any) => c.type === "text").map((c: any) => c.text).join("")
+      : "";
+    console.log("[wisely-ai] Naval via Anthropic API direta · Claude Haiku 4.5 ✓");
+    return { ok: true, text };
+  } catch (e) {
+    return {
+      ok: false,
+      status: 500,
+      error: e instanceof Error ? e.message : "erro desconhecido",
+    };
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -791,54 +901,38 @@ Gere a leitura estratégica seguindo o formato obrigatório.`;
       topK: isApplicabilityQuery ? 15 : 10,
       threshold: isApplicabilityQuery ? 0.2 : 0.3,
     });
-    const body: Record<string, unknown> = {
-      model: "google/gemini-2.5-flash",
-      messages: [{ role: "system", content: systemPrompt }, ...messages],
-      stream: stream ?? false,
-    };
-    if (!stream) body.max_tokens = 1500;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
+    // Naval roda no Claude Haiku 4.5 — qualidade de raciocínio significativamente
+    // melhor pra conselhos financeiros vs Gemini Flash (que continua nas extrações
+    // de PDF, parse de fatura, reconcile, etc — mais barato e cumpre bem o papel).
+    // Streaming desabilitado por enquanto — wt7 já passa stream:false do client.
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
+    const result = await callClaudeHaiku(systemPrompt, messages, {
+      maxTokens: 1500,
+      lovableKey: LOVABLE_API_KEY,
+      anthropicKey: ANTHROPIC_API_KEY,
     });
 
-    if (!response.ok) {
-      const status = response.status;
-      const t = await response.text();
-      console.error("AI gateway error:", status, t);
-
-      if (status === 429) {
+    if (!result.ok) {
+      if (result.status === 429) {
         return new Response(
           JSON.stringify({ error: "Limite de requisições excedido. Tente novamente em alguns segundos.", rateLimited: true }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
-      if (status === 402) {
+      if (result.status === 402) {
         return new Response(
-          JSON.stringify({ error: "Créditos esgotados. Adicione fundos no workspace.", creditsExhausted: true }),
+          JSON.stringify({ error: "Créditos esgotados. Adicione fundos no workspace ou ANTHROPIC_API_KEY.", creditsExhausted: true }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
-      return new Response(JSON.stringify({ error: "Erro no gateway de IA" }), {
+      return new Response(JSON.stringify({ error: result.error || "Erro ao chamar Claude Haiku" }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    if (stream) {
-      return new Response(response.body, {
-        headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
-      });
-    }
-
-    const data = await response.json();
-    const text = data.choices?.[0]?.message?.content ?? "";
-    return new Response(JSON.stringify({ text }), {
+    return new Response(JSON.stringify({ text: result.text }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
