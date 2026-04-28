@@ -788,10 +788,17 @@ async function callClaudeHaiku(
   }
 }
 
+// Versão do código deployado — log inicial em CADA invocação pra confirmar
+// que o deploy do edge function está atualizado. Bumpa toda vez que mudar
+// a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
+const WISELY_AI_VERSION = "2026.04.28-v3-haiku-tools";
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
+
+  console.log(`[wisely-ai] ▶ invocação · versão ${WISELY_AI_VERSION}`);
 
   try {
     let body_req: Record<string, unknown>;
