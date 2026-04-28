@@ -706,13 +706,30 @@ async function callClaudeHaiku(
     // Loop tool-use — máximo 5 iterações pra evitar runaway
     const MAX_TOOL_ITER = 5;
     for (let iter = 0; iter < MAX_TOOL_ITER; iter++) {
+      // Prompt caching: marca o system prompt como cacheable (ephemeral, TTL 5min).
+      // System tem ~30k tokens (memória + brain stack). Sem cache, cada request custa
+      // 30k tokens de input → estoura rate limit Tier 1 (50k/min) em 2 chamadas.
+      // Com cache, requisições subsequentes em até 5min usam só ~10% do peso (cache_read).
+      // Anthropic prompt caching é GA, não precisa header beta.
+      // Tools também marcadas como cacheable (definição estável entre chamadas).
+      const cachedSystem = [
+        { type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } },
+      ];
       const reqBody: Record<string, unknown> = {
         model: MODEL_NATIVE,
         max_tokens: maxTokens,
-        system: systemPrompt,
+        system: cachedSystem,
         messages: conversation,
       };
-      if (useTools) reqBody.tools = opts.tools;
+      if (useTools && opts.tools) {
+        // Marca a última tool com cache_control — Anthropic cacheia até essa fronteira
+        const toolsWithCache = opts.tools.map((t, idx) =>
+          idx === opts.tools!.length - 1
+            ? { ...t, cache_control: { type: "ephemeral" } }
+            : t,
+        );
+        reqBody.tools = toolsWithCache;
+      }
 
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
@@ -733,6 +750,16 @@ async function callClaudeHaiku(
       const data = await res.json();
       const content = Array.isArray(data.content) ? data.content : [];
       const stopReason = data.stop_reason as string | undefined;
+
+      // Log tokens pra monitorar cache hit ratio
+      const usage = data.usage ?? {};
+      if (iter === 0) {
+        const cacheRead = usage.cache_read_input_tokens ?? 0;
+        const cacheWrite = usage.cache_creation_input_tokens ?? 0;
+        const inputReg = usage.input_tokens ?? 0;
+        const output = usage.output_tokens ?? 0;
+        console.log(`[wisely-ai] tokens · in_reg=${inputReg} cache_read=${cacheRead} cache_write=${cacheWrite} out=${output}`);
+      }
 
       // Se Claude pediu tool_use, executa todas as ferramentas pedidas e devolve resultados
       if (stopReason === "tool_use") {
@@ -791,7 +818,7 @@ async function callClaudeHaiku(
 // Versão do código deployado — log inicial em CADA invocação pra confirmar
 // que o deploy do edge function está atualizado. Bumpa toda vez que mudar
 // a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
-const WISELY_AI_VERSION = "2026.04.28-v3-haiku-tools";
+const WISELY_AI_VERSION = "2026.04.28-v4-prompt-caching";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
