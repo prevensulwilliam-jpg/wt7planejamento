@@ -65,7 +65,7 @@ Quando a pergunta for puramente tática (número, cálculo, decisão operacional
 Quando a mensagem incluir "Dados da página:" ou "Snapshot:", usar esses números como ponto de partida.
 
 ═══ FERRAMENTA DE BUSCA — USE QUANDO PRECISAR DE NÚMERO EXATO ═══
-Você tem acesso à ferramenta **get_breakdown(month, bucket?)** que retorna os lançamentos reais do mês agrupados por categoria, com os top 5 itens de cada (data + valor + descrição). Use SEMPRE que:
+Você tem acesso à ferramenta **get_breakdown(month, bucket?, only_card?)** que retorna os lançamentos reais do mês agrupados por categoria, com os top 5 itens de cada (data + valor + descrição). Use SEMPRE que:
 - For citar valor específico de uma categoria (ex: "Lazer R$ X")
 - For listar transações de um bloco
 - Precisar validar uma soma antes de afirmar
@@ -73,7 +73,14 @@ Você tem acesso à ferramenta **get_breakdown(month, bucket?)** que retorna os 
 - Quiser comparar sub-categorias dentro de um bloco
 
 **Buckets possíveis:** receitas, custeio, obras, casamento, eventos, outros_aportes.
-**Não chute somas.** Se o snapshot só tem agregado e a pergunta exige granularidade, chame a tool. É barato e a resposta fica auditável. Após chamar a tool, cite valores **exatos** e mostre as categorias top 3-5 de cada bucket.
+
+**REGRA CRÍTICA — when usuário menciona "cartão", "fatura", "BB", "XP" ou similar:**
+Passe `only_card=true` na tool. Isso retorna SOMENTE categorias com prefixo `cartao__` (alimentacao_supermercado, viagens, saude_academia_farmacia, etc). NÃO mistura com expenses (PIX, débito, boleto).
+
+Ex: pergunta "5 maiores gastos do meu cartão" → `get_breakdown(month="2026-04", bucket="custeio", only_card=true)` → retorna só tx do cartão.
+Ex: pergunta "essencial vs luxo" → `get_breakdown(month="2026-04")` → tudo, pra ter visão completa.
+
+**Não chute somas.** Se o snapshot só tem agregado e a pergunta exige granularidade, chame a tool. É barato e a resposta fica auditável. Após chamar a tool, cite valores **exatos** das categorias retornadas — nunca invente número que não veio na resposta da tool.
 
 PT-BR, direto, executivo. **Negrito** em números. Trate William pelo nome. Máximo 4 parágrafos — a menos que ele peça profundidade.`;
 
@@ -135,11 +142,14 @@ interface MatchedPrinciple {
  *   Modo "isso se aplica ao meu caso?": detectado no wisely-ai, aumenta K e
  *   reduz threshold pra pegar mais contexto.
  */
-async function buildSystemPrompt(opts?: { userQuery?: string; apiKey?: string; topK?: number; threshold?: number }): Promise<string> {
+// Retorna duas partes pra permitir prompt caching:
+//   - fixed: BASE_SYSTEM_PROMPT + naval_memory → estável entre chamadas, cacheável
+//   - variable: brain stack RAG semântico (varia por query) → não cachear
+async function buildSystemPrompt(opts?: { userQuery?: string; apiKey?: string; topK?: number; threshold?: number }): Promise<{ fixed: string; variable: string }> {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    if (!supabaseUrl || !serviceKey) return BASE_SYSTEM_PROMPT;
+    if (!supabaseUrl || !serviceKey) return { fixed: BASE_SYSTEM_PROMPT, variable: "" };
 
     const sb = createClient(supabaseUrl, serviceKey, {
       auth: { persistSession: false },
@@ -151,13 +161,13 @@ async function buildSystemPrompt(opts?: { userQuery?: string; apiKey?: string; t
       .order("priority", { ascending: true });
     const memory = memoryRes.data ?? [];
 
-    let prompt = BASE_SYSTEM_PROMPT;
+    let fixed = BASE_SYSTEM_PROMPT;
 
     if (memory.length > 0) {
       const memoryBlock = memory
         .map((m: any) => `\n### ${m.title} (${m.slug}.md)\n${m.content}`)
         .join("\n");
-      prompt += `\n\n═══════════════════════════════════════\nMEMÓRIA PERMANENTE (fonte única de verdade)\n═══════════════════════════════════════\n${memoryBlock}\n═══════════════════════════════════════\nFIM DA MEMÓRIA PERMANENTE\n═══════════════════════════════════════`;
+      fixed += `\n\n═══════════════════════════════════════\nMEMÓRIA PERMANENTE (fonte única de verdade)\n═══════════════════════════════════════\n${memoryBlock}\n═══════════════════════════════════════\nFIM DA MEMÓRIA PERMANENTE\n═══════════════════════════════════════`;
     }
 
     // 2. Brain stack — modo RAG (se temos query + apiKey) OU fallback total
@@ -243,17 +253,18 @@ async function buildSystemPrompt(opts?: { userQuery?: string; apiKey?: string; t
       }
     }
 
+    let variable = "";
     if (brainMarkdown) {
       const header = ragMode
         ? `BRAIN STACK (lentes de análise — TOP ${brainMarkdown.split("\n  -").length - 1} princípios mais relevantes pra esta pergunta, ranqueados por similaridade semântica)`
         : `BRAIN STACK (lentes de análise — biblioteca completa)`;
-      prompt += `\n\n═══════════════════════════════════════\n${header}\n═══════════════════════════════════════\nUse os princípios abaixo como ângulos mentais. Eles estão em linguagem destilada — NUNCA reproduza texto longo de livros. Cruze lentes quando útil.\n\n${brainMarkdown}\n═══════════════════════════════════════\nFIM DA BRAIN STACK\n═══════════════════════════════════════`;
+      variable = `\n\n═══════════════════════════════════════\n${header}\n═══════════════════════════════════════\nUse os princípios abaixo como ângulos mentais. Eles estão em linguagem destilada — NUNCA reproduza texto longo de livros. Cruze lentes quando útil.\n\n${brainMarkdown}\n═══════════════════════════════════════\nFIM DA BRAIN STACK\n═══════════════════════════════════════`;
     }
 
-    return prompt;
+    return { fixed, variable };
   } catch (e) {
     console.error("Naval prompt build failed:", e);
-    return BASE_SYSTEM_PROMPT;
+    return { fixed: BASE_SYSTEM_PROMPT, variable: "" };
   }
 }
 
@@ -411,7 +422,8 @@ const NAVAL_TOOLS: ClaudeTool[] = [
       "Retorna o detalhe dos lançamentos do mês, agrupados por categoria, dentro de um bloco do DRE. " +
       "Use sempre que precisar citar valores específicos, listar transações de uma categoria, ou validar somas. " +
       "Regime caixa: cartão = fatura paga no mês (paid_at). Kitnets = entries reconciled (Modelo A). " +
-      "Retorna JSON com totais por categoria + top 5 itens de cada categoria (data/valor/descrição).",
+      "Retorna JSON com totais por categoria + top 5 itens de cada categoria (data/valor/descrição). " +
+      "IMPORTANTE: se a pergunta do William mencionar 'cartão' ou 'fatura', passe only_card=true pra filtrar SÓ tx do cartão (categorias com prefixo cartao__).",
     input_schema: {
       type: "object",
       properties: {
@@ -424,6 +436,12 @@ const NAVAL_TOOLS: ClaudeTool[] = [
           enum: ["receitas", "custeio", "obras", "casamento", "eventos", "outros_aportes"],
           description:
             "Bloco do DRE pra detalhar. Omitir = retorna todos os blocos (resposta maior).",
+        },
+        only_card: {
+          type: "boolean",
+          description:
+            "Se true, retorna SOMENTE categorias com prefixo cartao__ (transações do cartão de crédito). " +
+            "Use quando a pergunta envolver gastos de cartão/fatura especificamente.",
         },
       },
       required: ["month"],
@@ -463,6 +481,7 @@ function classifyCardTx(t: any): "obras" | "casamento" | "eventos" | "outros_apo
 async function handleGetBreakdown(input: Record<string, unknown>, supabaseUrl: string, serviceKey: string): Promise<string> {
   const month = String(input.month ?? "").trim();
   const bucketFilter = input.bucket ? String(input.bucket) : null;
+  const onlyCard = input.only_card === true;
   if (!/^\d{4}-\d{2}$/.test(month)) {
     return JSON.stringify({ error: "month deve ser YYYY-MM" });
   }
@@ -582,8 +601,11 @@ async function handleGetBreakdown(input: Record<string, unknown>, supabaseUrl: s
   }
 
   // Monta retorno compacto
+  // Se only_card=true, filtra só categorias com prefixo cartao__ (transações do cartão).
   const formatBucket = (b: Record<string, AggCat>) => {
-    const cats = Object.entries(b)
+    let entries = Object.entries(b);
+    if (onlyCard) entries = entries.filter(([cat]) => cat.startsWith("cartao__"));
+    const cats = entries
       .map(([cat, v]) => ({
         category: cat,
         total: Math.round(v.total * 100) / 100,
@@ -633,7 +655,7 @@ type ClaudeToolHandler = (input: Record<string, unknown>) => Promise<string>;
 type ClaudeResult = { ok: true; text: string } | { ok: false; status: number; error: string };
 
 async function callClaudeHaiku(
-  systemPrompt: string,
+  systemPrompt: string | { fixed: string; variable: string },
   messages: Array<{ role: string; content: unknown }>,
   opts: {
     maxTokens?: number;
@@ -643,6 +665,11 @@ async function callClaudeHaiku(
     toolHandlers?: Record<string, ClaudeToolHandler>;
   },
 ): Promise<ClaudeResult> {
+  // Normaliza pra ter sempre {fixed, variable}. String simples vai toda em "fixed".
+  const sys = typeof systemPrompt === "string"
+    ? { fixed: systemPrompt, variable: "" }
+    : systemPrompt;
+  const fullSystemForGateway = sys.fixed + sys.variable;
   const maxTokens = opts.maxTokens ?? 1500;
   const MODEL_GW = "anthropic/claude-haiku-4-5";
   const MODEL_NATIVE = "claude-haiku-4-5";
@@ -660,7 +687,7 @@ async function callClaudeHaiku(
         body: JSON.stringify({
           model: MODEL_GW,
           max_tokens: maxTokens,
-          messages: [{ role: "system", content: systemPrompt }, ...messages],
+          messages: [{ role: "system", content: fullSystemForGateway }, ...messages],
         }),
       });
       if (res.ok) {
@@ -706,15 +733,19 @@ async function callClaudeHaiku(
     // Loop tool-use — máximo 5 iterações pra evitar runaway
     const MAX_TOOL_ITER = 5;
     for (let iter = 0; iter < MAX_TOOL_ITER; iter++) {
-      // Prompt caching: marca o system prompt como cacheable (ephemeral, TTL 5min).
-      // System tem ~30k tokens (memória + brain stack). Sem cache, cada request custa
-      // 30k tokens de input → estoura rate limit Tier 1 (50k/min) em 2 chamadas.
-      // Com cache, requisições subsequentes em até 5min usam só ~10% do peso (cache_read).
-      // Anthropic prompt caching é GA, não precisa header beta.
-      // Tools também marcadas como cacheable (definição estável entre chamadas).
-      const cachedSystem = [
-        { type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } },
+      // Prompt caching split em 2 blocos:
+      //   1. FIXO (BASE_SYSTEM_PROMPT + naval_memory) → cache_control:ephemeral.
+      //      Estável entre chamadas. ~25k tokens. Cache hit garantido após 1ª chamada.
+      //   2. VARIÁVEL (brain stack RAG) → sem cache_control. Muda por query (RAG semântico
+      //      retorna princípios diferentes), então não cachea.
+      // Antes a função recebia string única e cache_control ia nela inteira → como o prompt
+      // mudava por query (RAG dinâmico), cache_read=0 sempre. Agora cache_read fica ~25k.
+      const cachedSystem: Array<Record<string, unknown>> = [
+        { type: "text", text: sys.fixed, cache_control: { type: "ephemeral" } },
       ];
+      if (sys.variable && sys.variable.length > 0) {
+        cachedSystem.push({ type: "text", text: sys.variable });
+      }
       const reqBody: Record<string, unknown> = {
         model: MODEL_NATIVE,
         max_tokens: maxTokens,
@@ -818,7 +849,7 @@ async function callClaudeHaiku(
 // Versão do código deployado — log inicial em CADA invocação pra confirmar
 // que o deploy do edge function está atualizado. Bumpa toda vez que mudar
 // a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
-const WISELY_AI_VERSION = "2026.04.28-v4-prompt-caching";
+const WISELY_AI_VERSION = "2026.04.28-v5-cache-split-only-card";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
