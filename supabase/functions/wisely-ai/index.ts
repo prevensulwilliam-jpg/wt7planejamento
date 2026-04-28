@@ -88,15 +88,18 @@ const LENS_LABEL: Record<string, string> = {
 
 // Embedding de uma query (usado pelo RAG) — API nativa do Gemini
 // apiKey aqui é GEMINI_API_KEY (Lovable gateway não suporta embeddings)
+// Modelo: gemini-embedding-001 (text-embedding-004 foi descontinuado em 2026)
 async function embedQuery(text: string, apiKey: string): Promise<number[] | null> {
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=${apiKey}`;
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "models/text-embedding-004",
+        model: "models/gemini-embedding-001",
         content: { parts: [{ text: text.slice(0, 8000) }] },
+        // 768 dims — bate com naval_principle_vectors indexado pelo naval-embed
+        outputDimensionality: 768,
       }),
     });
     if (!res.ok) {
