@@ -513,6 +513,47 @@ const NAVAL_TOOLS: ClaudeTool[] = [
     },
   },
   {
+    name: "get_history",
+    description:
+      "Série temporal de uma métrica financeira nos últimos N meses. " +
+      "Retorna valor por mês + estatísticas (média, mediana, min, max, tendência). " +
+      "USE pra perguntas tipo: 'como está a sobra nos últimos meses?', 'tendência de custeio', " +
+      "'aluguel está crescendo?', 'receita Q1 vs Q2', 'comparar últimos 3 meses'. " +
+      "Métricas suportadas (uma por chamada). Pra comparar 2 meses específicos, prefira " +
+      "compare_months (quando existir) ou get_breakdown 2x.",
+    input_schema: {
+      type: "object",
+      properties: {
+        metric: {
+          type: "string",
+          enum: [
+            "receita_total",
+            "custeio_total",
+            "sobra_liquida",
+            "aluguel_kitnets",
+            "comissao_prevensul_recebida",
+            "obras_aporte",
+            "outros_aportes",
+          ],
+          description:
+            "Qual métrica buscar. " +
+            "receita_total = renda ativa + passiva + comissões extras + avulsas. " +
+            "custeio_total = custeio puro (expenses + cartão, sem obras/casamento/eventos/outros_aportes). " +
+            "sobra_liquida = receita - todas as saídas. " +
+            "aluguel_kitnets = renda passiva (kitnet_entries reconciled, Modelo A). " +
+            "comissao_prevensul_recebida = revenues source=comissao_prevensul (regime caixa real, lump sums). " +
+            "obras_aporte = aporte em obras (cota William). " +
+            "outros_aportes = consórcios + dev profissional + ferramentas.",
+        },
+        n_months: {
+          type: "number",
+          description: "Quantos meses pra trás. Default 6. Min 3, max 24.",
+        },
+      },
+      required: ["metric"],
+    },
+  },
+  {
     name: "get_construction_status",
     description:
       "Status real de cada obra (constructions) — orçado vs gasto, % executado, próxima etapa, " +
@@ -818,6 +859,173 @@ function idxToMonth(idx: number): string {
   const y = Math.floor((idx - 1) / 12);
   const mo = ((idx - 1) % 12) + 1;
   return `${y}-${String(mo).padStart(2, "0")}`;
+}
+
+// ─── Handler: histórico de métrica financeira ────────────────────────
+// Cada métrica tem um cálculo dedicado replicando lógica de useDRE.
+
+async function calcReceitaMes(sb: any, month: string): Promise<number> {
+  const [yy, mm] = month.split("-").map(Number);
+  const mStart = `${month}-01`;
+  const lastDay = new Date(yy, mm, 0).getDate();
+  const mEnd = `${yy}-${String(mm).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+
+  const [revsR, kitR, paidInstR] = await Promise.all([
+    sb.from("revenues").select("amount, source, counts_as_income").eq("reference_month", month),
+    sb.from("kitnet_entries").select("total_liquid, reconciled").eq("reference_month", month),
+    sb.from("other_commission_installments").select("amount, paid_amount, paid_at")
+      .not("paid_at", "is", null).gte("paid_at", mStart).lte("paid_at", mEnd),
+  ]);
+
+  const revs = (revsR.data ?? []).filter((r: any) => r.counts_as_income !== false && r.source !== "aluguel_kitnets");
+  const renda = revs.reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0);
+  const kit = (kitR.data ?? []).filter((k: any) => k.reconciled).reduce((s: number, k: any) => s + Number(k.total_liquid ?? 0), 0);
+  const inst = (paidInstR.data ?? []).reduce((s: number, p: any) => s + Number(p.paid_amount ?? p.amount ?? 0), 0);
+  return renda + kit + inst;
+}
+
+async function calcAluguelKitnetsMes(sb: any, month: string): Promise<number> {
+  const { data } = await sb.from("kitnet_entries").select("total_liquid, reconciled").eq("reference_month", month);
+  return (data ?? []).filter((k: any) => k.reconciled).reduce((s: number, k: any) => s + Number(k.total_liquid ?? 0), 0);
+}
+
+async function calcComissaoPrevensulMes(sb: any, month: string): Promise<number> {
+  const { data } = await sb.from("revenues").select("amount").eq("source", "comissao_prevensul").eq("reference_month", month);
+  return (data ?? []).reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0);
+}
+
+// Helper compartilhado: classifica e soma despesas (expenses + card) por bucket DRE
+async function calcDespesasMesDRE(sb: any, month: string): Promise<{
+  custeio: number; obras: number; casamento: number; eventos: number; outros: number;
+}> {
+  const [yy, mm] = month.split("-").map(Number);
+  const mStart = `${month}-01`;
+  const nextMonth = mm === 12 ? `${yy + 1}-01-01` : `${yy}-${String(mm + 1).padStart(2, "0")}-01`;
+
+  const [expsR, invsR] = await Promise.all([
+    sb.from("expenses").select("amount, category, vector, counts_as_investment, description, is_card_payment, nature").eq("reference_month", month),
+    sb.from("card_invoices").select("id, paid_amount, total_amount").gte("paid_at", mStart).lt("paid_at", nextMonth),
+  ]);
+
+  const buckets = { custeio: 0, obras: 0, casamento: 0, eventos: 0, outros: 0 };
+  for (const e of expsR.data ?? []) {
+    if (e.is_card_payment) continue;
+    if ((e.nature ?? "expense") === "transfer") continue;
+    const bloc = classifyExpense(e);
+    if (bloc === "obras") buckets.obras += Number(e.amount ?? 0);
+    else if (bloc === "casamento") buckets.casamento += Number(e.amount ?? 0);
+    else if (bloc === "eventos") buckets.eventos += Number(e.amount ?? 0);
+    else if (bloc === "outros_aportes") buckets.outros += Number(e.amount ?? 0);
+    else buckets.custeio += Number(e.amount ?? 0);
+  }
+
+  const invs = invsR.data ?? [];
+  const invIds = invs.map((i: any) => i.id);
+  const ratio: Record<string, number> = {};
+  for (const inv of invs) {
+    const t = Number(inv.total_amount ?? 0);
+    const p = Number(inv.paid_amount ?? t);
+    ratio[inv.id] = t > 0 ? Math.min(1, p / t) : 1;
+  }
+  if (invIds.length > 0) {
+    const { data: txs } = await sb.from("card_transactions")
+      .select("amount, vector, counts_as_investment, invoice_id, custom_categories(slug)")
+      .in("invoice_id", invIds);
+    for (const t of txs ?? []) {
+      const bloc = classifyCardTx(t);
+      if (bloc === "ignorar") continue;
+      const v = Number(t.amount ?? 0) * (ratio[t.invoice_id] ?? 1);
+      if (bloc === "obras") buckets.obras += v;
+      else if (bloc === "casamento") buckets.casamento += v;
+      else if (bloc === "eventos") buckets.eventos += v;
+      else if (bloc === "outros_aportes") buckets.outros += v;
+      else buckets.custeio += v;
+    }
+  }
+  return buckets;
+}
+
+async function handleGetHistory(
+  input: Record<string, unknown>,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<string> {
+  const sb = createClient(supabaseUrl, serviceKey);
+  const metric = String(input.metric ?? "");
+  const nMonths = Math.max(3, Math.min(24, Number(input.n_months ?? 6)));
+
+  const validMetrics = ["receita_total", "custeio_total", "sobra_liquida", "aluguel_kitnets", "comissao_prevensul_recebida", "obras_aporte", "outros_aportes"];
+  if (!validMetrics.includes(metric)) {
+    return JSON.stringify({ error: `metric inválido. Use um de: ${validMetrics.join(", ")}` });
+  }
+
+  // Gera N meses até o atual
+  const now = new Date();
+  const curIdx = (now.getFullYear() * 12) + (now.getMonth() + 1);
+  const months: string[] = [];
+  for (let i = nMonths - 1; i >= 0; i--) {
+    months.push(idxToMonth(curIdx - i));
+  }
+
+  // Pra cada mês, calcula a métrica solicitada (paralelo limitado pra evitar timeout)
+  const results: Array<{ month: string; value: number }> = [];
+  for (const month of months) {
+    let value = 0;
+    if (metric === "receita_total") value = await calcReceitaMes(sb, month);
+    else if (metric === "aluguel_kitnets") value = await calcAluguelKitnetsMes(sb, month);
+    else if (metric === "comissao_prevensul_recebida") value = await calcComissaoPrevensulMes(sb, month);
+    else if (metric === "custeio_total" || metric === "obras_aporte" || metric === "outros_aportes" || metric === "sobra_liquida") {
+      const buckets = await calcDespesasMesDRE(sb, month);
+      if (metric === "custeio_total") value = buckets.custeio;
+      else if (metric === "obras_aporte") value = buckets.obras;
+      else if (metric === "outros_aportes") value = buckets.outros;
+      else if (metric === "sobra_liquida") {
+        const receita = await calcReceitaMes(sb, month);
+        value = receita - buckets.custeio - buckets.obras - buckets.casamento - buckets.eventos - buckets.outros;
+      }
+    }
+    results.push({ month, value: Math.round(value * 100) / 100 });
+  }
+
+  // Estatísticas
+  const values = results.map((r) => r.value);
+  const sum = values.reduce((s, v) => s + v, 0);
+  const avg = values.length > 0 ? sum / values.length : 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const median = sorted.length > 0
+    ? (sorted.length % 2 === 0
+        ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
+        : sorted[Math.floor(sorted.length / 2)])
+    : 0;
+  const min = sorted[0] ?? 0;
+  const max = sorted[sorted.length - 1] ?? 0;
+
+  // Tendência: compara primeira metade × segunda metade
+  const half = Math.floor(values.length / 2);
+  const firstHalf = values.slice(0, half);
+  const secondHalf = values.slice(values.length - half);
+  const avgFirst = firstHalf.length > 0 ? firstHalf.reduce((s, v) => s + v, 0) / firstHalf.length : 0;
+  const avgSecond = secondHalf.length > 0 ? secondHalf.reduce((s, v) => s + v, 0) / secondHalf.length : 0;
+  const trendPct = avgFirst !== 0 ? ((avgSecond - avgFirst) / Math.abs(avgFirst)) * 100 : 0;
+  let trend: "crescente" | "decrescente" | "estavel" = "estavel";
+  if (Math.abs(trendPct) >= 10) trend = trendPct > 0 ? "crescente" : "decrescente";
+
+  return JSON.stringify({
+    metric,
+    n_months: nMonths,
+    by_month: results,
+    statistics: {
+      sum: Math.round(sum * 100) / 100,
+      avg: Math.round(avg * 100) / 100,
+      median: Math.round(median * 100) / 100,
+      min: Math.round(min * 100) / 100,
+      max: Math.round(max * 100) / 100,
+      trend,
+      trend_pct_change: Math.round(trendPct * 10) / 10,
+      first_half_avg: Math.round(avgFirst * 100) / 100,
+      second_half_avg: Math.round(avgSecond * 100) / 100,
+    },
+  });
 }
 
 // Handler: status de cada obra (constructions + expenses + stages)
@@ -1524,7 +1732,7 @@ async function callClaudeHaiku(
 // Versão do código deployado — log inicial em CADA invocação pra confirmar
 // que o deploy do edge function está atualizado. Bumpa toda vez que mudar
 // a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
-const WISELY_AI_VERSION = "2026.04.29-v13-no-stage-hallucination";
+const WISELY_AI_VERSION = "2026.04.29-v14-history-metric";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -1960,6 +2168,7 @@ Gere a leitura estratégica seguindo o formato obrigatório.`;
             get_prevensul_history: (input) => handleGetPrevensulHistory(input, supabaseUrl, serviceKey),
             get_prevensul_cycle: (input) => handleGetPrevensulCycle(input, supabaseUrl, serviceKey),
             get_construction_status: (input) => handleGetConstructionStatus(input, supabaseUrl, serviceKey),
+            get_history: (input) => handleGetHistory(input, supabaseUrl, serviceKey),
           }
         : undefined,
     });
