@@ -913,6 +913,11 @@ function PrevensulHistory({ month, userId, onLoadRecord }: { month: string; user
 
   const totalPago = useMemo(() => displayData.reduce((s, r) => s + (r.amount_paid ?? 0), 0), [displayData]);
   const totalComissao = useMemo(() => displayData.reduce((s, r) => s + (r.commission_value ?? 0), 0), [displayData]);
+  const totalValor = useMemo(() => displayData.reduce((s, r) => s + (r.contract_total ?? 0), 0), [displayData]);
+  const totalSaldo = useMemo(
+    () => displayData.reduce((s, r) => s + Math.max(0, (r.balance_remaining ?? 0) - (r.amount_paid ?? 0)), 0),
+    [displayData]
+  );
 
   const startEdit = (r: any) => {
     setEditingId(r.id);
@@ -1184,7 +1189,10 @@ function PrevensulHistory({ month, userId, onLoadRecord }: { month: string; user
           </TableBody>
           <TableFooter>
             <TableRow style={{ borderColor: '#1A2535', background: 'rgba(201,168,76,0.05)' }}>
-              <TableCell colSpan={5} className="font-semibold whitespace-nowrap" style={{ color: '#E8C97A' }}>TOTAL</TableCell>
+              <TableCell className="font-semibold whitespace-nowrap" style={{ color: '#E8C97A' }}>TOTAL</TableCell>
+              <TableCell className="font-mono text-xs font-semibold whitespace-nowrap" style={{ color: '#94A3B8' }}>{formatCurrency(totalValor)}</TableCell>
+              <TableCell className="font-mono text-xs font-semibold whitespace-nowrap" style={{ color: '#F43F5E' }}>{formatCurrency(totalSaldo)}</TableCell>
+              <TableCell colSpan={2} />
               <TableCell className="font-mono text-xs font-semibold whitespace-nowrap" style={{ color: '#10B981' }}>{formatCurrency(totalPago)}</TableCell>
               <TableCell className="font-mono text-xs font-semibold whitespace-nowrap" style={{ color: '#E8C97A' }}>{formatCurrency(totalComissao)}</TableCell>
               <TableCell colSpan={2} />
