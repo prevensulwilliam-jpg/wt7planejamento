@@ -115,6 +115,16 @@ Sequência correta pra comparar 2 meses:
 3. Respeite piso R$ 100k (regra inviolável metas.md)
 4. Se decisão grande, complementa com get_milestone_gap pra ver impacto na trajetória
 
+**Tool simulate_scenario** — pra cenários "e se?":
+USE quando William perguntar "e se eu fizer X?", "vale a pena Y?". Tipos:
+- aportar_extra({amount, target}) — saída de caixa
+- vender_imovel({amount, asset_name}) — entrada caixa, alerta automático se Blumenau
+- novo_contrato_prevensul({amount, months}) — gera comissão futura mensal
+- atrasar_obra({months, renda_esperada}) — perda de renda acumulada
+- gastar_extra({amount}) — consome patrimônio
+
+Retorna: posicao_antes/depois (caixa + patrimonio + cagr_2027 + cagr_2041) + impacto_mensal + alerts. Se cenário viola regra inviolável, alert é gerado mas a simulação ainda calcula — William pode ver a consequência mesmo da decisão proibida.
+
 ═══ REGRA CRÍTICA — PREVISÃO DE COMISSÃO PREVENSUL ═══
 
 REGRA DE NEGÓCIO (memorize como verdade absoluta):
@@ -525,6 +535,41 @@ const NAVAL_TOOLS: ClaudeTool[] = [
     },
   },
   {
+    name: "simulate_scenario",
+    description:
+      "Simula impacto de uma DECISÃO HIPOTÉTICA no patrimônio + caixa + trajetória vs marcos. " +
+      "Cenários suportados: aportar_extra, vender_imovel, novo_contrato_prevensul, atrasar_obra, gastar_extra. " +
+      "USE quando William perguntar 'e se eu fizer X?', 'vale a pena vender Y?', 'aporto Z?'. " +
+      "RETORNA: caixa antes/depois, patrimônio antes/depois, impacto em CAGR, alerta se viola regra (piso R$ 100k, vender Blumenau, etc). " +
+      "ATENÇÃO: NÃO modela cenários que violam regras invioláveis sem o William confirmar (ver regra de cenários).",
+    input_schema: {
+      type: "object",
+      properties: {
+        scenario_type: {
+          type: "string",
+          enum: ["aportar_extra", "vender_imovel", "novo_contrato_prevensul", "atrasar_obra", "gastar_extra"],
+          description:
+            "Tipo de cenário. " +
+            "aportar_extra = cliente põe X em obra/investimento (sai do caixa). " +
+            "vender_imovel = vende ativo X, entra Y no caixa. " +
+            "novo_contrato_prevensul = fecha contrato R$ X, gera comissão Y/mês por Z meses. " +
+            "atrasar_obra = obra X atrasa N meses, perde N×renda_esperada. " +
+            "gastar_extra = gasto único de X (custeio, viagem, evento).",
+        },
+        params: {
+          type: "object",
+          description:
+            "Parâmetros do cenário. Variam por tipo: " +
+            "{amount, target?, months?, asset_name?}. " +
+            "Ex aportar_extra: {amount: 30000, target: 'RWT05'}. " +
+            "Ex vender_imovel: {amount: 1000000, asset_name: 'Blumenau'}. " +
+            "Ex novo_contrato_prevensul: {amount: 600000, months: 24} (gera amount × 3% / months / mês de comissão).",
+        },
+      },
+      required: ["scenario_type", "params"],
+    },
+  },
+  {
     name: "get_bank_balances",
     description:
       "Saldo ATUAL em todas as contas + investimentos líquidos. " +
@@ -928,6 +973,111 @@ function idxToMonth(idx: number): string {
   const y = Math.floor((idx - 1) / 12);
   const mo = ((idx - 1) % 12) + 1;
   return `${y}-${String(mo).padStart(2, "0")}`;
+}
+
+// ─── Handler: simulate_scenario ──────────────────────────────────────
+async function handleSimulateScenario(
+  input: Record<string, unknown>,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<string> {
+  const sb = createClient(supabaseUrl, serviceKey);
+  const scenarioType = String(input.scenario_type ?? "");
+  const params = (input.params as Record<string, unknown>) ?? {};
+  const amount = Number((params as any).amount ?? 0);
+
+  // Posição atual (reusa lógica)
+  const snap = await calcNetWorth(supabaseUrl, serviceKey);
+
+  const banksR = await sb.from("bank_accounts").select("balance");
+  const invsR = await sb.from("investments").select("rescue_amount");
+  const caixaImediato = (banksR.data ?? []).reduce((s: number, b: any) => s + Number(b.balance ?? 0), 0);
+  const caixaResgateImediato = (invsR.data ?? []).reduce((s: number, i: any) => s + Number(i.rescue_amount ?? 0), 0);
+  const caixaTotal = caixaImediato + caixaResgateImediato;
+
+  const PISO_CAIXA = 100_000;
+  const alerts: string[] = [];
+  let caixaDepois = caixaTotal;
+  let patrimonioDepois = snap.patrimonio_liquido;
+  let impactoMensal = 0;
+  let descricao = "";
+
+  switch (scenarioType) {
+    case "aportar_extra": {
+      const target = String((params as any).target ?? "obra");
+      caixaDepois = caixaTotal - amount;
+      // Aporte em obra vira ativo: patrimônio se mantém (transfere caixa pra construção)
+      // Mas como construções já estão em assets pelo valor estimado, considero patrimonio neutro
+      patrimonioDepois = snap.patrimonio_liquido;
+      descricao = `Aportar R$ ${amount.toLocaleString("pt-BR")} em ${target}`;
+      if (caixaDepois < PISO_CAIXA) alerts.push(`⚠ VIOLA REGRA INVIOLÁVEL: caixa cairia pra R$ ${caixaDepois.toLocaleString("pt-BR")} (abaixo do piso R$ 100k). Não recomendado.`);
+      break;
+    }
+    case "vender_imovel": {
+      const asset = String((params as any).asset_name ?? "imóvel");
+      caixaDepois = caixaTotal + amount;
+      patrimonioDepois = snap.patrimonio_liquido; // entrada caixa = saída ativo, neutro
+      descricao = `Vender ${asset} por R$ ${amount.toLocaleString("pt-BR")}`;
+      if (asset.toLowerCase().includes("blumenau")) {
+        alerts.push("⚠⚠ VIOLA REGRA INVIOLÁVEL #4: 'Nunca recomendar vender Blumenau nos próximos 3 anos (até 2029)'. Confirme com William antes de modelar consequências.");
+      }
+      break;
+    }
+    case "novo_contrato_prevensul": {
+      const months = Number((params as any).months ?? 24);
+      const comissaoTotal = amount * 0.03;
+      impactoMensal = comissaoTotal / months;
+      descricao = `Fechar contrato Prevensul de R$ ${amount.toLocaleString("pt-BR")} em ${months} meses → R$ ${comissaoTotal.toLocaleString("pt-BR")} comissão total = R$ ${impactoMensal.toFixed(0)}/mês`;
+      break;
+    }
+    case "atrasar_obra": {
+      const months = Number((params as any).months ?? 6);
+      const rendaEsperada = Number((params as any).renda_esperada ?? 5000);
+      const perdaRenda = months * rendaEsperada;
+      impactoMensal = -rendaEsperada;
+      descricao = `Obra atrasa ${months} meses → perde R$ ${perdaRenda.toLocaleString("pt-BR")} de renda acumulada`;
+      break;
+    }
+    case "gastar_extra": {
+      caixaDepois = caixaTotal - amount;
+      patrimonioDepois = snap.patrimonio_liquido - amount; // gasto consome patrimônio
+      descricao = `Gasto único de R$ ${amount.toLocaleString("pt-BR")}`;
+      if (caixaDepois < PISO_CAIXA) alerts.push(`⚠ Caixa cairia pra R$ ${caixaDepois.toLocaleString("pt-BR")} (abaixo do piso R$ 100k).`);
+      break;
+    }
+    default:
+      return JSON.stringify({ error: `scenario_type '${scenarioType}' não suportado. Use: aportar_extra, vender_imovel, novo_contrato_prevensul, atrasar_obra, gastar_extra.` });
+  }
+
+  // Impacto na trajetória (CAGR vs marcos)
+  const today = new Date();
+  const milestone2027 = new Date("2027-12-11");
+  const milestone2041 = new Date("2041-12-31");
+  const yearsTo2027 = (milestone2027.getTime() - today.getTime()) / (86400000 * 365.25);
+  const yearsTo2041 = (milestone2041.getTime() - today.getTime()) / (86400000 * 365.25);
+  const cagr2027Antes = patrimonioDepois > 0 && yearsTo2027 > 0 ? (Math.pow(6_500_000 / snap.patrimonio_liquido, 1 / yearsTo2027) - 1) * 100 : null;
+  const cagr2027Depois = patrimonioDepois > 0 && yearsTo2027 > 0 ? (Math.pow(6_500_000 / patrimonioDepois, 1 / yearsTo2027) - 1) * 100 : null;
+  const cagr2041Antes = snap.patrimonio_liquido > 0 && yearsTo2041 > 0 ? (Math.pow(70_000_000 / snap.patrimonio_liquido, 1 / yearsTo2041) - 1) * 100 : null;
+  const cagr2041Depois = patrimonioDepois > 0 && yearsTo2041 > 0 ? (Math.pow(70_000_000 / patrimonioDepois, 1 / yearsTo2041) - 1) * 100 : null;
+
+  return JSON.stringify({
+    scenario: descricao,
+    posicao_antes: {
+      caixa_total: Math.round(caixaTotal * 100) / 100,
+      patrimonio_liquido: snap.patrimonio_liquido,
+      cagr_2027_exigido: cagr2027Antes != null ? Math.round(cagr2027Antes * 10) / 10 : null,
+      cagr_2041_exigido: cagr2041Antes != null ? Math.round(cagr2041Antes * 10) / 10 : null,
+    },
+    posicao_depois: {
+      caixa_total: Math.round(caixaDepois * 100) / 100,
+      patrimonio_liquido: Math.round(patrimonioDepois * 100) / 100,
+      cagr_2027_exigido: cagr2027Depois != null ? Math.round(cagr2027Depois * 10) / 10 : null,
+      cagr_2041_exigido: cagr2041Depois != null ? Math.round(cagr2041Depois * 10) / 10 : null,
+    },
+    impacto_mensal_caixa: Math.round(impactoMensal * 100) / 100,
+    alerts,
+    note: "Simulação simplificada: 'aportar_extra' assume aporte vira ativo equivalente (patrimônio neutro). 'vender_imovel' = caixa entra, ativo sai (neutro). 'gastar_extra' = consome patrimônio. CAGR exigido recalcula vs marcos R$ 6,5M/2027 e R$ 70M/2041.",
+  });
 }
 
 // ─── Handler: get_bank_balances ──────────────────────────────────────
@@ -2167,7 +2317,7 @@ async function callClaudeHaiku(
 // Versão do código deployado — log inicial em CADA invocação pra confirmar
 // que o deploy do edge function está atualizado. Bumpa toda vez que mudar
 // a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
-const WISELY_AI_VERSION = "2026.04.29-v16-navigator";
+const WISELY_AI_VERSION = "2026.04.29-v17-full-navigator";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -2609,6 +2759,7 @@ Gere a leitura estratégica seguindo o formato obrigatório.`;
             get_debts_status: (input) => handleGetDebtsStatus(input, supabaseUrl, serviceKey),
             get_net_worth_snapshot: (input) => handleGetNetWorthSnapshot(input, supabaseUrl, serviceKey),
             get_milestone_gap: (input) => handleGetMilestoneGap(input, supabaseUrl, serviceKey),
+            simulate_scenario: (input) => handleSimulateScenario(input, supabaseUrl, serviceKey),
           }
         : undefined,
     });

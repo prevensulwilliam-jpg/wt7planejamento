@@ -77,3 +77,25 @@ export function useDeleteChat() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["naval_chats"] }),
   });
 }
+
+/**
+ * Salva uma memória permanente em naval_memory.
+ * Naval vai usar essa info em TODAS as próximas sessões — não some.
+ * Use pra: regras de negócio, decisões importantes, fatos que William quer
+ * que Naval lembre pra sempre (até ele explicitamente apagar).
+ */
+export function useSaveMemory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (entry: { slug: string; title: string; content: string; priority?: number }) => {
+      const { error } = await (supabase as any).from("naval_memory").upsert({
+        slug: entry.slug,
+        title: entry.title,
+        content: entry.content,
+        priority: entry.priority ?? 100, // 100 = adicionada pelo William, vai pro fim da lista
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["naval_memory"] }),
+  });
+}

@@ -19,3 +19,6 @@ verify_jwt = true
 
 [functions.extract-celesc-invoice]
 verify_jwt = true
+
+[functions.naval-daily-check]
+verify_jwt = false

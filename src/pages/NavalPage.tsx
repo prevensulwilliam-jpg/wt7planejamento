@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { RefreshCw, Send, MessageSquare, ChevronDown, ChevronUp, Play, History, Search, Trash2, Reply, X } from "lucide-react";
+import { RefreshCw, Send, MessageSquare, ChevronDown, ChevronUp, Play, History, Search, Trash2, Reply, X, BookmarkPlus, Save, Bell, AlertTriangle, AlertCircle, Info, Check } from "lucide-react";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
 import { GoldButton } from "@/components/wt7/GoldButton";
 import { WtBadge } from "@/components/wt7/WtBadge";
@@ -7,7 +7,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useNavalAnalysis, useNavalChat, useNavalInsight } from "@/hooks/useNaval";
-import { useNavalHistory, useDeleteAllChats } from "@/hooks/useNavalHistory";
+import { useNavalHistory, useDeleteAllChats, useSaveMemory } from "@/hooks/useNavalHistory";
+import { useNavalAlerts, useRunDailyCheck, useDismissAlert } from "@/hooks/useNavalAlerts";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import ReactMarkdown from "react-markdown";
 import { formatDate } from "@/lib/formatters";
 
@@ -139,6 +142,97 @@ function InsightCard({ icon, title, prompt }: { icon: string; title: string; pro
   );
 }
 
+// ─── Modal "Salvar como memória permanente" ──────────────────────────
+type SaveMemoryDialogProps = {
+  open: boolean;
+  onClose: () => void;
+  initialQuestion?: string;
+  initialAnswer?: string;
+};
+function SaveMemoryDialog({ open, onClose, initialQuestion = "", initialAnswer = "" }: SaveMemoryDialogProps) {
+  const saveMutation = useSaveMemory();
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+  const [slug, setSlug] = useState("");
+
+  useEffect(() => {
+    if (open) {
+      // Pré-preenche: título sugerido a partir da pergunta, conteúdo combinando Q+A
+      const suggestTitle = initialQuestion
+        ? initialQuestion.slice(0, 60)
+        : "";
+      setTitle(suggestTitle);
+      const combined = initialQuestion && initialAnswer
+        ? `**Pergunta:** ${initialQuestion}\n\n**Resposta/regra:**\n${initialAnswer}`
+        : initialAnswer || "";
+      setContent(combined);
+      // Slug auto: lowercase + sem acentos + traços
+      const autoSlug = (suggestTitle || "memoria")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[̀-ͯ]/g, "")
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, "")
+        .slice(0, 50);
+      setSlug(autoSlug || `memoria_${Date.now()}`);
+    }
+  }, [open, initialQuestion, initialAnswer]);
+
+  const handleSave = async () => {
+    if (!title.trim() || !content.trim() || !slug.trim()) return;
+    try {
+      await saveMutation.mutateAsync({ slug: slug.trim(), title: title.trim(), content });
+      onClose();
+    } catch (e: any) {
+      alert(`Erro ao salvar: ${e.message}`);
+    }
+  };
+
+  const inputStyle = { background: "#0D1318", border: "1px solid #2A3F55", color: "#F0F4F8" } as const;
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent style={{ background: "#0D1318", border: "1px solid rgba(45,212,191,0.4)", maxWidth: 600 }}>
+        <DialogHeader>
+          <DialogTitle style={{ color: "#2DD4BF" }}>💾 Salvar como memória permanente</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <p className="text-xs" style={{ color: "#94A3B8" }}>
+            Naval vai usar essa memória em TODAS as próximas sessões. Use pra regras de negócio,
+            fatos que ele precisa lembrar pra sempre (não confundir com histórico de chat de 7 dias).
+          </p>
+          <div>
+            <label className="text-[10px] uppercase tracking-wide" style={{ color: "#94A3B8" }}>Slug (id único)</label>
+            <Input value={slug} onChange={(e) => setSlug(e.target.value)} style={inputStyle} placeholder="ex: ciclo_comissao_prevensul" />
+          </div>
+          <div>
+            <label className="text-[10px] uppercase tracking-wide" style={{ color: "#94A3B8" }}>Título</label>
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} style={inputStyle} placeholder="Ex: Regra do ciclo de comissão" />
+          </div>
+          <div>
+            <label className="text-[10px] uppercase tracking-wide" style={{ color: "#94A3B8" }}>Conteúdo (markdown ok)</label>
+            <Textarea value={content} onChange={(e) => setContent(e.target.value)} rows={10} style={inputStyle} />
+            <p className="text-[10px] mt-1" style={{ color: "#4A5568" }}>Edite à vontade — só o que ficar aqui é o que Naval vai lembrar.</p>
+          </div>
+        </div>
+        <DialogFooter>
+          <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm" style={{ background: "#1A2535", color: "#F0F4F8" }}>
+            Cancelar
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saveMutation.isPending || !title.trim() || !content.trim() || !slug.trim()}
+            className="px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50"
+            style={{ background: "#C9A84C", color: "#000" }}
+          >
+            {saveMutation.isPending ? "Salvando..." : "💾 Salvar memória"}
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Chat principal — agora puxa últimas 10 do banco + mostra envio em andamento ──
 type ChatSectionProps = {
   localMessages: { role: "user" | "assistant"; content: string }[];
@@ -151,6 +245,7 @@ function ChatSection({ localMessages, loading, send, loadConversation, clearChat
   const { data: history = [], isLoading: historyLoading } = useNavalHistory();
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [memoryDialog, setMemoryDialog] = useState<{ open: boolean; q?: string; a?: string }>({ open: false });
   // Esconde o histórico inline (mas mantém no banco). User pode reexibir.
   // Persiste em localStorage pra manter mesmo após reload.
   const [historyHidden, setHistoryHidden] = useState<boolean>(() => {
@@ -276,15 +371,26 @@ function ChatSection({ localMessages, loading, send, loadConversation, clearChat
                   </ReactMarkdown>
                 </div>
               </div>
-              <button
-                onClick={() => loadConversation(c.question, c.answer)}
-                className="opacity-0 group-hover:opacity-100 flex items-center gap-1 text-[10px] px-2 py-1 rounded-md hover:bg-white/5 transition-opacity shrink-0"
-                style={{ color: "#2DD4BF", border: "1px solid rgba(45,212,191,0.3)" }}
-                title="Continuar essa conversa (próxima pergunta vai com esse contexto)"
-              >
-                <Reply className="w-3 h-3" />
-                Continuar
-              </button>
+              <div className="flex flex-col gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                  onClick={() => loadConversation(c.question, c.answer)}
+                  className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md hover:bg-white/5"
+                  style={{ color: "#2DD4BF", border: "1px solid rgba(45,212,191,0.3)" }}
+                  title="Continuar essa conversa (próxima pergunta vai com esse contexto)"
+                >
+                  <Reply className="w-3 h-3" />
+                  Continuar
+                </button>
+                <button
+                  onClick={() => setMemoryDialog({ open: true, q: c.question, a: c.answer })}
+                  className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md hover:bg-white/5"
+                  style={{ color: "#C9A84C", border: "1px solid rgba(201,168,76,0.3)" }}
+                  title="Salvar como memória permanente do Naval (não some em 7 dias)"
+                >
+                  <BookmarkPlus className="w-3 h-3" />
+                  Anotar
+                </button>
+              </div>
             </div>
           </div>
         ))}
@@ -361,6 +467,13 @@ function ChatSection({ localMessages, loading, send, loadConversation, clearChat
           <Send className="w-4 h-4" />
         </GoldButton>
       </div>
+
+      <SaveMemoryDialog
+        open={memoryDialog.open}
+        onClose={() => setMemoryDialog({ open: false })}
+        initialQuestion={memoryDialog.q}
+        initialAnswer={memoryDialog.a}
+      />
     </PremiumCard>
   );
 }
@@ -374,6 +487,7 @@ function HistorySection({ onContinue }: HistorySectionProps) {
   const { data = [], isLoading } = useNavalHistory(search);
   const deleteAll = useDeleteAllChats();
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [memoryDialog, setMemoryDialog] = useState<{ open: boolean; q?: string; a?: string }>({ open: false });
 
   const handleClearAll = () => {
     if (!confirm("Apagar TODO o histórico de perguntas? Não dá pra desfazer.")) return;
@@ -470,18 +584,131 @@ function HistorySection({ onContinue }: HistorySectionProps) {
                       {c.tokens_cache_read != null && c.tokens_cache_read > 0 && <span>cache: {c.tokens_cache_read}</span>}
                       {c.tokens_out != null && <span>out: {c.tokens_out}</span>}
                     </div>
-                    <button
-                      onClick={() => onContinue(c.question, c.answer)}
-                      className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-md hover:bg-white/5 transition-colors"
-                      style={{ color: "#2DD4BF", border: "1px solid rgba(45,212,191,0.3)" }}
-                      title="Voltar pra aba Conversar com essa conversa carregada"
-                    >
-                      <Reply className="w-3 h-3" />
-                      Continuar essa conversa
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setMemoryDialog({ open: true, q: c.question, a: c.answer })}
+                        className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-md hover:bg-white/5 transition-colors"
+                        style={{ color: "#C9A84C", border: "1px solid rgba(201,168,76,0.3)" }}
+                        title="Salvar como memória permanente do Naval"
+                      >
+                        <BookmarkPlus className="w-3 h-3" />
+                        Anotar
+                      </button>
+                      <button
+                        onClick={() => onContinue(c.question, c.answer)}
+                        className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-md hover:bg-white/5 transition-colors"
+                        style={{ color: "#2DD4BF", border: "1px solid rgba(45,212,191,0.3)" }}
+                        title="Voltar pra aba Conversar com essa conversa carregada"
+                      >
+                        <Reply className="w-3 h-3" />
+                        Continuar
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
+            </div>
+          );
+        })}
+      </div>
+
+      <SaveMemoryDialog
+        open={memoryDialog.open}
+        onClose={() => setMemoryDialog({ open: false })}
+        initialQuestion={memoryDialog.q}
+        initialAnswer={memoryDialog.a}
+      />
+    </PremiumCard>
+  );
+}
+
+// ─── Aba Alertas — desvios detectados pelo cron diário ───────────────
+function AlertsSection() {
+  const { data: alerts = [], isLoading } = useNavalAlerts();
+  const runCheck = useRunDailyCheck();
+  const dismiss = useDismissAlert();
+
+  const sevColor = (s: string) =>
+    s === "critical" ? "#F43F5E" : s === "warning" ? "#F59E0B" : "#3B82F6";
+  const sevIcon = (s: string) =>
+    s === "critical" ? AlertCircle : s === "warning" ? AlertTriangle : Info;
+
+  return (
+    <PremiumCard>
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <Bell className="w-4 h-4" style={{ color: "#F59E0B" }} />
+          <h3 className="font-display font-bold text-sm" style={{ color: "#F0F4F8" }}>
+            Alertas proativos
+          </h3>
+          {alerts.length > 0 && (
+            <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: "rgba(245,158,11,0.15)", color: "#F59E0B" }}>
+              {alerts.length} ativo(s)
+            </span>
+          )}
+        </div>
+        <button
+          onClick={() => runCheck.mutate()}
+          disabled={runCheck.isPending}
+          className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-md hover:bg-white/5 transition-colors disabled:opacity-50"
+          style={{ color: "#2DD4BF", border: "1px solid rgba(45,212,191,0.3)" }}
+          title="Rodar detectores agora (sem esperar 06:00)"
+        >
+          <RefreshCw className={`w-3 h-3 ${runCheck.isPending ? "animate-spin" : ""}`} />
+          Verificar agora
+        </button>
+      </div>
+
+      <p className="text-[11px] mb-3" style={{ color: "#94A3B8" }}>
+        Detectores rodam diariamente às 06:00. Cada alerta auto-resolve quando a condição corrige.
+      </p>
+
+      {isLoading && (
+        <div className="space-y-2">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <Skeleton key={i} className="h-20 rounded" style={{ background: "#131B22" }} />
+          ))}
+        </div>
+      )}
+
+      {!isLoading && alerts.length === 0 && (
+        <div className="text-center py-12">
+          <Check className="w-12 h-12 mx-auto mb-2" style={{ color: "#10B981", opacity: 0.5 }} />
+          <p className="text-sm" style={{ color: "#94A3B8" }}>Tudo no trilho. Nenhum alerta ativo.</p>
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {alerts.map((a) => {
+          const SevIcon = sevIcon(a.severity);
+          const color = sevColor(a.severity);
+          return (
+            <div key={a.id} className="rounded-lg p-3 flex items-start gap-3" style={{ background: "#0D1318", border: `1px solid ${color}33` }}>
+              <SevIcon className="w-5 h-5 shrink-0 mt-0.5" style={{ color }} />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
+                  <h4 className="text-sm font-semibold" style={{ color: "#F0F4F8" }}>{a.title}</h4>
+                  <span className="text-[10px]" style={{ color: "#4A5568" }}>
+                    {new Date(a.detected_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                </div>
+                <p className="text-xs" style={{ color: "#94A3B8" }}>{a.message}</p>
+                {a.metric_name && (
+                  <div className="text-[10px] mt-2" style={{ color: "#4A5568" }}>
+                    {a.metric_name}: <span style={{ color }}>{a.metric_value}</span>
+                    {a.metric_threshold != null && <span> · limite: {a.metric_threshold}</span>}
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => dismiss.mutate(a.id)}
+                disabled={dismiss.isPending}
+                className="shrink-0 p-1.5 rounded hover:bg-white/5"
+                style={{ color: "#4A5568" }}
+                title="Marcar como visto / resolvido"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
           );
         })}
@@ -494,9 +721,12 @@ function HistorySection({ onContinue }: HistorySectionProps) {
 //  PÁGINA PRINCIPAL — Chat | Histórico
 // ═══════════════════════════════════════════════════════════════════
 export default function NavalPage() {
-  const [tab, setTab] = useState<"chat" | "historico">("chat");
+  const [tab, setTab] = useState<"chat" | "historico" | "alertas">("chat");
   // useNavalChat aqui no topo pra compartilhar entre ChatSection e HistorySection
   const chat = useNavalChat();
+  const { data: alerts = [] } = useNavalAlerts();
+  const criticalCount = alerts.filter((a) => a.severity === "critical").length;
+  const warningCount = alerts.filter((a) => a.severity === "warning").length;
 
   // Callback usado pelo HistorySection: carrega conversa + muda pra aba Conversar
   const handleContinueFromHistory = (q: string, a: string) => {
@@ -515,8 +745,8 @@ export default function NavalPage() {
         </div>
       </div>
 
-      <Tabs value={tab} onValueChange={(v) => setTab(v as "chat" | "historico")}>
-        <TabsList className="grid w-full grid-cols-2 max-w-md">
+      <Tabs value={tab} onValueChange={(v) => setTab(v as "chat" | "historico" | "alertas")}>
+        <TabsList className="grid w-full grid-cols-3 max-w-xl">
           <TabsTrigger value="chat">
             <MessageSquare className="w-3.5 h-3.5 mr-2" />
             Conversar
@@ -524,6 +754,21 @@ export default function NavalPage() {
           <TabsTrigger value="historico">
             <History className="w-3.5 h-3.5 mr-2" />
             Histórico
+          </TabsTrigger>
+          <TabsTrigger value="alertas">
+            <Bell className="w-3.5 h-3.5 mr-2" />
+            Alertas
+            {(criticalCount + warningCount) > 0 && (
+              <span
+                className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full font-bold"
+                style={{
+                  background: criticalCount > 0 ? "#F43F5E" : "#F59E0B",
+                  color: "#fff",
+                }}
+              >
+                {criticalCount + warningCount}
+              </span>
+            )}
           </TabsTrigger>
         </TabsList>
 
@@ -560,6 +805,10 @@ export default function NavalPage() {
 
         <TabsContent value="historico" className="mt-6">
           <HistorySection onContinue={handleContinueFromHistory} />
+        </TabsContent>
+
+        <TabsContent value="alertas" className="mt-6">
+          <AlertsSection />
         </TabsContent>
       </Tabs>
     </div>
