@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDashboardKPIs, useGoals } from "./useFinances";
 import { useKitnets, useKitnetSummary } from "./useKitnets";
 import { usePrevensulBilling } from "./useBilling";
@@ -188,6 +188,7 @@ type ChatMsg = { role: "user" | "assistant"; content: string };
 
 export function useNavalChat() {
   const { context } = useNavalContext();
+  const qc = useQueryClient();
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -206,6 +207,8 @@ export function useNavalChat() {
         ];
         const text = await callNaval(allMsgs);
         setMessages((prev) => [...prev, { role: "assistant", content: text }]);
+        // edge function salvou em naval_chats → invalida histórico pra refletir
+        qc.invalidateQueries({ queryKey: ["naval_chats"] });
       } catch (error) {
         console.error("Naval chat error:", error);
         setMessages((prev) => [
@@ -219,7 +222,7 @@ export function useNavalChat() {
         setLoading(false);
       }
     },
-    [context, messages],
+    [context, messages, qc],
   );
 
   return { messages, loading, send };

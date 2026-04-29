@@ -39,7 +39,11 @@ export function useNavalHistory(search?: string) {
       if (error) throw error;
       return (data ?? []) as NavalChat[];
     },
-    staleTime: 30 * 1000,
+    // Sempre refresca quando volta pra página (user pode ter saído enquanto Naval
+    // ainda processava — quando volta, vê a nova resposta salva pela edge function)
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
 }
 

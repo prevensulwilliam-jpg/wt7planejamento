@@ -139,15 +139,26 @@ function InsightCard({ icon, title, prompt }: { icon: string; title: string; pro
   );
 }
 
-// ─── Chat principal — sempre visível ────────────────────────────────
+// ─── Chat principal — agora puxa últimas 10 do banco + mostra envio em andamento ──
+// Combina:
+//  - state local (messages) pra UI imediata da pergunta sendo enviada (com loader)
+//  - histórico do banco (useNavalHistory) pras 10 últimas conversas
+// Quando William sai da página e volta: state local some, mas histórico continua visível.
+// A edge function salva mesmo se ele sair antes da resposta chegar — quando voltar, vê.
 function ChatSection() {
-  const { messages, loading, send } = useNavalChat();
+  const { messages: localMessages, loading, send } = useNavalChat();
+  const { data: history = [], isLoading: historyLoading } = useNavalHistory();
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // Mostra: histórico do banco (mais antigo no topo) + mensagens locais novas (no fim)
+  // Filtra historial pra evitar duplicar perguntas que já estão em messages locais
+  const localQuestions = new Set(localMessages.filter((m) => m.role === "user").map((m) => m.content.trim()));
+  const recentHistory = history.slice(0, 10).filter((h) => !localQuestions.has(h.question.trim())).reverse();
+
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages]);
+  }, [localMessages, recentHistory.length]);
 
   const handleSend = () => {
     const txt = input.trim();
@@ -156,23 +167,71 @@ function ChatSection() {
     send(txt);
   };
 
+  const isEmpty = localMessages.length === 0 && recentHistory.length === 0 && !historyLoading;
+
   return (
     <PremiumCard>
-      <div className="flex items-center gap-2 mb-4">
-        <MessageSquare className="w-4 h-4" style={{ color: "#2DD4BF" }} />
-        <h3 className="font-display font-bold text-sm" style={{ color: "#F0F4F8" }}>
-          Pergunte ao Naval
-        </h3>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <MessageSquare className="w-4 h-4" style={{ color: "#2DD4BF" }} />
+          <h3 className="font-display font-bold text-sm" style={{ color: "#F0F4F8" }}>
+            Pergunte ao Naval
+          </h3>
+        </div>
+        {recentHistory.length > 0 && (
+          <span className="text-[10px]" style={{ color: "#4A5568" }}>
+            últimas {recentHistory.length} conversas (auto-limpa em 7d)
+          </span>
+        )}
       </div>
 
-      <div ref={scrollRef} className="space-y-3 mb-4 max-h-[400px] overflow-y-auto pr-1" style={{ minHeight: 120 }}>
-        {messages.length === 0 && (
+      <div ref={scrollRef} className="space-y-3 mb-4 max-h-[500px] overflow-y-auto pr-1" style={{ minHeight: 120 }}>
+        {isEmpty && (
           <p className="text-xs text-center py-8" style={{ color: "#4A5568" }}>
             Faça uma pergunta sobre suas finanças...
           </p>
         )}
-        {messages.map((m, i) => (
-          <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+
+        {/* Histórico do banco (conversas anteriores, ainda dentro da janela 7d) */}
+        {recentHistory.map((c) => (
+          <div key={c.id} className="space-y-2">
+            <div className="flex justify-end">
+              <div
+                className="rounded-xl px-4 py-2 max-w-[85%] text-sm opacity-70"
+                style={{ background: "#1A2535", border: "1px solid #2A3F55", color: "#F0F4F8" }}
+              >
+                {c.question}
+              </div>
+            </div>
+            <div className="flex justify-start">
+              <div
+                className="rounded-xl px-4 py-2 max-w-[85%] text-sm opacity-90"
+                style={{ background: "rgba(45,212,191,0.06)", border: "1px solid rgba(45,212,191,0.15)", color: "#F0F4F8" }}
+              >
+                <div className="flex items-center gap-1 mb-1">
+                  <span className="text-xs font-bold" style={{ color: "#2DD4BF" }}>W</span>
+                  <span className="text-[10px]" style={{ color: "#4A5568" }}>
+                    {new Date(c.asked_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                </div>
+                <div className="prose prose-sm prose-invert max-w-none">
+                  <ReactMarkdown
+                    components={{
+                      strong: ({ children }) => <strong style={{ color: "#E8C97A" }}>{children}</strong>,
+                      p: ({ children }) => <p style={{ margin: "4px 0" }}>{children}</p>,
+                    }}
+                  >
+                    {c.answer}
+                  </ReactMarkdown>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+
+        {/* Mensagens locais (sessão atual) — destaque visual mais forte */}
+        {localMessages.map((m, i) => (
+          <div key={`local-${i}`} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
             <div
               className="rounded-xl px-4 py-2 max-w-[85%] text-sm"
               style={{
@@ -199,6 +258,7 @@ function ChatSection() {
             </div>
           </div>
         ))}
+
         {loading && (
           <div className="flex justify-start">
             <div className="rounded-xl px-4 py-3" style={{ background: "rgba(45,212,191,0.08)", border: "1px solid rgba(45,212,191,0.2)" }}>
@@ -207,6 +267,9 @@ function ChatSection() {
                 <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: "#2DD4BF", animationDelay: "0.2s" }} />
                 <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: "#2DD4BF", animationDelay: "0.4s" }} />
               </div>
+              <p className="text-[10px] mt-1" style={{ color: "#4A5568" }}>
+                Naval pensando... pode sair da página, a resposta fica salva.
+              </p>
             </div>
           </div>
         )}
