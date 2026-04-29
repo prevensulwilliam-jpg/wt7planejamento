@@ -99,17 +99,36 @@ Sequência correta pra comparar 2 meses:
 
 ⚠ **CRÍTICO — números do pipeline na memoria/metas.md e memoria/negocios.md estão DESATUALIZADOS** (eram do 1º trimestre 2026). SEMPRE use estas tools em vez de citar memória.
 
-═══ REGRA DE PRECISÃO ABSOLUTA — comissão Prevensul ═══
-William exige 100% de acertividade. NUNCA invente número, NUNCA extrapole sem dado.
+═══ REGRA CRÍTICA — PREVISÃO DE COMISSÃO PREVENSUL ═══
 
-Pra perguntas de previsão de comissão Prevensul (qualquer "quanto vou receber em X mês"):
-1. SEMPRE chame get_prevensul_history(n_months=6) PRIMEIRO
-2. Se o pattern retornado for "IRREGULAR" ou "VOLÁTIL": NUNCA cravar valor único. Use a recomendação da própria tool (range min-max).
-3. Se quiser pipeline teórico, complementa com get_prevensul_pipeline(forecast_month).
-4. Apresente: "Histórico real (R$ X mediana, range Y-Z, mas Q meses zeraram)" + "Pipeline teórico (R$ W se ritmo regular)" + "Estimativa: faixa razoável é [a, b]".
-5. Se a tool indicar variabilidade alta, EXPLICITE: "Não dá pra cravar valor único — Prevensul paga em lump sums irregulares."
+REGRA DE NEGÓCIO (memorize como verdade absoluta):
+**Ciclo de comissão Prevensul = dia 1 a 31 do mês X. Pagamento = até dia 20 do mês X+1.**
 
-NUNCA invente números do tipo "comissão abril foi R$ 53.528" sem ter chamado tool. Se não tem dado, diga: "Não chamei tool pra esse mês ainda. Quer que eu busque?"
+Logo:
+- "Previsão de comissão de MAIO" = o que entra na conta em maio = comissão acumulada no ciclo de ABRIL
+  → use get_prevensul_cycle(cycle_month="2026-04") (assumindo hoje é abril)
+- "Previsão de comissão de JUNHO" → cycle_month="2026-05"
+- "Comissão deste mês" (referindo ao recebimento atual) → cycle_month=mês anterior
+
+RESPOSTA IDEAL (formato curto, direto):
+> "Até hoje [DATA], comissão Prevensul do ciclo [MÊS_CICLO] está em **R$ X**, pagamento previsto até [DIA 20 MÊS+1]."
+
+Depois pode complementar com:
+- Top 3 clientes que mais contribuem
+- Concentração GRAND FOOD se relevante
+- Comparativo com ciclo anterior (chame get_prevensul_cycle do mês anterior)
+
+NUNCA misture com:
+- get_prevensul_history (esse é RECEBIDO histórico, não previsão)
+- get_prevensul_pipeline forecast teórico (esse é só pra projeção LONGA, vários meses à frente)
+
+═══ REGRA DE PRECISÃO ABSOLUTA — outros casos ═══
+William exige 100% acertividade. NUNCA invente número, NUNCA extrapole sem dado.
+
+Para perguntas que NÃO sejam "previsão comissão" (ex: "quanto recebi mês passado", "tendência"):
+1. get_prevensul_history pra ver recebimento real histórico
+2. Se pattern IRREGULAR/VOLÁTIL: dê range, nunca valor único
+3. NUNCA invente: se não tem dado, diga "preciso buscar essa info — chama tool"
 
 ═══ REGRAS INVIOLÁVEIS DE CONFLITO COM CENÁRIOS DO USUÁRIO ═══
 Quando o William perguntar "e se eu vender X" ou "e se eu fizer Y" e a memória/metas.md tiver regra inviolável contra essa ação, NÃO MODELE O CENÁRIO ainda. Em vez:
@@ -490,6 +509,29 @@ const NAVAL_TOOLS: ClaudeTool[] = [
     },
   },
   {
+    name: "get_prevensul_cycle",
+    description:
+      "Retorna a comissão Prevensul ACUMULADA num ciclo específico (mês X) que SERÁ PAGA até dia 20 do mês X+1. " +
+      "REGRA DE NEGÓCIO PREVENSUL: ciclo de comissão = dia 1 a 31 do mês, recebimento até dia 20 do mês seguinte. " +
+      "USE SEMPRE que a pergunta envolver: 'previsão de comissão maio', 'quanto vou receber', " +
+      "'comissão do mês', 'comissão a pagar'. A resposta direta é: olhar o ciclo correspondente. " +
+      "Pergunta 'previsão maio' → cycle_month='2026-04' (ciclo abril paga em maio). " +
+      "Pergunta 'previsão junho' → cycle_month='2026-05'. " +
+      "Lê prevensul_billing.commission_value por reference_month. Esse é o número CORRETO " +
+      "pra previsão de comissão — não use get_prevensul_history (recebido) nem forecast teórico.",
+    input_schema: {
+      type: "object",
+      properties: {
+        cycle_month: {
+          type: "string",
+          description:
+            "Mês do CICLO (não do recebimento) no formato YYYY-MM. Default = mês atual. " +
+            "Pra pergunta 'comissão maio': cycle_month='2026-04' (ciclo abril → paga maio).",
+        },
+      },
+    },
+  },
+  {
     name: "get_prevensul_history",
     description:
       "Retorna o HISTÓRICO REAL de comissão Prevensul recebida nos últimos N meses, " +
@@ -748,6 +790,76 @@ function idxToMonth(idx: number): string {
   const y = Math.floor((idx - 1) / 12);
   const mo = ((idx - 1) % 12) + 1;
   return `${y}-${String(mo).padStart(2, "0")}`;
+}
+
+// Handler: comissão Prevensul do ciclo X (paga dia 20 do mês X+1)
+async function handleGetPrevensulCycle(
+  input: Record<string, unknown>,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<string> {
+  const sb = createClient(supabaseUrl, serviceKey);
+
+  // Default = mês atual
+  const now = new Date();
+  const defaultCycle = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const cycleMonth = (typeof input.cycle_month === "string" && /^\d{4}-\d{2}$/.test(input.cycle_month))
+    ? input.cycle_month
+    : defaultCycle;
+
+  // Calcula data de pagamento = dia 20 do mês seguinte
+  const [y, m] = cycleMonth.split("-").map(Number);
+  const payYear = m === 12 ? y + 1 : y;
+  const payMonth = m === 12 ? 1 : m + 1;
+  const paymentDate = `${payYear}-${String(payMonth).padStart(2, "0")}-20`;
+
+  // Busca todas linhas do ciclo
+  const { data, error } = await sb.from("prevensul_billing")
+    .select("client_name, amount_paid, commission_rate, commission_value, status, contract_total, balance_remaining, installment_current, installment_total")
+    .eq("reference_month", cycleMonth);
+
+  if (error) {
+    return JSON.stringify({ error: `prevensul_billing query failed: ${error.message}` });
+  }
+
+  const rows = data ?? [];
+  const totalCommission = rows.reduce((s, r: any) => s + Number(r.commission_value ?? 0), 0);
+  const totalAmountPaid = rows.reduce((s, r: any) => s + Number(r.amount_paid ?? 0), 0);
+
+  // Agrupa por cliente
+  const byClient = new Map<string, { commission: number; amount_paid: number; rows: number }>();
+  for (const r of rows as any[]) {
+    const cur = byClient.get(r.client_name) ?? { commission: 0, amount_paid: 0, rows: 0 };
+    cur.commission += Number(r.commission_value ?? 0);
+    cur.amount_paid += Number(r.amount_paid ?? 0);
+    cur.rows += 1;
+    byClient.set(r.client_name, cur);
+  }
+  const clientList = Array.from(byClient.entries())
+    .map(([client, v]) => ({
+      client,
+      amount_paid_in_cycle: Math.round(v.amount_paid * 100) / 100,
+      commission: Math.round(v.commission * 100) / 100,
+      rows: v.rows,
+    }))
+    .filter((c) => c.commission > 0)
+    .sort((a, b) => b.commission - a.commission);
+
+  return JSON.stringify({
+    rule: "Ciclo de comissão Prevensul: dia 1-31 do mês X, pagamento até dia 20 do mês X+1.",
+    cycle_month: cycleMonth,
+    payment_date_estimated: paymentDate,
+    summary: {
+      total_commission_to_receive: Math.round(totalCommission * 100) / 100,
+      total_client_payments_in_cycle: Math.round(totalAmountPaid * 100) / 100,
+      n_clients_with_commission: clientList.length,
+      n_billing_rows: rows.length,
+    },
+    by_client: clientList,
+    interpretation: clientList.length === 0
+      ? `Nenhuma comissão registrada no ciclo ${cycleMonth}. Confirma se o portal /commissions/portal foi atualizado com pagamentos do mês.`
+      : `Comissão total a receber em ${paymentDate}: R$ ${totalCommission.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}. Esse é o valor consolidado do ciclo ${cycleMonth} pelo portal Prevensul.`,
+  });
 }
 
 // Handler: histórico REAL de comissão Prevensul recebida (revenues)
@@ -1225,7 +1337,7 @@ async function callClaudeHaiku(
 // Versão do código deployado — log inicial em CADA invocação pra confirmar
 // que o deploy do edge function está atualizado. Bumpa toda vez que mudar
 // a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
-const WISELY_AI_VERSION = "2026.04.28-v9-precision-history";
+const WISELY_AI_VERSION = "2026.04.28-v10-cycle-rule";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -1659,6 +1771,7 @@ Gere a leitura estratégica seguindo o formato obrigatório.`;
             get_breakdown: (input) => handleGetBreakdown(input, supabaseUrl, serviceKey),
             get_prevensul_pipeline: (input) => handleGetPrevensulPipeline(input, supabaseUrl, serviceKey),
             get_prevensul_history: (input) => handleGetPrevensulHistory(input, supabaseUrl, serviceKey),
+            get_prevensul_cycle: (input) => handleGetPrevensulCycle(input, supabaseUrl, serviceKey),
           }
         : undefined,
     });
