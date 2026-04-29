@@ -95,7 +95,9 @@ Sequência correta pra comparar 2 meses:
 
 ⚠ ATENÇÃO: a projeção mensal aqui é TEÓRICA (assume parcelas mensais regulares). Na realidade Prevensul paga em LUMP SUMS irregulares (ver Tool 3).
 
-**Tool 3: get_prevensul_history(n_months?)** — HISTÓRICO REAL recebido nos últimos N meses (default 6). Lê de revenues source=comissao_prevensul. Retorna por mês: total recebido + lista dos depósitos. Inclui estatísticas: avg, mediana, min, max, variability_index, months_with_zero. Tool 3 também classifica o padrão (ESTÁVEL / VOLÁTIL / IRREGULAR) e dá recomendação automática.
+**Tool 3a: get_construction_status(construction_filter?, include_completed?)** — status real de cada obra (RWT05, JW7 Sonho, JW7 Itaipava, RWT04, etc): orçado vs gasto, % executado, próxima etapa, renda mensal esperada quando pronta (cota William). Retorna sinais_alerta automáticos (estouro de orçamento, atraso vs prazo, prazo apertado). USE pra: "como vai a obra X?", "quanto falta gastar em RWT05?", "estou no orçamento?", "renda esperada com tudo pronto?". Filtro por nome (ex: 'JW7'). Default só obras em andamento.
+
+**Tool 3b: get_prevensul_history(n_months?)** — HISTÓRICO REAL recebido nos últimos N meses (default 6). Lê de revenues source=comissao_prevensul. Retorna por mês: total recebido + lista dos depósitos. Inclui estatísticas: avg, mediana, min, max, variability_index, months_with_zero. Tool 3 também classifica o padrão (ESTÁVEL / VOLÁTIL / IRREGULAR) e dá recomendação automática.
 
 ⚠ **CRÍTICO — números do pipeline na memoria/metas.md e memoria/negocios.md estão DESATUALIZADOS** (eram do 1º trimestre 2026). SEMPRE use estas tools em vez de citar memória.
 
@@ -509,6 +511,30 @@ const NAVAL_TOOLS: ClaudeTool[] = [
     },
   },
   {
+    name: "get_construction_status",
+    description:
+      "Status real de cada obra (constructions) — orçado vs gasto, % executado, próxima etapa, " +
+      "renda mensal esperada (cota William). USE pra perguntas tipo: 'Como vai a obra X?', " +
+      "'Quanto falta gastar em RWT05?', 'Estou no orçamento?', 'Quanto vai entrar de aluguel quando " +
+      "todas obras estiverem prontas?'. Cruza constructions + construction_expenses (com cota William) " +
+      "+ construction_stages. Filtro opcional pelo nome da obra.",
+    input_schema: {
+      type: "object",
+      properties: {
+        construction_filter: {
+          type: "string",
+          description:
+            "Filtra por nome da obra (busca parcial, case-insensitive). " +
+            "Ex: 'RWT05', 'JW7', 'Sonho'. Omitir = retorna todas as obras em andamento.",
+        },
+        include_completed: {
+          type: "boolean",
+          description: "Se true, inclui obras já entregues (status=concluida). Default false.",
+        },
+      },
+    },
+  },
+  {
     name: "get_prevensul_cycle",
     description:
       "Retorna a comissão Prevensul ACUMULADA num ciclo específico (mês X) que SERÁ PAGA até dia 20 do mês X+1. " +
@@ -790,6 +816,152 @@ function idxToMonth(idx: number): string {
   const y = Math.floor((idx - 1) / 12);
   const mo = ((idx - 1) % 12) + 1;
   return `${y}-${String(mo).padStart(2, "0")}`;
+}
+
+// Handler: status de cada obra (constructions + expenses + stages)
+async function handleGetConstructionStatus(
+  input: Record<string, unknown>,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<string> {
+  const sb = createClient(supabaseUrl, serviceKey);
+  const filter = typeof input.construction_filter === "string" ? input.construction_filter.trim() : null;
+  const includeCompleted = input.include_completed === true;
+
+  // 1) Busca obras
+  let q = sb.from("constructions").select(
+    "id, name, status, ownership_pct, partner_name, total_budget, total_units_planned, total_units_built, total_units_rented, estimated_rent_per_unit, start_date, estimated_completion, end_date",
+  );
+  if (!includeCompleted) q = q.neq("status", "concluida");
+  if (filter) q = q.ilike("name", `%${filter}%`);
+
+  const { data: constructions, error: ec } = await q;
+  if (ec) return JSON.stringify({ error: `constructions query: ${ec.message}` });
+
+  if (!constructions || constructions.length === 0) {
+    return JSON.stringify({
+      constructions: [],
+      summary: { total: 0 },
+      note: filter ? `Nenhuma obra encontrada com filtro '${filter}'.` : "Nenhuma obra em andamento.",
+    });
+  }
+
+  // 2) Pra cada obra, busca expenses + stages
+  const today = new Date();
+  const out: any[] = [];
+  for (const c of constructions as any[]) {
+    const cota = Number(c.ownership_pct ?? 100);
+    const orcadoTotal = Number(c.total_budget ?? 0);
+
+    // Expenses
+    const { data: exps } = await sb.from("construction_expenses")
+      .select("total_amount, william_amount, partner_amount, expense_date, description, category, stage_id")
+      .eq("construction_id", c.id);
+    const gastoTotal = (exps ?? []).reduce((s: number, e: any) => s + Number(e.total_amount ?? 0), 0);
+    const gastoWilliam = (exps ?? []).reduce((s: number, e: any) => s + Number(e.william_amount ?? 0), 0);
+    const pctExecutado = orcadoTotal > 0 ? (gastoTotal / orcadoTotal) * 100 : 0;
+    const orcadoCotaW = orcadoTotal * (cota / 100);
+    const restanteCotaW = Math.max(0, orcadoCotaW - gastoWilliam);
+
+    // Stages
+    const { data: stages } = await sb.from("construction_stages")
+      .select("id, name, status, pct_complete, budget_estimated, order_index, start_date, end_date")
+      .eq("construction_id", c.id)
+      .order("order_index", { ascending: true });
+
+    // Gasto real por stage (somando expenses com stage_id correspondente)
+    const gastoPorStage = new Map<string, { total: number; william: number }>();
+    for (const e of exps ?? []) {
+      const sid = (e as any).stage_id;
+      if (!sid) continue;
+      const cur = gastoPorStage.get(sid) ?? { total: 0, william: 0 };
+      cur.total += Number((e as any).total_amount ?? 0);
+      cur.william += Number((e as any).william_amount ?? 0);
+      gastoPorStage.set(sid, cur);
+    }
+
+    const stagesOut = (stages ?? []).map((s: any) => {
+      const g = gastoPorStage.get(s.id) ?? { total: 0, william: 0 };
+      return {
+        name: s.name,
+        status: s.status,
+        order: s.order_index,
+        pct_complete: s.pct_complete,
+        budget_estimated: Number(s.budget_estimated ?? 0),
+        executed_amount: Math.round(g.total * 100) / 100,
+        executed_amount_william: Math.round(g.william * 100) / 100,
+        start_date: s.start_date,
+        end_date: s.end_date,
+      };
+    });
+
+    const proxima = stagesOut.find((s: any) => s.status !== "concluida");
+
+    // Renda esperada quando finalizada
+    const units = Number(c.total_units_planned ?? 0);
+    const rentPerUnit = Number(c.estimated_rent_per_unit ?? 0);
+    const rendaTotalMensal = units * rentPerUnit;
+    const rendaCotaWMensal = rendaTotalMensal * (cota / 100);
+
+    // Tempo decorrido
+    const start = c.start_date ? new Date(c.start_date) : null;
+    const eta = c.estimated_completion ? new Date(c.estimated_completion) : null;
+    const mesesDecorridos = start ? Math.max(0, Math.round((today.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 30))) : null;
+    const mesesRestantes = eta ? Math.max(0, Math.round((eta.getTime() - today.getTime()) / (1000 * 60 * 60 * 24 * 30))) : null;
+
+    // Sinais auto-gerados
+    const sinais: string[] = [];
+    if (orcadoTotal > 0 && pctExecutado > 100) sinais.push(`⚠ Estouro: gasto ${pctExecutado.toFixed(1)}% do orçamento`);
+    if (eta && mesesRestantes != null && mesesRestantes <= 1 && pctExecutado < 90) {
+      sinais.push(`⚠ Prazo apertado: ${mesesRestantes} mês(es) até ETA, mas só ${pctExecutado.toFixed(1)}% executado`);
+    }
+    if (start && mesesDecorridos != null && mesesDecorridos > 0 && eta) {
+      const totalMeses = Math.max(1, Math.round((eta.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 30)));
+      const pctTempo = (mesesDecorridos / totalMeses) * 100;
+      if (pctTempo - pctExecutado > 25) {
+        sinais.push(`⚠ Atrasado: ${pctTempo.toFixed(0)}% do tempo passou, ${pctExecutado.toFixed(0)}% executado`);
+      }
+    }
+
+    out.push({
+      name: c.name,
+      status: c.status,
+      partner: c.partner_name,
+      ownership_pct: cota,
+      orcado_total: Math.round(orcadoTotal * 100) / 100,
+      orcado_cota_william: Math.round(orcadoCotaW * 100) / 100,
+      gasto_total: Math.round(gastoTotal * 100) / 100,
+      gasto_cota_william: Math.round(gastoWilliam * 100) / 100,
+      restante_cota_william: Math.round(restanteCotaW * 100) / 100,
+      pct_executado: Math.round(pctExecutado * 10) / 10,
+      total_units_planned: units,
+      total_units_built: c.total_units_built,
+      estimated_rent_per_unit: Math.round(rentPerUnit * 100) / 100,
+      renda_total_mensal_quando_pronta: Math.round(rendaTotalMensal * 100) / 100,
+      renda_cota_william_mensal: Math.round(rendaCotaWMensal * 100) / 100,
+      start_date: c.start_date,
+      eta: c.estimated_completion,
+      meses_decorridos: mesesDecorridos,
+      meses_restantes: mesesRestantes,
+      n_expenses: (exps ?? []).length,
+      stages: stagesOut,
+      proxima_etapa: proxima ? { name: proxima.name, budget: proxima.budget_estimated, pct_complete: proxima.pct_complete } : null,
+      sinais_alerta: sinais,
+    });
+  }
+
+  // 3) Sumário geral
+  const summary = {
+    total_obras: out.length,
+    total_orcado_cota_william: Math.round(out.reduce((s, c) => s + c.orcado_cota_william, 0) * 100) / 100,
+    total_gasto_cota_william: Math.round(out.reduce((s, c) => s + c.gasto_cota_william, 0) * 100) / 100,
+    total_restante_cota_william: Math.round(out.reduce((s, c) => s + c.restante_cota_william, 0) * 100) / 100,
+    total_units_planned: out.reduce((s, c) => s + (c.total_units_planned ?? 0), 0),
+    renda_total_mensal_cota_william_quando_todas_prontas: Math.round(out.reduce((s, c) => s + c.renda_cota_william_mensal, 0) * 100) / 100,
+    obras_com_alerta: out.filter((c) => c.sinais_alerta.length > 0).length,
+  };
+
+  return JSON.stringify({ summary, constructions: out });
 }
 
 // Handler: comissão Prevensul do ciclo X (paga dia 20 do mês X+1)
@@ -1350,7 +1522,7 @@ async function callClaudeHaiku(
 // Versão do código deployado — log inicial em CADA invocação pra confirmar
 // que o deploy do edge function está atualizado. Bumpa toda vez que mudar
 // a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
-const WISELY_AI_VERSION = "2026.04.29-v11-history-save";
+const WISELY_AI_VERSION = "2026.04.29-v12-construction-status";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -1785,6 +1957,7 @@ Gere a leitura estratégica seguindo o formato obrigatório.`;
             get_prevensul_pipeline: (input) => handleGetPrevensulPipeline(input, supabaseUrl, serviceKey),
             get_prevensul_history: (input) => handleGetPrevensulHistory(input, supabaseUrl, serviceKey),
             get_prevensul_cycle: (input) => handleGetPrevensulCycle(input, supabaseUrl, serviceKey),
+            get_construction_status: (input) => handleGetConstructionStatus(input, supabaseUrl, serviceKey),
           }
         : undefined,
     });
