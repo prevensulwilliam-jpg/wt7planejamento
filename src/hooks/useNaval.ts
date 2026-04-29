@@ -192,6 +192,20 @@ export function useNavalChat() {
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // Carrega uma conversa anterior (do histórico) no chat ativo. Próxima
+  // pergunta vai com esse contexto. Substitui messages atual.
+  const loadConversation = useCallback((question: string, answer: string) => {
+    setMessages([
+      { role: "user", content: question },
+      { role: "assistant", content: answer },
+    ]);
+  }, []);
+
+  // Limpa o chat ativo (descarta contexto da sessão)
+  const clearChat = useCallback(() => {
+    setMessages([]);
+  }, []);
+
   const send = useCallback(
     async (input: string) => {
       if (!context) return;
@@ -225,7 +239,7 @@ export function useNavalChat() {
     [context, messages, qc],
   );
 
-  return { messages, loading, send };
+  return { messages, loading, send, loadConversation, clearChat };
 }
 
 export function useNavalInsight(topic: string, prompt: string, autoGenerate: boolean = false) {

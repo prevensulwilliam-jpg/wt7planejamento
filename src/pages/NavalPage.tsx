@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { RefreshCw, Send, MessageSquare, ChevronDown, ChevronUp, Play, History, Search, Trash2 } from "lucide-react";
+import { RefreshCw, Send, MessageSquare, ChevronDown, ChevronUp, Play, History, Search, Trash2, Reply, X } from "lucide-react";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
 import { GoldButton } from "@/components/wt7/GoldButton";
 import { WtBadge } from "@/components/wt7/WtBadge";
@@ -140,13 +140,14 @@ function InsightCard({ icon, title, prompt }: { icon: string; title: string; pro
 }
 
 // ─── Chat principal — agora puxa últimas 10 do banco + mostra envio em andamento ──
-// Combina:
-//  - state local (messages) pra UI imediata da pergunta sendo enviada (com loader)
-//  - histórico do banco (useNavalHistory) pras 10 últimas conversas
-// Quando William sai da página e volta: state local some, mas histórico continua visível.
-// A edge function salva mesmo se ele sair antes da resposta chegar — quando voltar, vê.
-function ChatSection() {
-  const { messages: localMessages, loading, send } = useNavalChat();
+type ChatSectionProps = {
+  localMessages: { role: "user" | "assistant"; content: string }[];
+  loading: boolean;
+  send: (input: string) => void;
+  loadConversation: (q: string, a: string) => void;
+  clearChat: () => void;
+};
+function ChatSection({ localMessages, loading, send, loadConversation, clearChat }: ChatSectionProps) {
   const { data: history = [], isLoading: historyLoading } = useNavalHistory();
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -171,18 +172,36 @@ function ChatSection() {
 
   return (
     <PremiumCard>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <MessageSquare className="w-4 h-4" style={{ color: "#2DD4BF" }} />
           <h3 className="font-display font-bold text-sm" style={{ color: "#F0F4F8" }}>
             Pergunte ao Naval
           </h3>
+          {localMessages.length > 0 && (
+            <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: "rgba(45,212,191,0.15)", color: "#2DD4BF" }}>
+              em conversa ({localMessages.length} msg)
+            </span>
+          )}
         </div>
-        {recentHistory.length > 0 && (
-          <span className="text-[10px]" style={{ color: "#4A5568" }}>
-            últimas {recentHistory.length} conversas (auto-limpa em 7d)
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {localMessages.length > 0 && (
+            <button
+              onClick={clearChat}
+              className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md hover:bg-white/5"
+              style={{ color: "#94A3B8", border: "1px solid #2A3F55" }}
+              title="Sair dessa conversa e começar uma nova"
+            >
+              <X className="w-3 h-3" />
+              Nova conversa
+            </button>
+          )}
+          {recentHistory.length > 0 && (
+            <span className="text-[10px]" style={{ color: "#4A5568" }}>
+              últimas {recentHistory.length} (auto-limpa em 7d)
+            </span>
+          )}
+        </div>
       </div>
 
       <div ref={scrollRef} className="space-y-3 mb-4 max-h-[500px] overflow-y-auto pr-1" style={{ minHeight: 120 }}>
@@ -194,7 +213,7 @@ function ChatSection() {
 
         {/* Histórico do banco (conversas anteriores, ainda dentro da janela 7d) */}
         {recentHistory.map((c) => (
-          <div key={c.id} className="space-y-2">
+          <div key={c.id} className="space-y-2 group">
             <div className="flex justify-end">
               <div
                 className="rounded-xl px-4 py-2 max-w-[85%] text-sm opacity-70"
@@ -203,7 +222,7 @@ function ChatSection() {
                 {c.question}
               </div>
             </div>
-            <div className="flex justify-start">
+            <div className="flex justify-start items-end gap-2">
               <div
                 className="rounded-xl px-4 py-2 max-w-[85%] text-sm opacity-90"
                 style={{ background: "rgba(45,212,191,0.06)", border: "1px solid rgba(45,212,191,0.15)", color: "#F0F4F8" }}
@@ -225,6 +244,15 @@ function ChatSection() {
                   </ReactMarkdown>
                 </div>
               </div>
+              <button
+                onClick={() => loadConversation(c.question, c.answer)}
+                className="opacity-0 group-hover:opacity-100 flex items-center gap-1 text-[10px] px-2 py-1 rounded-md hover:bg-white/5 transition-opacity shrink-0"
+                style={{ color: "#2DD4BF", border: "1px solid rgba(45,212,191,0.3)" }}
+                title="Continuar essa conversa (próxima pergunta vai com esse contexto)"
+              >
+                <Reply className="w-3 h-3" />
+                Continuar
+              </button>
             </div>
           </div>
         ))}
@@ -305,8 +333,11 @@ function ChatSection() {
   );
 }
 
-// ─── Aba de histórico — busca + limpar ──────────────────────────────
-function HistorySection() {
+// ─── Aba de histórico — busca + limpar + continuar conversa ────────
+type HistorySectionProps = {
+  onContinue: (question: string, answer: string) => void;
+};
+function HistorySection({ onContinue }: HistorySectionProps) {
   const [search, setSearch] = useState("");
   const { data = [], isLoading } = useNavalHistory(search);
   const deleteAll = useDeleteAllChats();
@@ -398,8 +429,8 @@ function HistorySection() {
                       {c.answer}
                     </ReactMarkdown>
                   </div>
-                  {(c.tools_used?.length || c.tokens_in || c.tokens_cache_read) && (
-                    <div className="flex flex-wrap gap-2 text-[10px] mt-2 pt-2 border-t" style={{ borderColor: "#1A2535", color: "#4A5568" }}>
+                  <div className="flex items-center justify-between mt-3 pt-2 border-t flex-wrap gap-2" style={{ borderColor: "#1A2535" }}>
+                    <div className="flex flex-wrap gap-2 text-[10px]" style={{ color: "#4A5568" }}>
                       {c.tools_used?.map((t) => (
                         <span key={t} className="px-2 py-0.5 rounded" style={{ background: "rgba(45,212,191,0.08)", color: "#2DD4BF" }}>{t}</span>
                       ))}
@@ -407,7 +438,16 @@ function HistorySection() {
                       {c.tokens_cache_read != null && c.tokens_cache_read > 0 && <span>cache: {c.tokens_cache_read}</span>}
                       {c.tokens_out != null && <span>out: {c.tokens_out}</span>}
                     </div>
-                  )}
+                    <button
+                      onClick={() => onContinue(c.question, c.answer)}
+                      className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-md hover:bg-white/5 transition-colors"
+                      style={{ color: "#2DD4BF", border: "1px solid rgba(45,212,191,0.3)" }}
+                      title="Voltar pra aba Conversar com essa conversa carregada"
+                    >
+                      <Reply className="w-3 h-3" />
+                      Continuar essa conversa
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -423,6 +463,14 @@ function HistorySection() {
 // ═══════════════════════════════════════════════════════════════════
 export default function NavalPage() {
   const [tab, setTab] = useState<"chat" | "historico">("chat");
+  // useNavalChat aqui no topo pra compartilhar entre ChatSection e HistorySection
+  const chat = useNavalChat();
+
+  // Callback usado pelo HistorySection: carrega conversa + muda pra aba Conversar
+  const handleContinueFromHistory = (q: string, a: string) => {
+    chat.loadConversation(q, a);
+    setTab("chat");
+  };
 
   return (
     <div className="space-y-6 max-w-[1400px] mx-auto">
@@ -469,11 +517,17 @@ export default function NavalPage() {
             />
           </div>
 
-          <ChatSection />
+          <ChatSection
+            localMessages={chat.messages}
+            loading={chat.loading}
+            send={chat.send}
+            loadConversation={chat.loadConversation}
+            clearChat={chat.clearChat}
+          />
         </TabsContent>
 
         <TabsContent value="historico" className="mt-6">
-          <HistorySection />
+          <HistorySection onContinue={handleContinueFromHistory} />
         </TabsContent>
       </Tabs>
     </div>
