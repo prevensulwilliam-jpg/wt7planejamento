@@ -21,12 +21,16 @@ const BASE_SYSTEM_PROMPT = `Você é o Naval — conselheiro estratégico do Wil
 Você NÃO é um chatbot. Você é um analista financeiro + estrategista comercial + mentor de execução com uma missão: **fazer o William chegar em R$ 70M de patrimônio até 2041 (aos 55 anos), com renda de R$ 200k/mês, como operador eterno.**
 
 ═══ FONTES DA VERDADE ═══
-- **MEMÓRIA PERMANENTE** (bloco adiante): quem é William, metas, estrutura de negócios, restrições. Mesmos .md que o Claude Code usa.
+- **MEMÓRIA PERMANENTE** (bloco adiante): contém SOMENTE estrutura imutável — quem é William, regras de negócio, parceiros, cotas, datas-âncora, restrições defensivas, regras invioláveis. NÃO contém valores em R$, status de obras, pipeline de comissão, posição de caixa, saldos de cartão.
+- **TOOLS (bloco "FERRAMENTAS DE BUSCA")**: única fonte autorizada pra QUALQUER NÚMERO DINÂMICO — receita, despesa, comissão, pipeline, saldo, dívida, patrimônio, kitnet, obra, cartão, casamento, consórcio, investimento.
 - **BRAIN STACK** (bloco adiante): princípios destilados de autores/mentores que o William estuda. Use como lentes de análise — não como verdade absoluta.
+
+🚨 **REGRA #0 — TOOL > MEMÓRIA PRA QUALQUER NÚMERO** 🚨
+Se a pergunta envolve um valor em R$, %, quantidade de unidades, status de obra, saldo, comissão recebida, pipeline a receber, posição de caixa, dívida ou QUALQUER dado que muda no tempo: **VOCÊ DEVE CHAMAR A TOOL**, não citar memória. Memória de números está PROIBIDA — todo número que parecer vir da memória é histórico congelado e provavelmente desatualizado. Veja o **index_tools** na memória para o mapa "pergunta tipo → tool". Se o mapa apontar pra uma tool que ainda não existe, diga: "Esse dado precisa de tool [nome] — ainda não implementada. Não vou estimar."
 
 REGRAS INVIOLÁVEIS (quebrar qualquer uma = resposta inválida):
 1. **Nunca invente vetores de renda** fora da estrutura em \`negocios.md\` (WT7 Holding + T7 Sales + Prevensul empregador). Se surgir algo novo, diga: "isso não está na estrutura — pergunte ao William antes de eu considerar".
-2. **Nunca invente metas ou números.** Tudo vem de \`metas.md\`. Se faltar dado, peça.
+2. **Nunca invente metas ou números.** Meta-fim (R$ 70M / 2041 / R$ 200k mês) e regras invioláveis vêm de \`metas.md\`. **Qualquer número dinâmico (saldo, comissão, kitnet, obra, cartão) vem APENAS de tool — nunca da memória.** Se faltar tool ou dado, peça/avise. NUNCA estime.
 3. **Brava Comex está FORA.** PrevFlow é **ferramenta**, não negócio em 2026. **PROIBIDO propor monetizar PrevFlow, piloto pago, SaaS beta ou venda externa antes de 2027.** Em 2026 PrevFlow roda EXCLUSIVAMENTE como ferramenta interna da Prevensul — sem exceção, sem "versão beta", sem "piloto pequeno", sem nada. Se tiver tentação de propor isso, PARE.
 4. **Nunca recomendar:** queimar caixa abaixo de R$ 100k; vender Blumenau nos próximos 3 anos; comprometer liquidez do casamento dez/2027; delegar o comercial Prevensul; prospectar mais pessoalmente sem antes destravar SDR externo (gargalo humano — William é único closer).
 5. **Nunca citar trechos longos de livros.** Use os princípios destilados na BRAIN STACK — eles já estão em linguagem sua. Nunca reproduzir texto copiado.
@@ -101,7 +105,7 @@ Sequência correta pra comparar 2 meses:
 
 **Tool 3b: get_prevensul_history(n_months?)** — HISTÓRICO REAL recebido nos últimos N meses (default 6). Lê de revenues source=comissao_prevensul. Retorna por mês: total recebido + lista dos depósitos. Inclui estatísticas: avg, mediana, min, max, variability_index, months_with_zero. Tool 3 também classifica o padrão (ESTÁVEL / VOLÁTIL / IRREGULAR) e dá recomendação automática.
 
-⚠ **CRÍTICO — números do pipeline na memoria/metas.md e memoria/negocios.md estão DESATUALIZADOS** (eram do 1º trimestre 2026). SEMPRE use estas tools em vez de citar memória.
+⚠ **CRÍTICO — memórias \`metas.md\` e \`negocios.md\` foram limpas de números dinâmicos.** Se você "lembrar" de algum valor em R$ específico (R$ 272k pipeline, R$ 45k mês Prevensul, R$ 20k aluguel etc), isso é cache antigo do prompt — IGNORE e chame a tool. Memória só tem estrutura, datas, cotas e regras.
 
 **Tools de POSIÇÃO ATUAL E TRAJETÓRIA (S1+S2):**
 - **get_bank_balances** — saldo HOJE em cada banco + investimentos. USE pra "posso aportar X?", "quanto disponível?". Alerta saldos desatualizados >7d.
@@ -764,6 +768,151 @@ const NAVAL_TOOLS: ClaudeTool[] = [
             "Mês YYYY-MM pra projeção. Quando passado, calcula estimativa de comissão " +
             "que deve cair NESSE mês baseado em contract_total/installment_total de cada contrato " +
             "ainda dentro do prazo. Ex: forecast_month='2026-05' estima maio.",
+        },
+      },
+    },
+  },
+  {
+    name: "get_kitnets_status",
+    description:
+      "Status real do parque de kitnets (RWT02 + RWT03 + qualquer outro residencial). " +
+      "Retorna por residencial: total de unidades, ocupadas/vagas, recebimento real do mês (Modelo A — kitnet_entries reconciled), " +
+      "expectativa total mensal, vacância em R$, broker takings, kitnets sem entrada lançada no mês. " +
+      "USE pra: 'como vão as kitnets?', 'quanto recebi de aluguel em [mês]?', 'tenho kitnet vaga?', " +
+      "'algum aluguel atrasou?', 'inadimplência'. " +
+      "Modelo A é fonte da verdade — bank_transactions só valida.",
+    input_schema: {
+      type: "object",
+      properties: {
+        month: {
+          type: "string",
+          description: "Mês YYYY-MM. Default = mês atual.",
+        },
+        residencial_filter: {
+          type: "string",
+          description:
+            "Filtra por código de residencial (busca parcial). Ex: 'RWT02', 'RWT03'. Omitir = todos.",
+        },
+      },
+    },
+  },
+  {
+    name: "get_current_card_invoice",
+    description:
+      "Fatura ATUAL e/ou recente do cartão de crédito. Por padrão retorna a fatura aberta (em formação) + a última fechada de cada cartão. " +
+      "Inclui: total acumulado, breakdown por categoria, top merchants, parcelados ainda em curso (próximos meses), due_date. " +
+      "USE pra: 'quanto está minha fatura?', 'fatura BB / XP', 'top gastos do cartão', 'tenho parcelado em curso?', " +
+      "'quando vence próxima fatura?'. " +
+      "Lê card_invoices + card_transactions. Categorias com prefixo cartao__.",
+    input_schema: {
+      type: "object",
+      properties: {
+        card_filter: {
+          type: "string",
+          description:
+            "Filtra por cardholder (William/Esposa) ou nome do banco no card (BB/XP). Busca parcial. Omitir = todos.",
+        },
+        month: {
+          type: "string",
+          description:
+            "Mês YYYY-MM (reference_month da fatura). Omitir = retorna fatura aberta + última fechada.",
+        },
+      },
+    },
+  },
+  {
+    name: "get_wedding_status",
+    description:
+      "Status do casamento 11/12/2027 (Villa Sonali, BC). Retorna: total contratado, total pago, saldo pendente, " +
+      "parcelas pagas vs pendentes, próximas 3 parcelas (com due_date e supplier), parcelas em atraso, dias até o casamento. " +
+      "Lê wedding_installments. " +
+      "USE pra: 'como está o casamento?', 'quanto falta pagar do casamento?', 'próxima parcela do casamento?', " +
+      "'algum boleto do casamento atrasou?'.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "get_recurring_bills",
+    description:
+      "Contas fixas mensais ativas (recurring_bills): aluguel apt, internet, telefone, condomínio, academia, etc. " +
+      "Agrupa por categoria, total mensal, lista os top 10 itens, alerta de vencimentos próximos. " +
+      "USE pra: 'quanto pago de fixo todo mês?', 'minhas contas recorrentes', 'quais contas vencem essa semana?', " +
+      "'composição do meu custeio fixo'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        category_filter: {
+          type: "string",
+          description: "Filtra por categoria (ex: 'telefonia', 'imovel', 'consorcio'). Omitir = todas.",
+        },
+      },
+    },
+  },
+  {
+    name: "get_other_commissions_status",
+    description:
+      "Status das comissões EXTERNAS à Prevensul (other_commissions): consultorias, parcerias, indicações. " +
+      "Retorna: total contratado, comissão a receber (saldo de installments pendentes), comissão recebida no histórico, " +
+      "próximas 5 parcelas a vencer (data, fonte, valor), parcelas em atraso. " +
+      "USE pra: 'quanto tenho de comissão extra a receber?', 'comissões fora Prevensul', 'próxima parcela R7?', " +
+      "'comissões externas no mês X'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        source_filter: {
+          type: "string",
+          description: "Filtra por fonte (ex: 'Consultoria', 'R7'). Busca parcial. Omitir = todas.",
+        },
+      },
+    },
+  },
+  {
+    name: "get_consortium_status",
+    description:
+      "Status dos consórcios ativos (Ademicon imóveis, Randon caminhões, NREG, etc). " +
+      "Retorna: por consórcio, valor de crédito, total pago vs pendente, parcelas pagas / restantes, " +
+      "data fim, ownership_pct (cota William em consórcio com sócio), tipo de ativo (imóveis/veículos), " +
+      "fundo comum/taxa adm/seguro pagos. " +
+      "USE pra: 'como está o consórcio Ademicon?', 'quanto já paguei de consórcio?', 'quando termina meu consórcio?', " +
+      "'consórcios totais cota William'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        name_filter: {
+          type: "string",
+          description: "Filtra por nome (ex: 'Ademicon', 'Randon'). Busca parcial. Omitir = todos.",
+        },
+      },
+    },
+  },
+  {
+    name: "get_investments_status",
+    description:
+      "Status dos investimentos líquidos (RDC/CDI/renda fixa/etc): por investimento mostra current_amount, " +
+      "rescue_amount (valor resgatável hoje, com possível haircut), rate (CDI%, fixo%), maturidade. " +
+      "Total caixa imediato + total liquidez emergencial. " +
+      "USE pra: 'quanto tenho aplicado?', 'qual investimento rende mais?', 'liquidez emergencial?', " +
+      "'meu colchão líquido'. " +
+      "OBS: get_bank_balances já dá saldo banco + investimentos resumido — esse aqui é detalhe profundo só de aplicações.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "get_energy_solar_status",
+    description:
+      "Status do sistema solar dos residenciais (RWT02 + RWT03 — geração solar abate Celesc). " +
+      "Lê celesc_invoices. Retorna: por residencial e por mês, kWh consumido, kWh abatido pelo solar, " +
+      "valor da fatura, tendência últimos 6 meses, % offset (geração / consumo). " +
+      "USE pra: 'como está a geração solar?', 'quanto economizo com solar?', 'fatura Celesc do RWT02?', " +
+      "'tendência da conta de luz', 'solar está rendendo?'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        residencial_filter: {
+          type: "string",
+          description: "Filtra por código residencial (RWT02, RWT03). Omitir = todos.",
+        },
+        n_months: {
+          type: "number",
+          description: "Quantos meses de histórico. Default 6, max 24.",
         },
       },
     },
@@ -2092,6 +2241,824 @@ async function handleGetPrevensulPipeline(
   });
 }
 
+// ─── Handler: get_kitnets_status ─────────────────────────────────────
+async function handleGetKitnetsStatus(
+  input: Record<string, unknown>,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<string> {
+  const sb = createClient(supabaseUrl, serviceKey);
+  const month = (input.month as string) || new Date().toISOString().slice(0, 7);
+  const residencialFilter = (input.residencial_filter as string) || null;
+
+  const knQuery = sb
+    .from("kitnets")
+    .select("id, residencial_code, unit_number, code, tenant_name, rent_value, status");
+  const { data: kitnets } = await knQuery;
+  const allKitnets = kitnets ?? [];
+
+  const filtered = residencialFilter
+    ? allKitnets.filter((k: any) =>
+        (k.residencial_code || "").toLowerCase().includes(residencialFilter.toLowerCase()),
+      )
+    : allKitnets;
+
+  const { data: entries } = await sb
+    .from("kitnet_entries")
+    .select("kitnet_id, total_liquid, rent_gross, reconciled, reconciled_at, period_end, tenant_name, broker_name")
+    .eq("reference_month", month);
+  const allEntries = entries ?? [];
+
+  const entryByKitnet = new Map<string, any>();
+  for (const e of allEntries) entryByKitnet.set(e.kitnet_id, e);
+
+  const byResidencial = new Map<string, {
+    code: string;
+    total_units: number;
+    occupied: number;
+    vacant: number;
+    entries_lancadas: number;
+    entries_reconciled: number;
+    received_real: number;
+    received_pending: number;
+    expected_total: number;
+    sem_lancamento: string[];
+  }>();
+
+  for (const k of filtered) {
+    const code = k.residencial_code || "?";
+    if (!byResidencial.has(code)) {
+      byResidencial.set(code, {
+        code,
+        total_units: 0,
+        occupied: 0,
+        vacant: 0,
+        entries_lancadas: 0,
+        entries_reconciled: 0,
+        received_real: 0,
+        received_pending: 0,
+        expected_total: 0,
+        sem_lancamento: [],
+      });
+    }
+    const r = byResidencial.get(code)!;
+    r.total_units++;
+    const status = (k.status || "").toLowerCase();
+    if (status === "occupied") r.occupied++;
+    else if (status === "vacant" || status === "available") r.vacant++;
+    r.expected_total += Number(k.rent_value ?? 0);
+
+    const entry = entryByKitnet.get(k.id);
+    if (entry) {
+      r.entries_lancadas++;
+      const liquid = Number(entry.total_liquid ?? 0);
+      if (entry.reconciled) {
+        r.entries_reconciled++;
+        r.received_real += liquid;
+      } else {
+        r.received_pending += liquid;
+      }
+    } else if (status === "occupied") {
+      r.sem_lancamento.push(k.code || `${code}-${k.unit_number}`);
+    }
+  }
+
+  const residenciais = Array.from(byResidencial.values()).map((r) => ({
+    residencial: r.code,
+    total_units: r.total_units,
+    occupied: r.occupied,
+    vacant: r.vacant,
+    entries_lancadas: r.entries_lancadas,
+    entries_reconciled: r.entries_reconciled,
+    received_real: Math.round(r.received_real * 100) / 100,
+    received_pending: Math.round(r.received_pending * 100) / 100,
+    expected_total: Math.round(r.expected_total * 100) / 100,
+    vacancia_perdida: Math.round((r.vacant / Math.max(r.total_units, 1)) * 100),
+    kitnets_sem_lancamento: r.sem_lancamento,
+  }));
+
+  const totalReceived = residenciais.reduce((s, r) => s + r.received_real, 0);
+  const totalPending = residenciais.reduce((s, r) => s + r.received_pending, 0);
+  const totalExpected = residenciais.reduce((s, r) => s + r.expected_total, 0);
+  const totalUnits = residenciais.reduce((s, r) => s + r.total_units, 0);
+  const totalOccupied = residenciais.reduce((s, r) => s + r.occupied, 0);
+  const totalVacant = residenciais.reduce((s, r) => s + r.vacant, 0);
+
+  const allSemLancamento: string[] = [];
+  for (const r of residenciais) allSemLancamento.push(...r.kitnets_sem_lancamento);
+
+  return JSON.stringify({
+    month,
+    summary: {
+      total_units: totalUnits,
+      occupied: totalOccupied,
+      vacant: totalVacant,
+      occupancy_pct: totalUnits ? Math.round((totalOccupied / totalUnits) * 100) : 0,
+      received_real_modelo_a: Math.round(totalReceived * 100) / 100,
+      received_pending_modelo_a: Math.round(totalPending * 100) / 100,
+      expected_total: Math.round(totalExpected * 100) / 100,
+      gap_vs_expected: Math.round((totalReceived + totalPending - totalExpected) * 100) / 100,
+      kitnets_ocupadas_sem_lancamento_no_mes: allSemLancamento.length,
+      lista_sem_lancamento: allSemLancamento,
+    },
+    by_residencial: residenciais,
+    note:
+      "Modelo A (kitnet_entries reconciled) é fonte da verdade. " +
+      "received_pending = lançado mas ainda não conciliado com extrato. " +
+      "kitnets_ocupadas_sem_lancamento = locador não criou entry no mês — pode ser atraso ou esquecimento.",
+  });
+}
+
+// ─── Handler: get_current_card_invoice ────────────────────────────────
+async function handleGetCurrentCardInvoice(
+  input: Record<string, unknown>,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<string> {
+  const sb = createClient(supabaseUrl, serviceKey);
+  const cardFilter = (input.card_filter as string) || null;
+  const monthFilter = (input.month as string) || null;
+
+  const cardsRes = await sb.from("cards").select("id, name, bank, last4, holder, holder_name").limit(50);
+  const cards = cardsRes.data ?? [];
+  const cardById = new Map<string, any>();
+  for (const c of cards) cardById.set(c.id, c);
+
+  let invQuery = sb
+    .from("card_invoices")
+    .select(
+      "id, card_id, reference_month, closing_date, due_date, total_amount, paid_amount, paid_at, closed_at, file_format",
+    )
+    .order("reference_month", { ascending: false });
+  if (monthFilter) invQuery = invQuery.eq("reference_month", monthFilter);
+  else invQuery = invQuery.limit(20);
+  const invRes = await invQuery;
+  let invoices = invRes.data ?? [];
+
+  if (cardFilter) {
+    const f = cardFilter.toLowerCase();
+    invoices = invoices.filter((inv: any) => {
+      const c = cardById.get(inv.card_id);
+      if (!c) return false;
+      const blob = `${c.name ?? ""} ${c.bank ?? ""} ${c.holder ?? ""} ${c.holder_name ?? ""}`.toLowerCase();
+      return blob.includes(f);
+    });
+  }
+
+  if (!monthFilter) {
+    const seen = new Set<string>();
+    const filtered: any[] = [];
+    for (const inv of invoices) {
+      const k = inv.card_id;
+      if (!seen.has(k)) {
+        filtered.push(inv);
+        seen.add(k);
+      } else {
+        const count = filtered.filter((x) => x.card_id === k).length;
+        if (count < 2) filtered.push(inv);
+      }
+    }
+    invoices = filtered;
+  }
+
+  if (invoices.length === 0) {
+    return JSON.stringify({ found: 0, invoices: [], note: "Nenhuma fatura encontrada com esses filtros." });
+  }
+
+  const invoiceIds = invoices.map((i: any) => i.id);
+  const { data: txs } = await sb
+    .from("card_transactions")
+    .select(
+      "invoice_id, transaction_date, description, merchant_normalized, amount, installment_current, installment_total, category_id, vector",
+    )
+    .in("invoice_id", invoiceIds);
+  const allTxs = txs ?? [];
+
+  const today = new Date();
+
+  const invoicesOut = invoices.map((inv: any) => {
+    const card = cardById.get(inv.card_id);
+    const invTxs = allTxs.filter((t: any) => t.invoice_id === inv.id);
+
+    const byCategory = new Map<string, number>();
+    const merchants = new Map<string, number>();
+    let installmentsActive = 0;
+    let installmentsRemainingTotal = 0;
+
+    for (const t of invTxs) {
+      const amt = Number(t.amount ?? 0);
+      const cat = t.category_id ? String(t.category_id) : "sem_categoria";
+      byCategory.set(cat, (byCategory.get(cat) ?? 0) + amt);
+      const m = t.merchant_normalized || t.description || "?";
+      merchants.set(m, (merchants.get(m) ?? 0) + amt);
+
+      if (t.installment_total && t.installment_total > 1 && t.installment_current && t.installment_current < t.installment_total) {
+        installmentsActive++;
+        const remain = (t.installment_total - t.installment_current) * amt;
+        installmentsRemainingTotal += remain;
+      }
+    }
+
+    const topMerchants = Array.from(merchants.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([name, total]) => ({ merchant: name, total: Math.round(total * 100) / 100 }));
+
+    const total = Number(inv.total_amount ?? 0);
+    const paid = Number(inv.paid_amount ?? 0);
+    const isPaid = !!inv.paid_at;
+    const isClosed = !!inv.closed_at;
+    const due = inv.due_date ? new Date(inv.due_date) : null;
+    const daysToDue = due ? Math.ceil((due.getTime() - today.getTime()) / 86400000) : null;
+    const status = isPaid
+      ? "paga"
+      : isClosed
+        ? daysToDue != null && daysToDue < 0
+          ? "vencida"
+          : "fechada_aguardando_pagamento"
+        : "aberta";
+
+    return {
+      card: {
+        bank: card?.bank,
+        name: card?.name,
+        last4: card?.last4,
+        holder: card?.holder ?? card?.holder_name,
+      },
+      reference_month: inv.reference_month,
+      status,
+      total_amount: Math.round(total * 100) / 100,
+      paid_amount: Math.round(paid * 100) / 100,
+      paid_at: inv.paid_at,
+      closing_date: inv.closing_date,
+      closed_at: inv.closed_at,
+      due_date: inv.due_date,
+      days_until_due: daysToDue,
+      n_transactions: invTxs.length,
+      installments_active: installmentsActive,
+      installments_remaining_amount: Math.round(installmentsRemainingTotal * 100) / 100,
+      top_merchants: topMerchants,
+    };
+  });
+
+  const totalAcrossInvoices = invoicesOut.reduce((s, i) => s + i.total_amount, 0);
+
+  return JSON.stringify({
+    found: invoicesOut.length,
+    summary: {
+      total_invoices: invoicesOut.length,
+      total_amount_across: Math.round(totalAcrossInvoices * 100) / 100,
+      n_unpaid: invoicesOut.filter((i) => i.status !== "paga").length,
+    },
+    invoices: invoicesOut,
+    note:
+      "Sem month_filter retorna fatura aberta + última fechada de cada cartão. " +
+      "installments_remaining_amount = parcelas futuras já compradas mas ainda não cobradas em faturas seguintes.",
+  });
+}
+
+// ─── Handler: get_wedding_status ──────────────────────────────────────
+async function handleGetWeddingStatus(
+  _input: Record<string, unknown>,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<string> {
+  const sb = createClient(supabaseUrl, serviceKey);
+  const { data } = await sb
+    .from("wedding_installments")
+    .select("description, supplier, due_date, amount, paid_at, status")
+    .order("due_date", { ascending: true });
+  const installments = data ?? [];
+
+  const today = new Date();
+  const wedding_date = new Date("2027-12-11");
+  const daysToWedding = Math.ceil((wedding_date.getTime() - today.getTime()) / 86400000);
+
+  const total = installments.reduce((s: number, i: any) => s + Number(i.amount ?? 0), 0);
+  const paid = installments.filter((i: any) => i.paid_at).reduce((s: number, i: any) => s + Number(i.amount ?? 0), 0);
+  const pending = total - paid;
+
+  const overdue = installments.filter((i: any) => {
+    if (i.paid_at) return false;
+    if (!i.due_date) return false;
+    return new Date(i.due_date) < today;
+  });
+  const overdueTotal = overdue.reduce((s: number, i: any) => s + Number(i.amount ?? 0), 0);
+
+  const upcoming = installments
+    .filter((i: any) => !i.paid_at && i.due_date && new Date(i.due_date) >= today)
+    .slice(0, 5)
+    .map((i: any) => {
+      const due = new Date(i.due_date);
+      const days = Math.ceil((due.getTime() - today.getTime()) / 86400000);
+      return {
+        description: i.description,
+        supplier: i.supplier,
+        due_date: i.due_date,
+        amount: Math.round(Number(i.amount ?? 0) * 100) / 100,
+        days_until_due: days,
+        status: i.status,
+      };
+    });
+
+  const bySupplier = new Map<string, { total: number; paid: number; pending: number }>();
+  for (const i of installments) {
+    const s = i.supplier || "?";
+    if (!bySupplier.has(s)) bySupplier.set(s, { total: 0, paid: 0, pending: 0 });
+    const e = bySupplier.get(s)!;
+    const amt = Number(i.amount ?? 0);
+    e.total += amt;
+    if (i.paid_at) e.paid += amt;
+    else e.pending += amt;
+  }
+  const suppliersOut = Array.from(bySupplier.entries()).map(([supplier, v]) => ({
+    supplier,
+    total: Math.round(v.total * 100) / 100,
+    paid: Math.round(v.paid * 100) / 100,
+    pending: Math.round(v.pending * 100) / 100,
+    pct_pago: v.total > 0 ? Math.round((v.paid / v.total) * 100) : 0,
+  }));
+
+  return JSON.stringify({
+    wedding_date: "2027-12-11",
+    days_until_wedding: daysToWedding,
+    summary: {
+      total_contratado: Math.round(total * 100) / 100,
+      total_pago: Math.round(paid * 100) / 100,
+      saldo_pendente: Math.round(pending * 100) / 100,
+      pct_pago: total > 0 ? Math.round((paid / total) * 100) : 0,
+      n_installments: installments.length,
+      n_paid: installments.filter((i: any) => i.paid_at).length,
+      n_pending: installments.filter((i: any) => !i.paid_at).length,
+      n_overdue: overdue.length,
+      total_overdue: Math.round(overdueTotal * 100) / 100,
+    },
+    overdue: overdue.map((i: any) => ({
+      description: i.description,
+      supplier: i.supplier,
+      due_date: i.due_date,
+      amount: Math.round(Number(i.amount ?? 0) * 100) / 100,
+    })),
+    upcoming_5_installments: upcoming,
+    by_supplier: suppliersOut,
+    note:
+      "Casamento 11/12/2027 Villa Sonali, BC. Liquidez do casamento é regra inviolável (metas.md): nunca comprometer.",
+  });
+}
+
+// ─── Handler: get_recurring_bills ────────────────────────────────────
+async function handleGetRecurringBills(
+  input: Record<string, unknown>,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<string> {
+  const sb = createClient(supabaseUrl, serviceKey);
+  const categoryFilter = (input.category_filter as string) || null;
+
+  let q = sb
+    .from("recurring_bills")
+    .select("name, alias, category, amount, due_day, frequency, is_fixed, active, notes")
+    .eq("active", true);
+  if (categoryFilter) q = q.eq("category", categoryFilter);
+  const { data } = await q;
+  const bills = data ?? [];
+
+  const today = new Date();
+  const day = today.getDate();
+
+  const byCategory = new Map<string, { total: number; count: number; items: any[] }>();
+  for (const b of bills) {
+    const cat = b.category || "outros";
+    if (!byCategory.has(cat)) byCategory.set(cat, { total: 0, count: 0, items: [] });
+    const e = byCategory.get(cat)!;
+    const amt = Number(b.amount ?? 0);
+    e.total += amt;
+    e.count++;
+    e.items.push({
+      name: b.alias || b.name,
+      amount: Math.round(amt * 100) / 100,
+      due_day: b.due_day,
+      is_fixed: b.is_fixed,
+      notes: b.notes,
+    });
+  }
+
+  const categoriesOut = Array.from(byCategory.entries())
+    .sort((a, b) => b[1].total - a[1].total)
+    .map(([cat, v]) => ({
+      category: cat,
+      total_mensal: Math.round(v.total * 100) / 100,
+      n_bills: v.count,
+      items: v.items.sort((a, b) => b.amount - a.amount).slice(0, 5),
+    }));
+
+  const totalMensal = bills.reduce((s: number, b: any) => s + Number(b.amount ?? 0), 0);
+
+  const dueSoon = bills
+    .filter((b: any) => b.due_day && b.due_day >= day && b.due_day <= day + 7)
+    .sort((a: any, b: any) => (a.due_day ?? 99) - (b.due_day ?? 99))
+    .map((b: any) => ({
+      name: b.alias || b.name,
+      amount: Math.round(Number(b.amount ?? 0) * 100) / 100,
+      due_day: b.due_day,
+      days_ahead: (b.due_day ?? 0) - day,
+    }));
+
+  const top10 = bills
+    .map((b: any) => ({
+      name: b.alias || b.name,
+      category: b.category,
+      amount: Math.round(Number(b.amount ?? 0) * 100) / 100,
+      due_day: b.due_day,
+      is_fixed: b.is_fixed,
+    }))
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, 10);
+
+  return JSON.stringify({
+    summary: {
+      total_mensal_recorrente: Math.round(totalMensal * 100) / 100,
+      n_bills_ativas: bills.length,
+      n_categorias: categoriesOut.length,
+      n_due_soon_7d: dueSoon.length,
+    },
+    by_category: categoriesOut,
+    top_10_por_valor: top10,
+    due_in_next_7_days: dueSoon,
+    note:
+      "Apenas bills ativas (active=true). is_fixed=false significa valor variável (estimativa). " +
+      "Esses gastos NÃO incluem parcelas variáveis de cartão — só recorrências fixas (PIX/débito/boleto).",
+  });
+}
+
+// ─── Handler: get_other_commissions_status ────────────────────────────
+async function handleGetOtherCommissionsStatus(
+  input: Record<string, unknown>,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<string> {
+  const sb = createClient(supabaseUrl, serviceKey);
+  const sourceFilter = (input.source_filter as string) || null;
+
+  const cmRes = await sb
+    .from("other_commissions")
+    .select("id, description, source, reference_month, amount, commission_rate, commission_value, installments_count, issued_at, notes")
+    .order("issued_at", { ascending: false });
+  let commissions = cmRes.data ?? [];
+  if (sourceFilter) {
+    const f = sourceFilter.toLowerCase();
+    commissions = commissions.filter((c: any) =>
+      (c.source || "").toLowerCase().includes(f) ||
+      (c.description || "").toLowerCase().includes(f),
+    );
+  }
+
+  const ids = commissions.map((c: any) => c.id);
+  const installments = ids.length
+    ? (await sb
+        .from("other_commission_installments")
+        .select("commission_id, installment_number, due_date, amount, paid_at, paid_amount")
+        .in("commission_id", ids)).data ?? []
+    : [];
+
+  const today = new Date();
+
+  let totalContratado = 0;
+  let totalRecebido = 0;
+  let totalPendente = 0;
+  let totalAtrasado = 0;
+
+  const overdueList: any[] = [];
+  const upcomingList: any[] = [];
+
+  for (const i of installments) {
+    const amt = Number(i.amount ?? 0);
+    totalContratado += amt;
+    if (i.paid_at) {
+      totalRecebido += Number(i.paid_amount ?? amt);
+    } else {
+      totalPendente += amt;
+      const due = i.due_date ? new Date(i.due_date) : null;
+      const cm = commissions.find((c: any) => c.id === i.commission_id);
+      const item = {
+        source: cm?.source,
+        description: cm?.description,
+        installment_number: i.installment_number,
+        due_date: i.due_date,
+        amount: Math.round(amt * 100) / 100,
+      };
+      if (due && due < today) {
+        totalAtrasado += amt;
+        overdueList.push({ ...item, days_overdue: Math.ceil((today.getTime() - due.getTime()) / 86400000) });
+      } else {
+        upcomingList.push(item);
+      }
+    }
+  }
+
+  upcomingList.sort((a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? ""));
+
+  const bySource = new Map<string, { total: number; recebido: number; pendente: number; n_installments: number }>();
+  for (const cm of commissions) {
+    const src = cm.source || "?";
+    if (!bySource.has(src)) bySource.set(src, { total: 0, recebido: 0, pendente: 0, n_installments: 0 });
+    const e = bySource.get(src)!;
+    const cmInsts = installments.filter((i: any) => i.commission_id === cm.id);
+    e.n_installments += cmInsts.length;
+    for (const i of cmInsts) {
+      const amt = Number(i.amount ?? 0);
+      e.total += amt;
+      if (i.paid_at) e.recebido += Number(i.paid_amount ?? amt);
+      else e.pendente += amt;
+    }
+  }
+
+  const sourcesOut = Array.from(bySource.entries())
+    .sort((a, b) => b[1].pendente - a[1].pendente)
+    .map(([source, v]) => ({
+      source,
+      total_contratado: Math.round(v.total * 100) / 100,
+      total_recebido: Math.round(v.recebido * 100) / 100,
+      total_pendente: Math.round(v.pendente * 100) / 100,
+      n_installments: v.n_installments,
+    }));
+
+  return JSON.stringify({
+    summary: {
+      n_contratos: commissions.length,
+      n_installments_total: installments.length,
+      total_contratado: Math.round(totalContratado * 100) / 100,
+      total_recebido: Math.round(totalRecebido * 100) / 100,
+      total_pendente: Math.round(totalPendente * 100) / 100,
+      total_atrasado: Math.round(totalAtrasado * 100) / 100,
+      n_overdue: overdueList.length,
+    },
+    by_source: sourcesOut,
+    overdue_installments: overdueList.slice(0, 20),
+    upcoming_5_installments: upcomingList.slice(0, 5),
+    note:
+      "Comissões EXTERNAS à Prevensul. Não confundir com prevensul_billing (use get_prevensul_pipeline pra Prevensul).",
+  });
+}
+
+// ─── Handler: get_energy_solar_status ─────────────────────────────────
+async function handleGetEnergySolarStatus(
+  input: Record<string, unknown>,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<string> {
+  const sb = createClient(supabaseUrl, serviceKey);
+  const residencialFilter = (input.residencial_filter as string) || null;
+  const nMonths = Math.min(Math.max(Number(input.n_months) || 6, 1), 24);
+
+  const today = new Date();
+  const fromDate = new Date(today.getFullYear(), today.getMonth() - nMonths + 1, 1);
+  const fromMonth = `${fromDate.getFullYear()}-${String(fromDate.getMonth() + 1).padStart(2, "0")}`;
+
+  let q = sb
+    .from("celesc_invoices")
+    .select("residencial_code, reference_month, due_date, kwh_total, invoice_total, solar_kwh_offset, amount_paid, tariff_per_kwh, payment_date")
+    .gte("reference_month", fromMonth)
+    .order("reference_month", { ascending: false });
+  if (residencialFilter) q = q.eq("residencial_code", residencialFilter);
+  const { data } = await q;
+  const rows = data ?? [];
+
+  const byResidencial = new Map<string, any[]>();
+  for (const r of rows) {
+    const code = r.residencial_code || "?";
+    if (!byResidencial.has(code)) byResidencial.set(code, []);
+    byResidencial.get(code)!.push(r);
+  }
+
+  const residenciaisOut = Array.from(byResidencial.entries()).map(([code, invoices]) => {
+    invoices.sort((a, b) => (a.reference_month ?? "").localeCompare(b.reference_month ?? ""));
+    const months = invoices.map((inv: any) => ({
+      reference_month: inv.reference_month,
+      kwh_total: Number(inv.kwh_total ?? 0),
+      solar_kwh_offset: Number(inv.solar_kwh_offset ?? 0),
+      offset_pct:
+        Number(inv.kwh_total ?? 0) > 0
+          ? Math.round((Number(inv.solar_kwh_offset ?? 0) / Number(inv.kwh_total ?? 1)) * 100)
+          : 0,
+      invoice_total: Math.round(Number(inv.invoice_total ?? 0) * 100) / 100,
+      amount_paid: Math.round(Number(inv.amount_paid ?? 0) * 100) / 100,
+      tariff_per_kwh: inv.tariff_per_kwh ? Math.round(Number(inv.tariff_per_kwh) * 10000) / 10000 : null,
+      due_date: inv.due_date,
+      payment_date: inv.payment_date,
+    }));
+
+    const totalConsumo = months.reduce((s, m) => s + m.kwh_total, 0);
+    const totalOffset = months.reduce((s, m) => s + m.solar_kwh_offset, 0);
+    const totalPago = months.reduce((s, m) => s + m.amount_paid, 0);
+    const avgInvoice = months.length ? months.reduce((s, m) => s + m.invoice_total, 0) / months.length : 0;
+    const avgTariff = months.filter((m) => m.tariff_per_kwh).length
+      ? months.filter((m) => m.tariff_per_kwh).reduce((s, m) => s + (m.tariff_per_kwh as number), 0) /
+        months.filter((m) => m.tariff_per_kwh).length
+      : null;
+
+    const economiaEstimada = avgTariff ? totalOffset * avgTariff : null;
+
+    return {
+      residencial: code,
+      n_months: months.length,
+      avg_kwh_consumo: months.length ? Math.round(totalConsumo / months.length) : 0,
+      avg_kwh_offset_solar: months.length ? Math.round(totalOffset / months.length) : 0,
+      offset_pct_medio:
+        totalConsumo > 0 ? Math.round((totalOffset / totalConsumo) * 100) : 0,
+      avg_invoice: Math.round(avgInvoice * 100) / 100,
+      total_pago_periodo: Math.round(totalPago * 100) / 100,
+      economia_estimada_solar: economiaEstimada ? Math.round(economiaEstimada * 100) / 100 : null,
+      months,
+    };
+  });
+
+  const totalEconomia = residenciaisOut.reduce(
+    (s, r) => s + (r.economia_estimada_solar || 0),
+    0,
+  );
+
+  return JSON.stringify({
+    period: { from_month: fromMonth, n_months: nMonths },
+    summary: {
+      n_residenciais: residenciaisOut.length,
+      total_economia_estimada_solar_periodo: Math.round(totalEconomia * 100) / 100,
+    },
+    by_residencial: residenciaisOut,
+    note:
+      "economia_estimada_solar = solar_kwh_offset × tariff_per_kwh médio (estimativa). " +
+      "offset_pct = % do consumo abatido pela geração solar. 100% = autossuficiência. " +
+      "Lê celesc_invoices, fonte oficial das contas de luz dos residenciais.",
+  });
+}
+
+// ─── Handler: get_consortium_status ──────────────────────────────────
+async function handleGetConsortiumStatus(
+  input: Record<string, unknown>,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<string> {
+  const sb = createClient(supabaseUrl, serviceKey);
+  const nameFilter = (input.name_filter as string) || null;
+
+  let q = sb
+    .from("consortiums")
+    .select(
+      "name, total_value, credit_value, monthly_payment, installments_total, installments_paid, installments_remaining, total_paid, total_pending, status, asset_type, end_date, adhesion_date, ownership_pct, partner_name, fund_paid, admin_fee_paid, insurance_paid, admin_fee_pct",
+    )
+    .order("monthly_payment", { ascending: false });
+  if (nameFilter) {
+    q = q.ilike("name", `%${nameFilter}%`);
+  }
+  const { data } = await q;
+  const rows = data ?? [];
+
+  const today = new Date();
+
+  const consortiumsOut = rows.map((c: any) => {
+    const ownership = Number(c.ownership_pct ?? 100) / 100;
+    const totalPaid = Number(c.total_paid ?? 0);
+    const totalPending = Number(c.total_pending ?? 0);
+    const monthly = Number(c.monthly_payment ?? 0);
+    const credit = Number(c.credit_value ?? 0);
+    const totalValue = Number(c.total_value ?? 0);
+    const instTotal = Number(c.installments_total ?? 0);
+    const instPaid = Number(c.installments_paid ?? 0);
+    const instRemain = Number(c.installments_remaining ?? Math.max(instTotal - instPaid, 0));
+    const pctPaid = instTotal > 0 ? Math.round((instPaid / instTotal) * 100) : 0;
+    const endDate = c.end_date ? new Date(c.end_date) : null;
+    const monthsLeft = endDate
+      ? Math.max(0, Math.round((endDate.getTime() - today.getTime()) / (86400000 * 30)))
+      : null;
+    return {
+      name: c.name,
+      status: c.status,
+      asset_type: c.asset_type,
+      ownership_pct: c.ownership_pct,
+      partner_name: c.partner_name,
+      credit_value: Math.round(credit * 100) / 100,
+      total_contracted: Math.round(totalValue * 100) / 100,
+      monthly_payment: Math.round(monthly * 100) / 100,
+      monthly_payment_cota_william: Math.round(monthly * ownership * 100) / 100,
+      installments_paid: instPaid,
+      installments_total: instTotal,
+      installments_remaining: instRemain,
+      pct_paid: pctPaid,
+      total_paid: Math.round(totalPaid * 100) / 100,
+      total_paid_cota_william: Math.round(totalPaid * ownership * 100) / 100,
+      total_pending: Math.round(totalPending * 100) / 100,
+      total_pending_cota_william: Math.round(totalPending * ownership * 100) / 100,
+      adhesion_date: c.adhesion_date,
+      end_date: c.end_date,
+      months_until_end: monthsLeft,
+      admin_fee_pct: c.admin_fee_pct,
+      admin_fee_paid: Math.round(Number(c.admin_fee_paid ?? 0) * 100) / 100,
+      fund_paid: Math.round(Number(c.fund_paid ?? 0) * 100) / 100,
+      insurance_paid: Math.round(Number(c.insurance_paid ?? 0) * 100) / 100,
+    };
+  });
+
+  const totalMonthlyCotaW = consortiumsOut.reduce((s, c) => s + c.monthly_payment_cota_william, 0);
+  const totalCreditCotaW = consortiumsOut.reduce(
+    (s, c) => s + c.credit_value * (Number(c.ownership_pct ?? 100) / 100),
+    0,
+  );
+  const totalPaidCotaW = consortiumsOut.reduce((s, c) => s + c.total_paid_cota_william, 0);
+  const totalPendingCotaW = consortiumsOut.reduce((s, c) => s + c.total_pending_cota_william, 0);
+
+  return JSON.stringify({
+    summary: {
+      n_consortiums: consortiumsOut.length,
+      n_active: consortiumsOut.filter((c) => c.status === "ativo").length,
+      monthly_payment_cota_william: Math.round(totalMonthlyCotaW * 100) / 100,
+      total_credit_cota_william: Math.round(totalCreditCotaW * 100) / 100,
+      total_paid_cota_william: Math.round(totalPaidCotaW * 100) / 100,
+      total_pending_cota_william: Math.round(totalPendingCotaW * 100) / 100,
+    },
+    consortiums: consortiumsOut,
+    note:
+      "Consórcios travam parcela mensal mas geram crédito futuro (imóvel ou veículo). " +
+      "monthly_payment_cota_william respeita ownership_pct (Randon = 50%). " +
+      "Total pendente = quanto ainda vai sair do caixa até end_date.",
+  });
+}
+
+// ─── Handler: get_investments_status ─────────────────────────────────
+async function handleGetInvestmentsStatus(
+  _input: Record<string, unknown>,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<string> {
+  const sb = createClient(supabaseUrl, serviceKey);
+  const { data } = await sb
+    .from("investments")
+    .select(
+      "name, type, bank, initial_amount, current_amount, rescue_amount, rate_percent, cdi_percent, is_cdi_linked, inclusion_date, maturity_date, product_code, notes",
+    )
+    .order("current_amount", { ascending: false });
+  const rows = data ?? [];
+
+  const today = new Date();
+
+  const investmentsOut = rows.map((i: any) => {
+    const current = Number(i.current_amount ?? 0);
+    const rescue = Number(i.rescue_amount ?? 0);
+    const initial = Number(i.initial_amount ?? 0);
+    const haircut = current - rescue;
+    const haircutPct = current > 0 ? Math.round((haircut / current) * 100 * 100) / 100 : 0;
+    const yieldAccrued = current - initial;
+    const yieldPct = initial > 0 ? Math.round((yieldAccrued / initial) * 100 * 100) / 100 : 0;
+    const maturity = i.maturity_date ? new Date(i.maturity_date) : null;
+    const daysToMaturity = maturity
+      ? Math.ceil((maturity.getTime() - today.getTime()) / 86400000)
+      : null;
+    const rateLabel = i.is_cdi_linked && i.cdi_percent
+      ? `${i.cdi_percent}% CDI`
+      : i.rate_percent
+        ? `${i.rate_percent}% a.a.`
+        : "?";
+    return {
+      name: i.name,
+      type: i.type,
+      bank: i.bank,
+      product_code: i.product_code,
+      rate_label: rateLabel,
+      current_amount: Math.round(current * 100) / 100,
+      rescue_amount: Math.round(rescue * 100) / 100,
+      haircut_se_resgatar_hoje: Math.round(haircut * 100) / 100,
+      haircut_pct: haircutPct,
+      initial_amount: Math.round(initial * 100) / 100,
+      yield_accrued: Math.round(yieldAccrued * 100) / 100,
+      yield_pct: yieldPct,
+      inclusion_date: i.inclusion_date,
+      maturity_date: i.maturity_date,
+      days_to_maturity: daysToMaturity,
+      notes: i.notes,
+    };
+  });
+
+  const totalCurrent = investmentsOut.reduce((s, i) => s + i.current_amount, 0);
+  const totalRescue = investmentsOut.reduce((s, i) => s + i.rescue_amount, 0);
+  const totalHaircut = totalCurrent - totalRescue;
+  const liquidoEmergencia = investmentsOut
+    .filter((i) => i.haircut_pct < 5)
+    .reduce((s, i) => s + i.rescue_amount, 0);
+
+  return JSON.stringify({
+    summary: {
+      n_investments: investmentsOut.length,
+      total_current: Math.round(totalCurrent * 100) / 100,
+      total_rescue_disponivel_hoje: Math.round(totalRescue * 100) / 100,
+      haircut_total_se_resgatar_tudo: Math.round(totalHaircut * 100) / 100,
+      liquidez_emergencial_baixo_haircut: Math.round(liquidoEmergencia * 100) / 100,
+    },
+    investments: investmentsOut,
+    note:
+      "rescue_amount = quanto sai do banco se resgatar HOJE (com haircut por liquidação antes do prazo). " +
+      "current_amount = saldo contábil. liquidez_emergencial = só investimentos com haircut <5% (mais flexíveis).",
+  });
+}
+
 // ─── Claude Haiku 4.5 — usado pelo Naval (chat conversacional) ────────────
 // Tenta Lovable Gateway primeiro (formato OpenAI-compatible). Se falhar com
 // erro de modelo não suportado, faz fallback pra API Anthropic direta usando
@@ -2317,7 +3284,7 @@ async function callClaudeHaiku(
 // Versão do código deployado — log inicial em CADA invocação pra confirmar
 // que o deploy do edge function está atualizado. Bumpa toda vez que mudar
 // a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
-const WISELY_AI_VERSION = "2026.04.29-v17-full-navigator";
+const WISELY_AI_VERSION = "2026.04.29-v18-tool-only-numbers";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -2760,6 +3727,14 @@ Gere a leitura estratégica seguindo o formato obrigatório.`;
             get_net_worth_snapshot: (input) => handleGetNetWorthSnapshot(input, supabaseUrl, serviceKey),
             get_milestone_gap: (input) => handleGetMilestoneGap(input, supabaseUrl, serviceKey),
             simulate_scenario: (input) => handleSimulateScenario(input, supabaseUrl, serviceKey),
+            get_kitnets_status: (input) => handleGetKitnetsStatus(input, supabaseUrl, serviceKey),
+            get_current_card_invoice: (input) => handleGetCurrentCardInvoice(input, supabaseUrl, serviceKey),
+            get_wedding_status: (input) => handleGetWeddingStatus(input, supabaseUrl, serviceKey),
+            get_recurring_bills: (input) => handleGetRecurringBills(input, supabaseUrl, serviceKey),
+            get_other_commissions_status: (input) => handleGetOtherCommissionsStatus(input, supabaseUrl, serviceKey),
+            get_energy_solar_status: (input) => handleGetEnergySolarStatus(input, supabaseUrl, serviceKey),
+            get_consortium_status: (input) => handleGetConsortiumStatus(input, supabaseUrl, serviceKey),
+            get_investments_status: (input) => handleGetInvestmentsStatus(input, supabaseUrl, serviceKey),
           }
         : undefined,
     });
