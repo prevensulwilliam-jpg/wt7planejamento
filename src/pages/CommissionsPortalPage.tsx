@@ -1165,7 +1165,7 @@ function PrevensulHistory({ month, userId, onLoadRecord }: { month: string; user
                   <TableCell><WtBadge variant={statusBadge[r.status ?? ""] || "gray"}>{r.status ?? "—"}</WtBadge></TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
-                      <button onClick={() => startEdit(r)} className="p-1.5 rounded-lg transition-colors hover:bg-amber-500/10"><Pencil className="w-4 h-4" style={{ color: '#F59E0B' }} /></button>
+                      <button onClick={() => { onLoadRecord(r); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="p-1.5 rounded-lg transition-colors hover:bg-amber-500/10"><Pencil className="w-4 h-4" style={{ color: '#F59E0B' }} /></button>
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
                           <button className="p-1.5 rounded-lg transition-colors hover:bg-red-500/10"><Trash2 className="w-4 h-4" style={{ color: '#F43F5E' }} /></button>
