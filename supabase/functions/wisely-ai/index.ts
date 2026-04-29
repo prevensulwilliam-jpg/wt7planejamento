@@ -103,6 +103,18 @@ Sequência correta pra comparar 2 meses:
 
 ⚠ **CRÍTICO — números do pipeline na memoria/metas.md e memoria/negocios.md estão DESATUALIZADOS** (eram do 1º trimestre 2026). SEMPRE use estas tools em vez de citar memória.
 
+**Tools de POSIÇÃO ATUAL E TRAJETÓRIA (S1+S2):**
+- **get_bank_balances** — saldo HOJE em cada banco + investimentos. USE pra "posso aportar X?", "quanto disponível?". Alerta saldos desatualizados >7d.
+- **get_debts_status** — dívidas ativas + cronograma. USE pra "quanto pago de dívida este mês?", "quando termino financiamento?".
+- **get_net_worth_snapshot** — patrimônio líquido total atual com breakdown. USE pra "qual meu patrimônio?".
+- **get_milestone_gap** — distância vs marcos R$ 70M/2041. USE pra "estou no trilho?", "falta quanto pra próximo marco?", "CAGR exigido?", "estou atrasado?". RETORNA status atras/no_trilho/a_frente automático.
+
+**REGRA pra perguntas de DECISÃO** ("posso aportar X?", "vendo isso?"):
+1. SEMPRE chame get_bank_balances + get_debts_status PRIMEIRO
+2. Cruze: caixa disponível − próxima parcela dívida = caixa real pra movimentar
+3. Respeite piso R$ 100k (regra inviolável metas.md)
+4. Se decisão grande, complementa com get_milestone_gap pra ver impacto na trajetória
+
 ═══ REGRA CRÍTICA — PREVISÃO DE COMISSÃO PREVENSUL ═══
 
 REGRA DE NEGÓCIO (memorize como verdade absoluta):
@@ -513,6 +525,39 @@ const NAVAL_TOOLS: ClaudeTool[] = [
     },
   },
   {
+    name: "get_bank_balances",
+    description:
+      "Saldo ATUAL em todas as contas + investimentos líquidos. " +
+      "USE pra perguntas tipo: 'quanto tenho disponível agora?', 'posso aportar X?', 'meu caixa cobre Y?'. " +
+      "Separa: caixa imediato (conta corrente) × aplicações líquidas (RDC, CDI). " +
+      "Mostra last_updated de cada — alerta se algum saldo está desatualizado >7 dias.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "get_debts_status",
+    description:
+      "Lista todas as dívidas ativas (debts) + cronograma de pagamento. " +
+      "USE pra: 'quanto pago de dívida este mês?', 'quando termina meu financiamento?', 'qual minha exposição total a dívida?'. " +
+      "Retorna por dívida: credor, valor restante, parcela mensal, parcelas restantes, due_date, total a pagar.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "get_net_worth_snapshot",
+    description:
+      "Patrimônio líquido ATUAL: bens (imóveis, terrenos, carros) + investimentos + saldo bancário + consórcios pagos − dívidas. " +
+      "USE pra: 'qual meu patrimônio agora?', 'quanto já cresci?', composição. " +
+      "Retorna breakdown por classe + total bruto + total dívidas + líquido.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "get_milestone_gap",
+    description:
+      "Distância vs marcos da meta R$ 70M / 2041. Calcula: patrimônio atual vs trajetória esperada por marco (2027=R$6,5M, 2030=R$7,75M, 2035=R$15M, 2041=R$70M). " +
+      "USE pra: 'estou no trilho?', 'falta quanto pra próximo marco?', 'CAGR exigido?', 'estou atrasado?'. " +
+      "Retorna por marco: gap R$, dias restantes, CAGR exigido pra esse trecho, status (no_trilho/atras/a_frente).",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
     name: "compare_months",
     description:
       "Compara 2 meses lado a lado: totais por bloco DRE (receitas, custeio, obras, " +
@@ -883,6 +928,212 @@ function idxToMonth(idx: number): string {
   const y = Math.floor((idx - 1) / 12);
   const mo = ((idx - 1) % 12) + 1;
   return `${y}-${String(mo).padStart(2, "0")}`;
+}
+
+// ─── Handler: get_bank_balances ──────────────────────────────────────
+async function handleGetBankBalances(
+  _input: Record<string, unknown>,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<string> {
+  const sb = createClient(supabaseUrl, serviceKey);
+
+  const [banks, invs] = await Promise.all([
+    sb.from("bank_accounts").select("bank_name, account_type, balance, last_updated, notes").order("balance", { ascending: false }),
+    sb.from("investments").select("name, type, bank, current_amount, rescue_amount, cdi_percent, maturity_date").order("current_amount", { ascending: false }),
+  ]);
+
+  const today = new Date();
+  const banksOut = (banks.data ?? []).map((b: any) => {
+    const days = b.last_updated ? Math.floor((today.getTime() - new Date(b.last_updated).getTime()) / 86400000) : null;
+    return {
+      bank: b.bank_name,
+      account_type: b.account_type,
+      balance: Math.round(Number(b.balance ?? 0) * 100) / 100,
+      last_updated: b.last_updated,
+      days_outdated: days,
+      stale: days != null && days > 7,
+      notes: b.notes,
+    };
+  });
+  const totalBank = banksOut.reduce((s, b) => s + b.balance, 0);
+
+  const invsOut = (invs.data ?? []).map((i: any) => ({
+    name: i.name,
+    type: i.type,
+    bank: i.bank,
+    current_amount: Math.round(Number(i.current_amount ?? 0) * 100) / 100,
+    rescue_amount: Math.round(Number(i.rescue_amount ?? 0) * 100) / 100,
+    cdi_percent: i.cdi_percent,
+    maturity_date: i.maturity_date,
+  }));
+  const totalInv = invsOut.reduce((s, i) => s + i.current_amount, 0);
+  const totalRescue = invsOut.reduce((s, i) => s + i.rescue_amount, 0);
+
+  return JSON.stringify({
+    summary: {
+      caixa_imediato: Math.round(totalBank * 100) / 100,
+      aplicado_marcado: Math.round(totalInv * 100) / 100,
+      aplicado_resgate_imediato: Math.round(totalRescue * 100) / 100,
+      total_disponivel_agora: Math.round((totalBank + totalRescue) * 100) / 100,
+      n_bancos: banksOut.length,
+      n_aplicacoes: invsOut.length,
+      bancos_desatualizados: banksOut.filter((b) => b.stale).length,
+    },
+    bank_accounts: banksOut,
+    investments: invsOut,
+    note: "caixa_imediato = saldo bancos. aplicado_resgate_imediato = valor que pode resgatar hoje (se diferente do current pode ter perda de juros). total_disponivel = caixa + resgate.",
+  });
+}
+
+// ─── Handler: get_debts_status ──────────────────────────────────────
+async function handleGetDebtsStatus(
+  _input: Record<string, unknown>,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<string> {
+  const sb = createClient(supabaseUrl, serviceKey);
+  const { data } = await sb.from("debts").select("name, creditor, total_amount, remaining_amount, monthly_payment, due_date, status").neq("status", "paid").order("remaining_amount", { ascending: false });
+  const debts = data ?? [];
+
+  const today = new Date();
+  const debtsOut = debts.map((d: any) => {
+    const due = d.due_date ? new Date(d.due_date) : null;
+    const monthsLeft = due ? Math.max(0, Math.round((due.getTime() - today.getTime()) / (86400000 * 30))) : null;
+    return {
+      name: d.name,
+      creditor: d.creditor,
+      total_amount: Math.round(Number(d.total_amount ?? 0) * 100) / 100,
+      remaining_amount: Math.round(Number(d.remaining_amount ?? 0) * 100) / 100,
+      monthly_payment: Math.round(Number(d.monthly_payment ?? 0) * 100) / 100,
+      due_date: d.due_date,
+      months_until_due: monthsLeft,
+      status: d.status,
+    };
+  });
+
+  const totalRemaining = debtsOut.reduce((s, d) => s + d.remaining_amount, 0);
+  const totalMonthly = debtsOut.reduce((s, d) => s + d.monthly_payment, 0);
+
+  return JSON.stringify({
+    summary: {
+      n_debts_active: debtsOut.length,
+      total_remaining: Math.round(totalRemaining * 100) / 100,
+      total_monthly_payment: Math.round(totalMonthly * 100) / 100,
+    },
+    debts: debtsOut,
+  });
+}
+
+// ─── Handler: get_net_worth_snapshot ─────────────────────────────────
+type NetWorthSnap = {
+  bens_total: number;
+  investimentos_total: number;
+  saldo_bancos: number;
+  imoveis_total_cota_william: number;
+  consorcios_pagos: number;
+  bruto_total: number;
+  dividas_total: number;
+  patrimonio_liquido: number;
+};
+async function calcNetWorth(supabaseUrl: string, serviceKey: string): Promise<NetWorthSnap> {
+  const sb = createClient(supabaseUrl, serviceKey);
+  const [assetsR, invsR, banksR, propsR, consR, debtsR] = await Promise.all([
+    sb.from("assets").select("estimated_value"),
+    sb.from("investments").select("current_amount"),
+    sb.from("bank_accounts").select("balance"),
+    sb.from("real_estate_properties").select("property_value, ownership_pct"),
+    sb.from("consortiums").select("total_paid, ownership_pct, status").in("status", ["ativo", "contemplado", "active", "paid_off"]),
+    sb.from("debts").select("remaining_amount, status").neq("status", "paid"),
+  ]);
+
+  const assets = (assetsR.data ?? []).reduce((s: number, a: any) => s + Number(a.estimated_value ?? 0), 0);
+  const invs = (invsR.data ?? []).reduce((s: number, i: any) => s + Number(i.current_amount ?? 0), 0);
+  const banks = (banksR.data ?? []).reduce((s: number, b: any) => s + Number(b.balance ?? 0), 0);
+  const props = (propsR.data ?? []).reduce((s: number, p: any) => {
+    const pct = p.ownership_pct == null ? 100 : Number(p.ownership_pct);
+    return s + Number(p.property_value ?? 0) * (pct / 100);
+  }, 0);
+  const cons = (consR.data ?? []).reduce((s: number, c: any) => {
+    const pct = c.ownership_pct == null ? 100 : Number(c.ownership_pct);
+    return s + Number(c.total_paid ?? 0) * (pct / 100);
+  }, 0);
+  const debts = (debtsR.data ?? []).reduce((s: number, d: any) => s + Number(d.remaining_amount ?? 0), 0);
+
+  const bruto = assets + invs + banks + props + cons;
+  return {
+    bens_total: Math.round(assets * 100) / 100,
+    investimentos_total: Math.round(invs * 100) / 100,
+    saldo_bancos: Math.round(banks * 100) / 100,
+    imoveis_total_cota_william: Math.round(props * 100) / 100,
+    consorcios_pagos: Math.round(cons * 100) / 100,
+    bruto_total: Math.round(bruto * 100) / 100,
+    dividas_total: Math.round(debts * 100) / 100,
+    patrimonio_liquido: Math.round((bruto - debts) * 100) / 100,
+  };
+}
+
+async function handleGetNetWorthSnapshot(
+  _input: Record<string, unknown>,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<string> {
+  const snap = await calcNetWorth(supabaseUrl, serviceKey);
+  return JSON.stringify({ snapshot_at: new Date().toISOString(), ...snap });
+}
+
+// ─── Handler: get_milestone_gap ──────────────────────────────────────
+async function handleGetMilestoneGap(
+  _input: Record<string, unknown>,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<string> {
+  const snap = await calcNetWorth(supabaseUrl, serviceKey);
+  const current = snap.patrimonio_liquido;
+
+  // Marcos canônicos da memoria/metas.md
+  const milestones = [
+    { name: "Marco 2027 (Casamento)", date: "2027-12-11", target: 6_500_000 },
+    { name: "Marco 2030 (Consolidação)", date: "2030-12-31", target: 7_750_000 },
+    { name: "Marco 2035 (Meio do Caminho)", date: "2035-12-31", target: 15_000_000 },
+    { name: "Marco 2041 (Destino)", date: "2041-12-31", target: 70_000_000 },
+  ];
+
+  const today = new Date();
+  const out = milestones.map((m) => {
+    const milestone = new Date(m.date);
+    const yearsLeft = (milestone.getTime() - today.getTime()) / (86400000 * 365.25);
+    const gap = m.target - current;
+    const cagrExigido = current > 0 && yearsLeft > 0 ? (Math.pow(m.target / current, 1 / yearsLeft) - 1) * 100 : null;
+    let status: "no_trilho" | "atras" | "a_frente" | "atingido" = "no_trilho";
+    if (current >= m.target) status = "atingido";
+    else if (cagrExigido != null) {
+      if (cagrExigido > 25) status = "atras";
+      else if (cagrExigido < 10) status = "a_frente";
+    }
+    return {
+      milestone: m.name,
+      date: m.date,
+      target: m.target,
+      current_net_worth: current,
+      gap_remaining: Math.round(gap * 100) / 100,
+      years_until: Math.round(yearsLeft * 10) / 10,
+      cagr_required_pct: cagrExigido != null ? Math.round(cagrExigido * 10) / 10 : null,
+      status,
+      multiplier_needed: current > 0 ? Math.round((m.target / current) * 100) / 100 : null,
+    };
+  });
+
+  // CAGR atual estimado: assume crescimento constante desde acquisition_date mais antigo
+  // Simplificação: usa valor da memoria (R$ 5,76M abr/2026 conforme metas.md) como ancora
+  return JSON.stringify({
+    today: today.toISOString().slice(0, 10),
+    patrimonio_liquido_atual: current,
+    breakdown: snap,
+    milestones: out,
+    cagr_target_overall_pct: 17.3,
+    note: "CAGR exigido = (target/atual)^(1/anos) - 1. status: atras=cagr>25%/aa, a_frente=cagr<10%/aa, no_trilho=resto, atingido=já passou. Pra retomar sequência, foque na ação que reduz o gap do marco mais próximo.",
+  });
 }
 
 // ─── Handler: compare_months — comparativo detalhado por categoria ───
@@ -1916,7 +2167,7 @@ async function callClaudeHaiku(
 // Versão do código deployado — log inicial em CADA invocação pra confirmar
 // que o deploy do edge function está atualizado. Bumpa toda vez que mudar
 // a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
-const WISELY_AI_VERSION = "2026.04.29-v15-pacote1-completo";
+const WISELY_AI_VERSION = "2026.04.29-v16-navigator";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -2354,6 +2605,10 @@ Gere a leitura estratégica seguindo o formato obrigatório.`;
             get_construction_status: (input) => handleGetConstructionStatus(input, supabaseUrl, serviceKey),
             get_history: (input) => handleGetHistory(input, supabaseUrl, serviceKey),
             compare_months: (input) => handleCompareMonths(input, supabaseUrl, serviceKey),
+            get_bank_balances: (input) => handleGetBankBalances(input, supabaseUrl, serviceKey),
+            get_debts_status: (input) => handleGetDebtsStatus(input, supabaseUrl, serviceKey),
+            get_net_worth_snapshot: (input) => handleGetNetWorthSnapshot(input, supabaseUrl, serviceKey),
+            get_milestone_gap: (input) => handleGetMilestoneGap(input, supabaseUrl, serviceKey),
           }
         : undefined,
     });
