@@ -83,6 +83,14 @@ Ex: pergunta "essencial vs luxo" → chame get_breakdown(month="2026-04") → tu
 
 **Não chute somas.** Se o snapshot só tem agregado e a pergunta exige granularidade, chame a tool. É barato e a resposta fica auditável. Após chamar a tool, cite valores **exatos** das categorias retornadas — nunca invente número que não veio na resposta da tool.
 
+**REGRA DE COMPARAÇÃO: SEMPRE auditar os 2 lados antes de comparar.**
+Se for comparar mês A vs mês B (ex: "maio vs abril", "DRE este mês vs anterior"), você DEVE chamar a tool pra **ambos os meses** antes de afirmar diferença. Comparar forecast contra "número do snapshot" ou "memória" gera falso alarme — exatamente o que aconteceu em 28/04/2026 quando Naval comparou forecast maio (R$ 27.756) contra "abril R$ 53.528" (chute, real era R$ 27.257) e gerou alarmismo "-49%" inexistente.
+
+Sequência correta pra comparar 2 meses:
+1. Tool 1 → busca mês A
+2. Tool 2 → busca mês B (mesmo bucket / cliente)
+3. SÓ ENTÃO calcule diff e afirme tendência
+
 **Tool 2: get_prevensul_pipeline(client_filter?, include_paid?)** — pipeline FUTURO de comissões Prevensul direto da tabela prevensul_billing. Retorna saldo a receber, comissão futura, concentração por cliente. USE SEMPRE que a pergunta envolver:
 - "comissões futuras", "pipeline", "quanto vou receber"
 - "GRAND FOOD" ou "concentração de cliente"
@@ -1087,7 +1095,7 @@ async function callClaudeHaiku(
 // Versão do código deployado — log inicial em CADA invocação pra confirmar
 // que o deploy do edge function está atualizado. Bumpa toda vez que mudar
 // a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
-const WISELY_AI_VERSION = "2026.04.28-v7-pipeline-forecast";
+const WISELY_AI_VERSION = "2026.04.28-v8-comparison-rule";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
