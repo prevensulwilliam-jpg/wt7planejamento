@@ -1,49 +1,48 @@
-# Totalizar colunas Valor e Saldo no Portal de Comissões
-
 ## Contexto
 
-Na tabela do `/commissions/portal` (componente `PrevensulHistory` em `src/pages/CommissionsPortalPage.tsx`), o rodapé `TOTAL` hoje só soma **Pago** (verde) e **Comissão** (dourado). As colunas **Valor** (`contract_total`) e **Saldo** (`balance_remaining − amount_paid`, mesma fórmula usada na linha 1155) ficam vazias no footer (cobertas pelo `colSpan={5}` da célula "TOTAL").
+No `/commissions/portal` (componente `PrevensulHistory` em `src/pages/CommissionsPortalPage.tsx`) existem hoje **dois caminhos** para editar um registro:
 
-O usuário quer que essas duas colunas também sejam totalizadas, seguindo a mesma lógica visual e de soma de Pago/Comissão.
+1. **Clicar no nome do cliente** (linha 1142) → chama `onLoadRecord(r)` → carrega no formulário **"Registrar Faturamento"** no topo da página (vira "Editar — {cliente}"). Esse fluxo já popula tudo: campos do contrato, parcelas, tipo de pagamento, etc.
+2. **Botão lápis âmbar** (linha 1168, ícone `Pencil` cor `#F59E0B`) → chama `startEdit(r)` → abre **edição inline** dentro da própria linha da tabela, com um conjunto reduzido de campos (sem parcelas, sem cronograma, sem notas).
 
-## Mudanças
+Você quer que ao clicar em **Editar** (o lápis âmbar) os dados também apareçam no **Registrar Faturamento** — ou seja, unificar os dois fluxos no formulário completo do topo, que é mais rico.
+
+## Mudança
 
 **Arquivo:** `src/pages/CommissionsPortalPage.tsx`
 
-### 1. Adicionar dois `useMemo` ao lado dos existentes (linha 914-915)
+### 1. Trocar o `onClick` do botão lápis (linha 1168)
 
-```ts
-const totalValor = useMemo(
-  () => displayData.reduce((s, r) => s + (r.contract_total ?? 0), 0),
-  [displayData]
-);
-const totalSaldo = useMemo(
-  () => displayData.reduce(
-    (s, r) => s + Math.max(0, (r.balance_remaining ?? 0) - (r.amount_paid ?? 0)),
-    0
-  ),
-  [displayData]
-);
+De:
+```tsx
+<button onClick={() => startEdit(r)} ...>
+```
+Para:
+```tsx
+<button onClick={() => onLoadRecord(r)} ...>
 ```
 
-Uso `Math.max(0, ...)` para casar com a fórmula exibida em cada linha (1155) e evitar saldo negativo distorcendo o total.
+Assim o botão Editar passa a fazer exatamente o mesmo que clicar no nome do cliente: rola/carrega o formulário "Registrar Faturamento" no topo com todos os dados do cliente prontos para edição (incluindo parcelas via `editRecord` no `useEffect` da linha 209-225).
 
-### 2. Reorganizar o `TableFooter` (linhas 1185-1192)
+### 2. Adicionar scroll suave para o topo
 
-Atualmente: `colSpan={5}` para "TOTAL" + Pago + Comissão + `colSpan={2}`.
+Para que ao clicar o usuário veja o formulário sendo preenchido (já que o form fica acima da tabela), envolver a chamada:
+```tsx
+onClick={() => { onLoadRecord(r); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+```
 
-Novo layout (8 colunas alinhadas com o header — Cliente, Valor, Saldo, Parcela, Data Fech., Pago, Comissão, Status, +1 ações):
+Aplicar o mesmo scroll também no botão do nome do cliente (linha 1142) para consistência.
 
-- Coluna 1 (Cliente): label "TOTAL" em dourado
-- Coluna 2 (Valor): `formatCurrency(totalValor)` em cinza/neutro (mesma cor da célula da linha — `#94A3B8`)
-- Coluna 3 (Saldo): `formatCurrency(totalSaldo)` em vermelho (`#F43F5E`, mesma cor das células da coluna)
-- Colunas 4-5 (Parcela, Data Fech.): `colSpan={2}` vazio
-- Coluna 6 (Pago): mantém verde
-- Coluna 7 (Comissão): mantém dourado
-- Colunas 8-9 (Status + ações): `colSpan={2}` vazio
+### 3. Limpeza opcional (recomendada)
+
+A edição inline (`startEdit`, `cancelEdit`, `saveEdit`, `editingId`, `editForm`, e o branch `isEditing` que renderiza a linha em modo edição em ~1100-1135) fica **órfã** — nada mais aciona. Removê-la deixa o código mais enxuto e elimina ~80 linhas mortas.
+
+Se preferir manter por segurança nesta primeira iteração, deixo apenas as duas trocas de `onClick` acima e sinalizo o código morto para uma limpeza futura.
 
 ## Resultado esperado
 
-A linha TOTAL passa a exibir, além de Pago e Comissão, o **Valor total dos contratos** e o **Saldo total a receber** do mês filtrado, respeitando o filtro de status e a busca aplicada (porque usa `displayData`, idêntico aos totais existentes).
+Tanto clicando no **nome do cliente** quanto no **lápis âmbar** da coluna de ações, os dados do registro carregam no card **"Registrar Faturamento"** no topo (que muda o título para "Editar — {cliente}"), permitindo editar **todos** os campos — inclusive parcelas, cronograma, notas e tipo de pagamento — em vez de apenas os campos básicos da edição inline.
 
-Nada mais muda — sem alteração de schema, hook, KPI ou export.
+## Pergunta
+
+Quer que eu também **remova a edição inline** (item 3) já nesta mudança, ou prefere manter por enquanto?
