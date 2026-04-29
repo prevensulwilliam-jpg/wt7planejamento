@@ -2053,6 +2053,51 @@ export type Database = {
           },
         ]
       }
+      naval_chats: {
+        Row: {
+          answer: string
+          asked_at: string
+          feedback: string | null
+          id: string
+          question: string
+          tokens_cache_read: number | null
+          tokens_cache_write: number | null
+          tokens_in: number | null
+          tokens_out: number | null
+          tools_used: string[] | null
+          user_id: string
+          version: string | null
+        }
+        Insert: {
+          answer: string
+          asked_at?: string
+          feedback?: string | null
+          id?: string
+          question: string
+          tokens_cache_read?: number | null
+          tokens_cache_write?: number | null
+          tokens_in?: number | null
+          tokens_out?: number | null
+          tools_used?: string[] | null
+          user_id: string
+          version?: string | null
+        }
+        Update: {
+          answer?: string
+          asked_at?: string
+          feedback?: string | null
+          id?: string
+          question?: string
+          tokens_cache_read?: number | null
+          tokens_cache_write?: number | null
+          tokens_in?: number | null
+          tokens_out?: number | null
+          tools_used?: string[] | null
+          user_id?: string
+          version?: string | null
+        }
+        Relationships: []
+      }
       naval_memory: {
         Row: {
           content: string
@@ -3013,6 +3058,7 @@ export type Database = {
           text: string
         }[]
       }
+      naval_chats_cleanup_old: { Args: never; Returns: undefined }
       request_manager_access:
         | { Args: { p_user_id: string }; Returns: undefined }
         | { Args: { p_role?: string; p_user_id: string }; Returns: undefined }
