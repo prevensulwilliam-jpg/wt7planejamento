@@ -91,13 +91,25 @@ Sequência correta pra comparar 2 meses:
 2. Tool 2 → busca mês B (mesmo bucket / cliente)
 3. SÓ ENTÃO calcule diff e afirme tendência
 
-**Tool 2: get_prevensul_pipeline(client_filter?, include_paid?)** — pipeline FUTURO de comissões Prevensul direto da tabela prevensul_billing. Retorna saldo a receber, comissão futura, concentração por cliente. USE SEMPRE que a pergunta envolver:
-- "comissões futuras", "pipeline", "quanto vou receber"
-- "GRAND FOOD" ou "concentração de cliente"
-- "saldo a receber" Prevensul
-- Detalhe de pipeline por cliente específico (use client_filter)
+**Tool 2: get_prevensul_pipeline(client_filter?, include_paid?, forecast_month?)** — pipeline TEÓRICO de comissões Prevensul (saldo a receber por contrato + projeção mensal baseada em contract_total/installment_total). Útil pra: ver concentração de risco (GRAND FOOD), saldo total a receber, projeção TEÓRICA mês a mês.
 
-⚠ **CRÍTICO — números do pipeline na memoria/metas.md e memoria/negocios.md estão DESATUALIZADOS** (eram do 1º trimestre 2026, não refletem contratos novos). SEMPRE use esta tool em vez de citar memória pra pipeline futuro. Os números reais podem estar 3-4x maiores.
+⚠ ATENÇÃO: a projeção mensal aqui é TEÓRICA (assume parcelas mensais regulares). Na realidade Prevensul paga em LUMP SUMS irregulares (ver Tool 3).
+
+**Tool 3: get_prevensul_history(n_months?)** — HISTÓRICO REAL recebido nos últimos N meses (default 6). Lê de revenues source=comissao_prevensul. Retorna por mês: total recebido + lista dos depósitos. Inclui estatísticas: avg, mediana, min, max, variability_index, months_with_zero. Tool 3 também classifica o padrão (ESTÁVEL / VOLÁTIL / IRREGULAR) e dá recomendação automática.
+
+⚠ **CRÍTICO — números do pipeline na memoria/metas.md e memoria/negocios.md estão DESATUALIZADOS** (eram do 1º trimestre 2026). SEMPRE use estas tools em vez de citar memória.
+
+═══ REGRA DE PRECISÃO ABSOLUTA — comissão Prevensul ═══
+William exige 100% de acertividade. NUNCA invente número, NUNCA extrapole sem dado.
+
+Pra perguntas de previsão de comissão Prevensul (qualquer "quanto vou receber em X mês"):
+1. SEMPRE chame get_prevensul_history(n_months=6) PRIMEIRO
+2. Se o pattern retornado for "IRREGULAR" ou "VOLÁTIL": NUNCA cravar valor único. Use a recomendação da própria tool (range min-max).
+3. Se quiser pipeline teórico, complementa com get_prevensul_pipeline(forecast_month).
+4. Apresente: "Histórico real (R$ X mediana, range Y-Z, mas Q meses zeraram)" + "Pipeline teórico (R$ W se ritmo regular)" + "Estimativa: faixa razoável é [a, b]".
+5. Se a tool indicar variabilidade alta, EXPLICITE: "Não dá pra cravar valor único — Prevensul paga em lump sums irregulares."
+
+NUNCA invente números do tipo "comissão abril foi R$ 53.528" sem ter chamado tool. Se não tem dado, diga: "Não chamei tool pra esse mês ainda. Quer que eu busque?"
 
 ═══ REGRAS INVIOLÁVEIS DE CONFLITO COM CENÁRIOS DO USUÁRIO ═══
 Quando o William perguntar "e se eu vender X" ou "e se eu fizer Y" e a memória/metas.md tiver regra inviolável contra essa ação, NÃO MODELE O CENÁRIO ainda. Em vez:
@@ -478,6 +490,25 @@ const NAVAL_TOOLS: ClaudeTool[] = [
     },
   },
   {
+    name: "get_prevensul_history",
+    description:
+      "Retorna o HISTÓRICO REAL de comissão Prevensul recebida nos últimos N meses, " +
+      "lendo de revenues com source=comissao_prevensul + business_id=Prevensul. " +
+      "USE SEMPRE pra responder 'quanto vou receber em [mês]', 'tendência de comissão', " +
+      "'média mensal'. O pagamento Prevensul vem em LUMP SUMS irregulares (CREDIFOZ DEPOSITO BLOQ), " +
+      "não em parcelas mensais regulares — alguns meses zeram, outros vêm 2x. NÃO use forecast " +
+      "teórico de get_prevensul_pipeline isoladamente. SEMPRE cruzar com este histórico real.",
+    input_schema: {
+      type: "object",
+      properties: {
+        n_months: {
+          type: "number",
+          description: "Quantos meses pra trás buscar. Default 6. Min 3, max 24.",
+        },
+      },
+    },
+  },
+  {
     name: "get_prevensul_pipeline",
     description:
       "Retorna o pipeline de comissões Prevensul direto da tabela prevensul_billing. " +
@@ -711,6 +742,105 @@ function monthToIdx(m: string | null | undefined): number | null {
   if (!m || !/^\d{4}-\d{2}$/.test(m)) return null;
   const [y, mo] = m.split("-").map(Number);
   return y * 12 + mo;
+}
+
+function idxToMonth(idx: number): string {
+  const y = Math.floor((idx - 1) / 12);
+  const mo = ((idx - 1) % 12) + 1;
+  return `${y}-${String(mo).padStart(2, "0")}`;
+}
+
+// Handler: histórico REAL de comissão Prevensul recebida (revenues)
+async function handleGetPrevensulHistory(
+  input: Record<string, unknown>,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<string> {
+  const sb = createClient(supabaseUrl, serviceKey);
+  const nMonths = Math.max(3, Math.min(24, Number(input.n_months ?? 6)));
+
+  // Calcula mês inicial (n_months atrás do mês atual)
+  const now = new Date();
+  const curIdx = (now.getFullYear() * 12) + (now.getMonth() + 1);
+  const startIdx = curIdx - nMonths + 1;
+  const startMonth = idxToMonth(startIdx);
+
+  const { data, error } = await sb.from("revenues")
+    .select("amount, received_at, source, description, reference_month, business_id")
+    .eq("source", "comissao_prevensul")
+    .gte("reference_month", startMonth);
+
+  if (error) {
+    return JSON.stringify({ error: `revenues query failed: ${error.message}` });
+  }
+
+  // Agrupa por reference_month
+  const byMonth = new Map<string, { total: number; deposits: Array<{ date: string; amount: number; description: string }> }>();
+  for (const r of data ?? []) {
+    const month = (r as any).reference_month as string;
+    if (!month) continue;
+    const cur = byMonth.get(month) ?? { total: 0, deposits: [] };
+    cur.total += Number((r as any).amount ?? 0);
+    cur.deposits.push({
+      date: (r as any).received_at,
+      amount: Number((r as any).amount ?? 0),
+      description: (r as any).description ?? "",
+    });
+    byMonth.set(month, cur);
+  }
+
+  // Preenche meses sem nenhum recebimento (zeros explícitos)
+  const months: Array<{ month: string; total: number; n_deposits: number; deposits: Array<{ date: string; amount: number; description: string }> }> = [];
+  for (let i = startIdx; i <= curIdx; i++) {
+    const m = idxToMonth(i);
+    const entry = byMonth.get(m);
+    months.push({
+      month: m,
+      total: entry ? Math.round(entry.total * 100) / 100 : 0,
+      n_deposits: entry ? entry.deposits.length : 0,
+      deposits: entry ? entry.deposits.sort((a, b) => b.amount - a.amount).slice(0, 5) : [],
+    });
+  }
+
+  // Estatísticas
+  const totals = months.map((m) => m.total);
+  const sum = totals.reduce((s, v) => s + v, 0);
+  const avg = totals.length > 0 ? sum / totals.length : 0;
+  const sorted = [...totals].sort((a, b) => a - b);
+  const median = sorted.length > 0
+    ? (sorted.length % 2 === 0
+        ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
+        : sorted[Math.floor(sorted.length / 2)])
+    : 0;
+  const min = sorted[0] ?? 0;
+  const max = sorted[sorted.length - 1] ?? 0;
+  const monthsWithZero = totals.filter((v) => v === 0).length;
+
+  const variability = avg > 0 ? (max - min) / avg : 0;
+
+  return JSON.stringify({
+    n_months: months.length,
+    by_month: months,
+    statistics: {
+      total_period: Math.round(sum * 100) / 100,
+      average_monthly: Math.round(avg * 100) / 100,
+      median_monthly: Math.round(median * 100) / 100,
+      min_monthly: Math.round(min * 100) / 100,
+      max_monthly: Math.round(max * 100) / 100,
+      months_with_zero: monthsWithZero,
+      variability_index: Math.round(variability * 100) / 100,
+    },
+    interpretation: {
+      pattern: monthsWithZero > 0
+        ? "IRREGULAR — alguns meses zeram (lump sums acumulados em outros). NÃO use média como previsão."
+        : (variability > 1.5
+          ? "VOLÁTIL — diferença max/min > 1.5×. Use mediana, não média. Indique range."
+          : "ESTÁVEL — receita relativamente uniforme."),
+      recommendation: monthsWithZero > 0 || variability > 1.5
+        ? "Pra forecast: indique RANGE [min, max] em vez de valor único. Avise sobre variabilidade."
+        : "Pode usar a média como projeção razoável.",
+    },
+  });
 }
 
 async function handleGetPrevensulPipeline(
@@ -1095,7 +1225,7 @@ async function callClaudeHaiku(
 // Versão do código deployado — log inicial em CADA invocação pra confirmar
 // que o deploy do edge function está atualizado. Bumpa toda vez que mudar
 // a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
-const WISELY_AI_VERSION = "2026.04.28-v8-comparison-rule";
+const WISELY_AI_VERSION = "2026.04.28-v9-precision-history";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -1528,6 +1658,7 @@ Gere a leitura estratégica seguindo o formato obrigatório.`;
         ? {
             get_breakdown: (input) => handleGetBreakdown(input, supabaseUrl, serviceKey),
             get_prevensul_pipeline: (input) => handleGetPrevensulPipeline(input, supabaseUrl, serviceKey),
+            get_prevensul_history: (input) => handleGetPrevensulHistory(input, supabaseUrl, serviceKey),
           }
         : undefined,
     });
