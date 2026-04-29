@@ -1,87 +1,49 @@
-# Comissões Externas — Datas, Parcelas, Edição e KPIs ajustados
+# Totalizar colunas Valor e Saldo no Portal de Comissões
 
-## O que muda na tela `/commissions/external`
+## Contexto
 
-### 1. KPIs (3 cards)
-- **Comissões Geradas** (R$) — soma de `commission_value` de todos os lançamentos do mês
-- **Comissões Recebidas** (R$) — soma das parcelas pagas (`paid_at` preenchido) cuja data de pagamento cai no mês
-- **Registros** — número inteiro puro (ex: `2`, não `R$ 2,00`)
+Na tabela do `/commissions/portal` (componente `PrevensulHistory` em `src/pages/CommissionsPortalPage.tsx`), o rodapé `TOTAL` hoje só soma **Pago** (verde) e **Comissão** (dourado). As colunas **Valor** (`contract_total`) e **Saldo** (`balance_remaining − amount_paid`, mesma fórmula usada na linha 1155) ficam vazias no footer (cobertas pelo `colSpan={5}` da célula "TOTAL").
 
-### 2. Formulário "Registrar Comissão" (atualizado)
-Mantém: Descrição, Origem, Valor, Taxa comissão (%), Observações.
-Acrescenta:
-- **Data do lançamento** (DatePicker) — obrigatória
-- **Forma de recebimento:**
-  - À vista → 1 campo "Data de pagamento prevista"
-  - Parcelado → input "Nº de parcelas" (ex: 3) + "Data 1ª parcela" → o sistema gera N parcelas com mesmo valor (`commission_value / N`) e datas mensais consecutivas
-  - Tabela editável das parcelas geradas (data + valor) antes de salvar — usuário pode ajustar cada uma
+O usuário quer que essas duas colunas também sejam totalizadas, seguindo a mesma lógica visual e de soma de Pago/Comissão.
 
-Exemplo: comissão R$ 30.000 em 3x → cria 3 parcelas de R$ 10.000 nas datas 27/04, 27/05, 27/06.
+## Mudanças
 
-### 3. Histórico — nova UX
-Tabela agrupada por lançamento, com expansão para ver parcelas:
-- Linha principal: Descrição | Origem | Valor | Comissão Total | Data Lançamento | Status (ex: "2/3 pagas") | Ações
-- Ações: **Editar** (abre modal) | **Excluir**
-- Expandir mostra parcelas com: Data prevista | Valor | Status (Paga / Pendente) | botão "Marcar como paga" (define `paid_at = hoje`) ou DatePicker para informar data real
-- O agrupamento por mês continua filtrando pela `reference_month` do lançamento principal
+**Arquivo:** `src/pages/CommissionsPortalPage.tsx`
 
-### 4. Modal de Edição
-Mesmos campos do formulário de criação. Permite:
-- Editar dados do lançamento
-- Adicionar/remover/ajustar parcelas individualmente
-- Marcar parcelas como pagas/pendentes
+### 1. Adicionar dois `useMemo` ao lado dos existentes (linha 914-915)
 
----
-
-## Mudanças técnicas
-
-### Banco — nova migration
-```sql
--- Campos no lançamento principal
-ALTER TABLE public.other_commissions
-  ADD COLUMN IF NOT EXISTS issued_at date,        -- data de lançamento
-  ADD COLUMN IF NOT EXISTS installments_count int DEFAULT 1;
-
--- Nova tabela de parcelas
-CREATE TABLE IF NOT EXISTS public.other_commission_installments (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  commission_id uuid NOT NULL REFERENCES public.other_commissions(id) ON DELETE CASCADE,
-  installment_number int NOT NULL,
-  due_date date NOT NULL,
-  amount numeric(12,2) NOT NULL,
-  paid_at date,
-  notes text,
-  created_at timestamptz DEFAULT now(),
-  UNIQUE (commission_id, installment_number)
+```ts
+const totalValor = useMemo(
+  () => displayData.reduce((s, r) => s + (r.contract_total ?? 0), 0),
+  [displayData]
 );
-ALTER TABLE public.other_commission_installments ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Admin full access oc_installments"
-  ON public.other_commission_installments FOR ALL TO authenticated
-  USING (public.has_role(auth.uid(),'admin'::public.app_role))
-  WITH CHECK (public.has_role(auth.uid(),'admin'::public.app_role));
+const totalSaldo = useMemo(
+  () => displayData.reduce(
+    (s, r) => s + Math.max(0, (r.balance_remaining ?? 0) - (r.amount_paid ?? 0)),
+    0
+  ),
+  [displayData]
+);
 ```
 
-### Hook (`src/hooks/useOtherCommissions.ts`)
-- Estender query para trazer parcelas (`select("*, installments:other_commission_installments(*)")`)
-- Adicionar: `useUpdateOtherCommission`, `useUpsertInstallments`, `useMarkInstallmentPaid`
-- `useOtherCommissionsSummary(month)` recalcula:
-  - `totalCommission` = soma de `commission_value` dos lançamentos do mês
-  - `totalReceived` = soma de `installments.amount` onde `paid_at` está dentro do mês
+Uso `Math.max(0, ...)` para casar com a fórmula exibida em cada linha (1155) e evitar saldo negativo distorcendo o total.
 
-### Página (`src/pages/ExternalCommissionsPage.tsx`)
-- KpiCard "Registros": usar `formatNumber` simples (não currency). Pode ser via prop nova `format="number"` ou texto direto
-- FormSection: adicionar DatePickers + bloco de parcelas (radio À vista/Parcelado + tabela)
-- HistorySection: linhas expansíveis (usar `Collapsible` ou estado local) + botões Editar/Excluir
-- Novo componente `EditCommissionDialog` reutilizando lógica do form
+### 2. Reorganizar o `TableFooter` (linhas 1185-1192)
 
-### KpiCard
-Verificar se já aceita formato numérico puro; senão adicionar prop `format?: "currency" | "number"` (default currency).
+Atualmente: `colSpan={5}` para "TOTAL" + Pago + Comissão + `colSpan={2}`.
 
----
+Novo layout (8 colunas alinhadas com o header — Cliente, Valor, Saldo, Parcela, Data Fech., Pago, Comissão, Status, +1 ações):
 
-## Checklist de entrega
-1. Migration SQL (campos novos + tabela parcelas + RLS)
-2. Hook atualizado com CRUD de parcelas
-3. Form com geração automática de parcelas + edição inline
-4. Histórico com expansão, edit modal, marcar como paga
-5. KPIs corrigidos (Geradas / Recebidas / Registros como inteiro)
+- Coluna 1 (Cliente): label "TOTAL" em dourado
+- Coluna 2 (Valor): `formatCurrency(totalValor)` em cinza/neutro (mesma cor da célula da linha — `#94A3B8`)
+- Coluna 3 (Saldo): `formatCurrency(totalSaldo)` em vermelho (`#F43F5E`, mesma cor das células da coluna)
+- Colunas 4-5 (Parcela, Data Fech.): `colSpan={2}` vazio
+- Coluna 6 (Pago): mantém verde
+- Coluna 7 (Comissão): mantém dourado
+- Colunas 8-9 (Status + ações): `colSpan={2}` vazio
+
+## Resultado esperado
+
+A linha TOTAL passa a exibir, além de Pago e Comissão, o **Valor total dos contratos** e o **Saldo total a receber** do mês filtrado, respeitando o filtro de status e a busca aplicada (porque usa `displayData`, idêntico aos totais existentes).
+
+Nada mais muda — sem alteração de schema, hook, KPI ou export.

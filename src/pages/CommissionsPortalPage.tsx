@@ -913,6 +913,11 @@ function PrevensulHistory({ month, userId, onLoadRecord }: { month: string; user
 
   const totalPago = useMemo(() => displayData.reduce((s, r) => s + (r.amount_paid ?? 0), 0), [displayData]);
   const totalComissao = useMemo(() => displayData.reduce((s, r) => s + (r.commission_value ?? 0), 0), [displayData]);
+  const totalValor = useMemo(() => displayData.reduce((s, r) => s + (r.contract_total ?? 0), 0), [displayData]);
+  const totalSaldo = useMemo(
+    () => displayData.reduce((s, r) => s + Math.max(0, (r.balance_remaining ?? 0) - (r.amount_paid ?? 0)), 0),
+    [displayData]
+  );
 
   const startEdit = (r: any) => {
     setEditingId(r.id);
