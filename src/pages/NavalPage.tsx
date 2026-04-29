@@ -151,11 +151,32 @@ function ChatSection({ localMessages, loading, send, loadConversation, clearChat
   const { data: history = [], isLoading: historyLoading } = useNavalHistory();
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Esconde o histórico inline (mas mantém no banco). User pode reexibir.
+  // Persiste em localStorage pra manter mesmo após reload.
+  const [historyHidden, setHistoryHidden] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("naval_chat_hide_history") === "1";
+  });
+
+  const toggleHistoryHidden = (next: boolean) => {
+    setHistoryHidden(next);
+    if (typeof window !== "undefined") {
+      if (next) localStorage.setItem("naval_chat_hide_history", "1");
+      else localStorage.removeItem("naval_chat_hide_history");
+    }
+  };
+
+  const handleClearVisible = () => {
+    clearChat();
+    toggleHistoryHidden(true);
+  };
 
   // Mostra: histórico do banco (mais antigo no topo) + mensagens locais novas (no fim)
   // Filtra historial pra evitar duplicar perguntas que já estão em messages locais
   const localQuestions = new Set(localMessages.filter((m) => m.role === "user").map((m) => m.content.trim()));
-  const recentHistory = history.slice(0, 10).filter((h) => !localQuestions.has(h.question.trim())).reverse();
+  const recentHistory = historyHidden
+    ? []
+    : history.slice(0, 10).filter((h) => !localQuestions.has(h.question.trim())).reverse();
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -184,19 +205,30 @@ function ChatSection({ localMessages, loading, send, loadConversation, clearChat
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          {localMessages.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          {(localMessages.length > 0 || recentHistory.length > 0) && (
             <button
-              onClick={clearChat}
-              className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md hover:bg-white/5"
+              onClick={handleClearVisible}
+              className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md hover:bg-white/5 transition-colors"
               style={{ color: "#94A3B8", border: "1px solid #2A3F55" }}
-              title="Sair dessa conversa e começar uma nova"
+              title="Esconde a conversa atual e o histórico inline. Permanece tudo salvo na aba Histórico."
             >
-              <X className="w-3 h-3" />
-              Nova conversa
+              <Trash2 className="w-3 h-3" />
+              Limpar
             </button>
           )}
-          {recentHistory.length > 0 && (
+          {historyHidden && history.length > 0 && (
+            <button
+              onClick={() => toggleHistoryHidden(false)}
+              className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md hover:bg-white/5 transition-colors"
+              style={{ color: "#2DD4BF", border: "1px solid rgba(45,212,191,0.3)" }}
+              title="Reexibir histórico recente nessa aba"
+            >
+              <History className="w-3 h-3" />
+              Mostrar histórico
+            </button>
+          )}
+          {!historyHidden && recentHistory.length > 0 && (
             <span className="text-[10px]" style={{ color: "#4A5568" }}>
               últimas {recentHistory.length} (auto-limpa em 7d)
             </span>
