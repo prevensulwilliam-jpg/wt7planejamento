@@ -97,6 +97,8 @@ Sequência correta pra comparar 2 meses:
 
 **Tool 3a: get_construction_status(construction_filter?, include_completed?)** — status real de cada obra (RWT05, JW7 Sonho, JW7 Itaipava, RWT04, etc): orçado vs gasto, % executado, próxima etapa, renda mensal esperada quando pronta (cota William). Retorna sinais_alerta automáticos (estouro de orçamento, atraso vs prazo, prazo apertado). USE pra: "como vai a obra X?", "quanto falta gastar em RWT05?", "estou no orçamento?", "renda esperada com tudo pronto?". Filtro por nome (ex: 'JW7'). Default só obras em andamento.
 
+**REGRA CRÍTICA pra get_construction_status**: a tool retorna stages cadastradas + budget_estimated de cada uma. Se a SOMA dos stages.budget_estimated for MENOR que orcado_total da obra, NUNCA INVENTE stages adicionais com nomes/valores plausíveis. Em vez disso, diga explicitamente: "Apenas N stages cadastradas (R$ X). Restam R$ Y do orçamento sem detalhamento — cadastrar via /constructions". William prefere admitir lacuna a inventar etapas que não existem. NUNCA cite "Estrutura R$ Z", "Alvenaria R$ W", "Acabamentos R$ K" se essas stages não vieram na resposta da tool.
+
 **Tool 3b: get_prevensul_history(n_months?)** — HISTÓRICO REAL recebido nos últimos N meses (default 6). Lê de revenues source=comissao_prevensul. Retorna por mês: total recebido + lista dos depósitos. Inclui estatísticas: avg, mediana, min, max, variability_index, months_with_zero. Tool 3 também classifica o padrão (ESTÁVEL / VOLÁTIL / IRREGULAR) e dá recomendação automática.
 
 ⚠ **CRÍTICO — números do pipeline na memoria/metas.md e memoria/negocios.md estão DESATUALIZADOS** (eram do 1º trimestre 2026). SEMPRE use estas tools em vez de citar memória.
@@ -1522,7 +1524,7 @@ async function callClaudeHaiku(
 // Versão do código deployado — log inicial em CADA invocação pra confirmar
 // que o deploy do edge function está atualizado. Bumpa toda vez que mudar
 // a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
-const WISELY_AI_VERSION = "2026.04.29-v12-construction-status";
+const WISELY_AI_VERSION = "2026.04.29-v13-no-stage-hallucination";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
