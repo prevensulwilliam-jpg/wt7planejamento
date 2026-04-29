@@ -2053,6 +2053,51 @@ export type Database = {
           },
         ]
       }
+      naval_alerts: {
+        Row: {
+          detected_at: string
+          detector: string
+          dismissed_at: string | null
+          dismissed_by_user: boolean | null
+          id: string
+          message: string
+          metric_name: string | null
+          metric_threshold: number | null
+          metric_value: number | null
+          severity: string
+          title: string
+          user_id: string | null
+        }
+        Insert: {
+          detected_at?: string
+          detector: string
+          dismissed_at?: string | null
+          dismissed_by_user?: boolean | null
+          id?: string
+          message: string
+          metric_name?: string | null
+          metric_threshold?: number | null
+          metric_value?: number | null
+          severity: string
+          title: string
+          user_id?: string | null
+        }
+        Update: {
+          detected_at?: string
+          detector?: string
+          dismissed_at?: string | null
+          dismissed_by_user?: boolean | null
+          id?: string
+          message?: string
+          metric_name?: string | null
+          metric_threshold?: number | null
+          metric_value?: number | null
+          severity?: string
+          title?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       naval_chats: {
         Row: {
           answer: string
@@ -3058,6 +3103,7 @@ export type Database = {
           text: string
         }[]
       }
+      naval_alerts_cleanup_old: { Args: never; Returns: undefined }
       naval_chats_cleanup_old: { Args: never; Returns: undefined }
       request_manager_access:
         | { Args: { p_user_id: string }; Returns: undefined }
