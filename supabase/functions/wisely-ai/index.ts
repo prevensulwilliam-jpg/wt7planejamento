@@ -472,12 +472,14 @@ const NAVAL_TOOLS: ClaudeTool[] = [
   {
     name: "get_prevensul_pipeline",
     description:
-      "Retorna o pipeline COMPLETO de comissões futuras Prevensul — saldo a receber por cliente, " +
-      "comissão futura calculada (balance_remaining × commission_rate), concentração de risco. " +
-      "USE SEMPRE que a pergunta envolver: pipeline, comissões futuras, saldo a receber, GRAND FOOD, " +
-      "concentração de cliente, ou 'quanto vou receber'. Os números da memória (memoria/metas.md, " +
-      "memoria/negocios.md) podem estar desatualizados — esta tool tem o dado VIVO da tabela " +
-      "prevensul_billing. Top 15 clientes + total geral. Filtro opcional por nome do cliente.",
+      "Retorna o pipeline de comissões Prevensul direto da tabela prevensul_billing. " +
+      "Modos: " +
+      "(1) AGREGADO — saldo a receber + comissão futura por cliente, concentração de risco. " +
+      "(2) PROJEÇÃO MENSAL — passe forecast_month=YYYY-MM pra estimar quanto entra de comissão naquele mês. " +
+      "Cada linha em prevensul_billing representa 1 MÊS do contrato (installment_current de N), " +
+      "então a projeção usa contract_total/installment_total como parcela mensal esperada. " +
+      "USE SEMPRE pra perguntas de pipeline/comissões futuras/saldo a receber. " +
+      "Os números da memória (negocios.md, metas.md) estão DESATUALIZADOS.",
     input_schema: {
       type: "object",
       properties: {
@@ -491,6 +493,13 @@ const NAVAL_TOOLS: ClaudeTool[] = [
           type: "boolean",
           description:
             "Se true, inclui linhas com balance_remaining=0 (já pagas). Default false (só pendentes).",
+        },
+        forecast_month: {
+          type: "string",
+          description:
+            "Mês YYYY-MM pra projeção. Quando passado, calcula estimativa de comissão " +
+            "que deve cair NESSE mês baseado em contract_total/installment_total de cada contrato " +
+            "ainda dentro do prazo. Ex: forecast_month='2026-05' estima maio.",
         },
       },
     },
@@ -689,6 +698,13 @@ async function handleGetBreakdown(input: Record<string, unknown>, supabaseUrl: s
 // Lê prevensul_billing e retorna saldo a receber + comissão futura agregados
 // por cliente. Resolve o problema de Naval citar números desatualizados das
 // memórias .md — a fonte da verdade é a tabela viva.
+// Helper: converte YYYY-MM em índice numérico pra comparar meses
+function monthToIdx(m: string | null | undefined): number | null {
+  if (!m || !/^\d{4}-\d{2}$/.test(m)) return null;
+  const [y, mo] = m.split("-").map(Number);
+  return y * 12 + mo;
+}
+
 async function handleGetPrevensulPipeline(
   input: Record<string, unknown>,
   supabaseUrl: string,
@@ -699,6 +715,9 @@ async function handleGetPrevensulPipeline(
     ? input.client_filter.trim().toUpperCase()
     : null;
   const includePaid = input.include_paid === true;
+  const forecastMonth = typeof input.forecast_month === "string" && /^\d{4}-\d{2}$/.test(input.forecast_month)
+    ? input.forecast_month
+    : null;
 
   let query = sb.from("prevensul_billing")
     .select("client_name, contract_total, balance_remaining, commission_rate, commission_value, status, reference_month, installment_current, installment_total, closing_date");
@@ -765,6 +784,80 @@ async function handleGetPrevensulPipeline(
   const top1Pct = top.length > 0 ? top[0].pipeline_pct : 0;
   const top1Name = top.length > 0 ? top[0].client : null;
 
+  // Projeção mensal — se forecast_month foi passado, estima comissão pra esse mês.
+  // Lógica: cada linha tem 1 mês do contrato (installment_current de N). Calcula:
+  //   - parcela_mensal = contract_total / installment_total
+  //   - last_ref = max(reference_month) por cliente (último mês registrado)
+  //   - meses_faltantes = installment_total - installment_current_max
+  //   - se forecast_month está em (last_ref, last_ref + meses_faltantes], estima comissão
+  let monthlyForecast: Record<string, unknown> | null = null;
+  if (forecastMonth) {
+    const forecastIdx = monthToIdx(forecastMonth)!;
+
+    // Pega "linha mais recente" de cada cliente (maior installment_current)
+    type Latest = {
+      contract_total: number;
+      installment_total: number;
+      installment_current: number;
+      commission_rate: number;
+      last_ref_month: string | null;
+    };
+    const latestByClient = new Map<string, Latest>();
+    for (const r of rows) {
+      const name = r.client_name || "?";
+      const cur = latestByClient.get(name);
+      const cur_inst = Number(r.installment_current ?? 0);
+      if (!cur || cur_inst > cur.installment_current) {
+        latestByClient.set(name, {
+          contract_total: Number(r.contract_total ?? 0),
+          installment_total: Number(r.installment_total ?? 1),
+          installment_current: cur_inst,
+          commission_rate: Number(r.commission_rate ?? 0.03),
+          last_ref_month: r.reference_month,
+        });
+      }
+    }
+
+    let totalEstPaid = 0;
+    let totalEstComm = 0;
+    const forecastByClient: Array<{ client: string; estimated_paid: number; estimated_commission: number; reasoning: string }> = [];
+
+    for (const [client, latest] of latestByClient.entries()) {
+      const totalInst = latest.installment_total || 1;
+      const curInst = latest.installment_current;
+      const monthsLeft = Math.max(0, totalInst - curInst);
+      const lastRefIdx = monthToIdx(latest.last_ref_month);
+      if (lastRefIdx == null) continue;
+
+      const monthsAhead = forecastIdx - lastRefIdx;
+      // forecast_month tem que ser FUTURO (>0) e dentro do prazo restante
+      if (monthsAhead <= 0 || monthsAhead > monthsLeft) continue;
+
+      const avgPerMonth = totalInst > 0 ? latest.contract_total / totalInst : 0;
+      const estPaid = avgPerMonth;
+      const estComm = avgPerMonth * latest.commission_rate;
+
+      totalEstPaid += estPaid;
+      totalEstComm += estComm;
+      forecastByClient.push({
+        client,
+        estimated_paid: Math.round(estPaid * 100) / 100,
+        estimated_commission: Math.round(estComm * 100) / 100,
+        reasoning: `parcela ${curInst + monthsAhead}/${totalInst}, contract_total/installment_total = ${Math.round(avgPerMonth * 100) / 100}`,
+      });
+    }
+    forecastByClient.sort((a, b) => b.estimated_commission - a.estimated_commission);
+
+    monthlyForecast = {
+      forecast_month: forecastMonth,
+      assumption: "parcela mensal estimada = contract_total / installment_total. Estimativa apenas pra contratos ainda dentro do prazo (installment_current < installment_total).",
+      total_estimated_paid: Math.round(totalEstPaid * 100) / 100,
+      total_estimated_commission: Math.round(totalEstComm * 100) / 100,
+      by_client: forecastByClient.slice(0, 15),
+      clients_in_range: forecastByClient.length,
+    };
+  }
+
   return JSON.stringify({
     summary: {
       total_balance_remaining: Math.round(totalBalance * 100) / 100,
@@ -778,6 +871,7 @@ async function handleGetPrevensulPipeline(
       included_paid: includePaid,
     },
     by_client: top,
+    monthly_forecast: monthlyForecast,
   });
 }
 
@@ -993,7 +1087,7 @@ async function callClaudeHaiku(
 // Versão do código deployado — log inicial em CADA invocação pra confirmar
 // que o deploy do edge function está atualizado. Bumpa toda vez que mudar
 // a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
-const WISELY_AI_VERSION = "2026.04.28-v6-pipeline-tool-regras";
+const WISELY_AI_VERSION = "2026.04.28-v7-pipeline-forecast";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
