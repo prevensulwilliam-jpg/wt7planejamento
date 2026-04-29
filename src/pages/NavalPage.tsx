@@ -1,75 +1,149 @@
 import { useState, useRef, useEffect } from "react";
-import { RefreshCw, Send, Sparkles, MessageSquare, TrendingUp, Home, Target } from "lucide-react";
+import { RefreshCw, Send, MessageSquare, ChevronDown, ChevronUp, Play, History, Search, Trash2 } from "lucide-react";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
 import { GoldButton } from "@/components/wt7/GoldButton";
 import { WtBadge } from "@/components/wt7/WtBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
-import { useToast } from "@/hooks/use-toast";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useNavalAnalysis, useNavalChat, useNavalInsight } from "@/hooks/useNaval";
+import { useNavalHistory, useDeleteAllChats } from "@/hooks/useNavalHistory";
 import ReactMarkdown from "react-markdown";
+import { formatDate } from "@/lib/formatters";
 
 const SUGGESTIONS = [
   "Quando vou atingir R$100k/mês?",
   "Qual kitnet está me dando mais retorno?",
   "Quais despesas posso cortar?",
   "Como está o andamento das obras?",
-  "Como diversificar minha renda?",
 ];
 
+// ─── Card de análise mensal — começa COLAPSADO ──────────────────────
 function AnalysisCard() {
-  const { analysis, loading, generate, context } = useNavalAnalysis();
+  const [expanded, setExpanded] = useState(false);
+  const { analysis, loading, generate, context, hasGenerated } = useNavalAnalysis(false);
+
+  const handleExpand = () => {
+    if (!expanded) {
+      setExpanded(true);
+      if (!hasGenerated && !loading) generate();
+    } else {
+      setExpanded(false);
+    }
+  };
 
   return (
     <PremiumCard glowColor="rgba(45,212,191,0.3)">
-      <div className="flex items-center justify-between mb-4">
+      <button onClick={handleExpand} className="w-full flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-lg">🤖</span>
           <h2 className="font-display font-bold" style={{ color: "#2DD4BF" }}>
             Análise de {context?.month ?? "..."}
           </h2>
+          {!hasGenerated && !loading && <span className="text-[10px] uppercase tracking-wide" style={{ color: "#4A5568" }}>(clique pra carregar)</span>}
         </div>
-        <button
-          onClick={() => generate()}
-          disabled={loading}
-          className="text-xs flex items-center gap-1 hover:text-wt-text-primary transition-colors disabled:opacity-50"
-          style={{ color: "#94A3B8" }}
-        >
-          <RefreshCw className={`w-3 h-3 ${loading ? "animate-spin" : ""}`} />
-          Atualizar
-        </button>
-      </div>
-      {loading ? (
-        <div className="space-y-3">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-4 rounded" style={{ background: "#131B22", width: `${90 - i * 10}%` }} />
-          ))}
+        <div className="flex items-center gap-2">
+          {hasGenerated && (
+            <button
+              onClick={(e) => { e.stopPropagation(); generate(); }}
+              disabled={loading}
+              className="text-xs flex items-center gap-1 hover:text-wt-text-primary transition-colors disabled:opacity-50"
+              style={{ color: "#94A3B8" }}
+              title="Recarregar análise"
+            >
+              <RefreshCw className={`w-3 h-3 ${loading ? "animate-spin" : ""}`} />
+            </button>
+          )}
+          {expanded ? <ChevronUp className="w-4 h-4" style={{ color: "#94A3B8" }} /> : <ChevronDown className="w-4 h-4" style={{ color: "#94A3B8" }} />}
         </div>
-      ) : (
-        <div className="prose prose-sm prose-invert max-w-none text-sm" style={{ color: "#F0F4F8" }}>
-          <ReactMarkdown
-            components={{
-              strong: ({ children }) => <strong style={{ color: "#E8C97A" }}>{children}</strong>,
-              li: ({ children }) => <li style={{ color: "#F0F4F8", marginBottom: 4 }}>{children}</li>,
-              h1: ({ children }) => <h3 className="font-display font-bold text-base mt-4 mb-2" style={{ color: "#2DD4BF" }}>{children}</h3>,
-              h2: ({ children }) => <h3 className="font-display font-bold text-base mt-4 mb-2" style={{ color: "#2DD4BF" }}>{children}</h3>,
-              h3: ({ children }) => <h4 className="font-display font-bold text-sm mt-3 mb-1" style={{ color: "#2DD4BF" }}>{children}</h4>,
-              p: ({ children }) => <p style={{ color: "#F0F4F8", marginBottom: 8 }}>{children}</p>,
-            }}
-          >
-            {analysis}
-          </ReactMarkdown>
+      </button>
+
+      {expanded && (
+        <div className="mt-4">
+          {loading ? (
+            <div className="space-y-3">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-4 rounded" style={{ background: "#131B22", width: `${90 - i * 10}%` }} />
+              ))}
+            </div>
+          ) : analysis ? (
+            <div className="prose prose-sm prose-invert max-w-none text-sm" style={{ color: "#F0F4F8" }}>
+              <ReactMarkdown
+                components={{
+                  strong: ({ children }) => <strong style={{ color: "#E8C97A" }}>{children}</strong>,
+                  li: ({ children }) => <li style={{ color: "#F0F4F8", marginBottom: 4 }}>{children}</li>,
+                  h1: ({ children }) => <h3 className="font-display font-bold text-base mt-4 mb-2" style={{ color: "#2DD4BF" }}>{children}</h3>,
+                  h2: ({ children }) => <h3 className="font-display font-bold text-base mt-4 mb-2" style={{ color: "#2DD4BF" }}>{children}</h3>,
+                  h3: ({ children }) => <h4 className="font-display font-bold text-sm mt-3 mb-1" style={{ color: "#2DD4BF" }}>{children}</h4>,
+                  p: ({ children }) => <p style={{ color: "#F0F4F8", marginBottom: 8 }}>{children}</p>,
+                }}
+              >
+                {analysis}
+              </ReactMarkdown>
+            </div>
+          ) : null}
         </div>
       )}
     </PremiumCard>
   );
 }
 
+// ─── Card de insight (Renda/Kitnets/Metas) — começa COLAPSADO ────────
+function InsightCard({ icon, title, prompt }: { icon: string; title: string; prompt: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const { text, loading, generate, hasGenerated } = useNavalInsight(title, prompt, false);
+
+  const handleClick = () => {
+    if (!expanded) {
+      setExpanded(true);
+      if (!hasGenerated && !loading) generate();
+    } else {
+      setExpanded(false);
+    }
+  };
+
+  return (
+    <PremiumCard>
+      <button onClick={handleClick} className="w-full flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">{icon}</span>
+          <h4 className="font-display font-bold text-sm" style={{ color: "#F0F4F8" }}>{title}</h4>
+          {!hasGenerated && !loading && <span className="text-[9px] uppercase" style={{ color: "#4A5568" }}>▶</span>}
+        </div>
+        {expanded ? <ChevronUp className="w-3 h-3" style={{ color: "#94A3B8" }} /> : <ChevronDown className="w-3 h-3" style={{ color: "#94A3B8" }} />}
+      </button>
+
+      {expanded && (
+        <div className="mt-3">
+          {loading ? (
+            <div className="space-y-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-3 rounded" style={{ background: "#131B22", width: `${85 - i * 15}%` }} />
+              ))}
+            </div>
+          ) : text ? (
+            <div className="prose prose-sm prose-invert max-w-none text-xs" style={{ color: "#94A3B8" }}>
+              <ReactMarkdown
+                components={{
+                  strong: ({ children }) => <strong style={{ color: "#E8C97A" }}>{children}</strong>,
+                  p: ({ children }) => <p style={{ margin: "2px 0" }}>{children}</p>,
+                }}
+              >
+                {text}
+              </ReactMarkdown>
+            </div>
+          ) : null}
+        </div>
+      )}
+    </PremiumCard>
+  );
+}
+
+// ─── Chat principal — sempre visível ────────────────────────────────
 function ChatSection() {
   const { messages, loading, send } = useNavalChat();
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
-  const { toast } = useToast();
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -91,11 +165,7 @@ function ChatSection() {
         </h3>
       </div>
 
-      <div
-        ref={scrollRef}
-        className="space-y-3 mb-4 max-h-[400px] overflow-y-auto pr-1"
-        style={{ minHeight: 120 }}
-      >
+      <div ref={scrollRef} className="space-y-3 mb-4 max-h-[400px] overflow-y-auto pr-1" style={{ minHeight: 120 }}>
         {messages.length === 0 && (
           <p className="text-xs text-center py-8" style={{ color: "#4A5568" }}>
             Faça uma pergunta sobre suas finanças...
@@ -142,7 +212,6 @@ function ChatSection() {
         )}
       </div>
 
-      {/* Suggestions */}
       <div className="flex flex-wrap gap-2 mb-3">
         {SUGGESTIONS.map((s) => (
           <button
@@ -156,7 +225,6 @@ function ChatSection() {
         ))}
       </div>
 
-      {/* Input */}
       <div className="flex gap-2">
         <Input
           value={input}
@@ -174,56 +242,124 @@ function ChatSection() {
   );
 }
 
-function InsightCard({
-  icon,
-  title,
-  prompt,
-  onDetail,
-}: {
-  icon: string;
-  title: string;
-  prompt: string;
-  onDetail: (q: string) => void;
-}) {
-  const { text, loading } = useNavalInsight(title, prompt);
+// ─── Aba de histórico — busca + limpar ──────────────────────────────
+function HistorySection() {
+  const [search, setSearch] = useState("");
+  const { data = [], isLoading } = useNavalHistory(search);
+  const deleteAll = useDeleteAllChats();
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  const handleClearAll = () => {
+    if (!confirm("Apagar TODO o histórico de perguntas? Não dá pra desfazer.")) return;
+    deleteAll.mutate();
+  };
 
   return (
     <PremiumCard>
-      <div className="flex items-center gap-2 mb-3">
-        <span className="text-lg">{icon}</span>
-        <h4 className="font-display font-bold text-sm" style={{ color: "#F0F4F8" }}>{title}</h4>
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <History className="w-4 h-4" style={{ color: "#2DD4BF" }} />
+          <h3 className="font-display font-bold text-sm" style={{ color: "#F0F4F8" }}>
+            Histórico de perguntas
+          </h3>
+          <span className="text-[10px]" style={{ color: "#4A5568" }}>
+            (auto-limpa após 7 dias)
+          </span>
+        </div>
+        {data.length > 0 && (
+          <button
+            onClick={handleClearAll}
+            disabled={deleteAll.isPending}
+            className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-md transition-colors hover:bg-red-500/10 disabled:opacity-50"
+            style={{ color: "#F43F5E", border: "1px solid rgba(244,63,94,0.3)" }}
+          >
+            <Trash2 className="w-3 h-3" />
+            Limpar tudo
+          </button>
+        )}
       </div>
-      {loading ? (
+
+      <div className="relative mb-4">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "#4A5568" }} />
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar nas perguntas e respostas..."
+          className="pl-10"
+          style={{ background: "#0D1318", borderColor: "#2A3F55", color: "#F0F4F8" }}
+        />
+      </div>
+
+      {isLoading && (
         <div className="space-y-2">
           {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-3 rounded" style={{ background: "#131B22", width: `${85 - i * 15}%` }} />
+            <Skeleton key={i} className="h-16 rounded" style={{ background: "#131B22" }} />
           ))}
         </div>
-      ) : (
-        <div className="prose prose-sm prose-invert max-w-none text-xs mb-3" style={{ color: "#94A3B8" }}>
-          <ReactMarkdown
-            components={{
-              strong: ({ children }) => <strong style={{ color: "#E8C97A" }}>{children}</strong>,
-              p: ({ children }) => <p style={{ margin: "2px 0" }}>{children}</p>,
-            }}
-          >
-            {text}
-          </ReactMarkdown>
-        </div>
       )}
-      <button
-        onClick={() => onDetail(`Detalhe mais sobre: ${title}`)}
-        className="text-xs hover:underline"
-        style={{ color: "#2DD4BF" }}
-      >
-        Detalhar →
-      </button>
+
+      {!isLoading && data.length === 0 && (
+        <p className="text-xs text-center py-12" style={{ color: "#4A5568" }}>
+          {search ? "Nenhuma pergunta encontrada com esse termo." : "Nenhuma pergunta ainda. Faça uma pergunta na aba ao lado."}
+        </p>
+      )}
+
+      <div className="space-y-2">
+        {data.map((c) => {
+          const isOpen = expanded === c.id;
+          return (
+            <div key={c.id} className="rounded-lg overflow-hidden" style={{ border: "1px solid #1A2535" }}>
+              <button
+                onClick={() => setExpanded(isOpen ? null : c.id)}
+                className="w-full text-left p-3 hover:bg-white/[0.02] transition-colors"
+              >
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <span className="text-[10px] uppercase" style={{ color: "#4A5568" }}>
+                    {formatDate(c.asked_at)} · {new Date(c.asked_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                    {c.tools_used && c.tools_used.length > 0 && ` · ${c.tools_used.length} tool(s)`}
+                  </span>
+                  {isOpen ? <ChevronUp className="w-3 h-3" style={{ color: "#94A3B8" }} /> : <ChevronDown className="w-3 h-3" style={{ color: "#94A3B8" }} />}
+                </div>
+                <p className="text-sm" style={{ color: "#F0F4F8" }}>{c.question}</p>
+              </button>
+
+              {isOpen && (
+                <div className="px-3 pb-3 pt-2 border-t" style={{ borderColor: "#1A2535", background: "#080C10" }}>
+                  <div className="prose prose-sm prose-invert max-w-none text-xs mb-2" style={{ color: "#94A3B8" }}>
+                    <ReactMarkdown
+                      components={{
+                        strong: ({ children }) => <strong style={{ color: "#E8C97A" }}>{children}</strong>,
+                        p: ({ children }) => <p style={{ margin: "4px 0" }}>{children}</p>,
+                      }}
+                    >
+                      {c.answer}
+                    </ReactMarkdown>
+                  </div>
+                  {(c.tools_used?.length || c.tokens_in || c.tokens_cache_read) && (
+                    <div className="flex flex-wrap gap-2 text-[10px] mt-2 pt-2 border-t" style={{ borderColor: "#1A2535", color: "#4A5568" }}>
+                      {c.tools_used?.map((t) => (
+                        <span key={t} className="px-2 py-0.5 rounded" style={{ background: "rgba(45,212,191,0.08)", color: "#2DD4BF" }}>{t}</span>
+                      ))}
+                      {c.tokens_in != null && <span>in: {c.tokens_in}</span>}
+                      {c.tokens_cache_read != null && c.tokens_cache_read > 0 && <span>cache: {c.tokens_cache_read}</span>}
+                      {c.tokens_out != null && <span>out: {c.tokens_out}</span>}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </PremiumCard>
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════
+//  PÁGINA PRINCIPAL — Chat | Histórico
+// ═══════════════════════════════════════════════════════════════════
 export default function NavalPage() {
-  const chatRef = useRef<{ send: (msg: string) => void }>(null);
+  const [tab, setTab] = useState<"chat" | "historico">("chat");
 
   return (
     <div className="space-y-6 max-w-[1400px] mx-auto">
@@ -232,37 +368,51 @@ export default function NavalPage() {
         <div className="flex items-center gap-3">
           <span className="text-2xl">🤖</span>
           <h1 className="font-display font-bold text-xl text-wt-text-primary">Naval</h1>
-          <WtBadge variant="cyan">powered by AI · Naval Ravikant inspired</WtBadge>
+          <WtBadge variant="cyan">powered by Claude Haiku 4.5</WtBadge>
         </div>
       </div>
 
-      {/* Analysis */}
-      <AnalysisCard />
+      <Tabs value={tab} onValueChange={(v) => setTab(v as "chat" | "historico")}>
+        <TabsList className="grid w-full grid-cols-2 max-w-md">
+          <TabsTrigger value="chat">
+            <MessageSquare className="w-3.5 h-3.5 mr-2" />
+            Conversar
+          </TabsTrigger>
+          <TabsTrigger value="historico">
+            <History className="w-3.5 h-3.5 mr-2" />
+            Histórico
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Insights */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <InsightCard
-          icon="💰"
-          title="Renda"
-          prompt="Analise a composição de receitas do William. Diversificação, dependência de fontes, tendências. Máximo 3 bullets curtos."
-          onDetail={() => {}}
-        />
-        <InsightCard
-          icon="🏘️"
-          title="Kitnets"
-          prompt="Analise a performance das kitnets: ocupação, vacância, manutenção, rentabilidade. Máximo 3 bullets curtos."
-          onDetail={() => {}}
-        />
-        <InsightCard
-          icon="🎯"
-          title="Metas"
-          prompt="Analise o progresso das metas do William. Distância de cada meta e próximo passo sugerido. Máximo 3 bullets curtos."
-          onDetail={() => {}}
-        />
-      </div>
+        <TabsContent value="chat" className="space-y-4 mt-6">
+          {/* Cards de análise — colapsados, clica pra expandir + carregar */}
+          <AnalysisCard />
 
-      {/* Chat */}
-      <ChatSection />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <InsightCard
+              icon="💰"
+              title="Renda"
+              prompt="Analise a composição de receitas do William. Diversificação, dependência de fontes, tendências. Máximo 3 bullets curtos."
+            />
+            <InsightCard
+              icon="🏘️"
+              title="Kitnets"
+              prompt="Analise a performance das kitnets: ocupação, vacância, manutenção, rentabilidade. Máximo 3 bullets curtos."
+            />
+            <InsightCard
+              icon="🎯"
+              title="Metas"
+              prompt="Analise o progresso das metas do William. Distância de cada meta e próximo passo sugerido. Máximo 3 bullets curtos."
+            />
+          </div>
+
+          <ChatSection />
+        </TabsContent>
+
+        <TabsContent value="historico" className="mt-6">
+          <HistorySection />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

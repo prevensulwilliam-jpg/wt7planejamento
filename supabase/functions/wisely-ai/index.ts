@@ -1140,7 +1140,15 @@ type ClaudeTool = {
   input_schema: Record<string, unknown>;
 };
 type ClaudeToolHandler = (input: Record<string, unknown>) => Promise<string>;
-type ClaudeResult = { ok: true; text: string } | { ok: false; status: number; error: string };
+type ClaudeUsage = {
+  input_tokens?: number;
+  output_tokens?: number;
+  cache_read_input_tokens?: number;
+  cache_creation_input_tokens?: number;
+};
+type ClaudeResult =
+  | { ok: true; text: string; usage?: ClaudeUsage; tools_used?: string[] }
+  | { ok: false; status: number; error: string };
 
 async function callClaudeHaiku(
   systemPrompt: string | { fixed: string; variable: string },
@@ -1220,6 +1228,8 @@ async function callClaudeHaiku(
 
     // Loop tool-use — máximo 5 iterações pra evitar runaway
     const MAX_TOOL_ITER = 5;
+    const toolsUsedSet = new Set<string>();
+    let lastUsage: ClaudeUsage | undefined;
     for (let iter = 0; iter < MAX_TOOL_ITER; iter++) {
       // Prompt caching split em 2 blocos:
       //   1. FIXO (BASE_SYSTEM_PROMPT + naval_memory) → cache_control:ephemeral.
@@ -1271,7 +1281,8 @@ async function callClaudeHaiku(
       const stopReason = data.stop_reason as string | undefined;
 
       // Log tokens pra monitorar cache hit ratio
-      const usage = data.usage ?? {};
+      const usage = (data.usage ?? {}) as ClaudeUsage;
+      lastUsage = usage; // captura pra retornar
       if (iter === 0) {
         const cacheRead = usage.cache_read_input_tokens ?? 0;
         const cacheWrite = usage.cache_creation_input_tokens ?? 0;
@@ -1284,6 +1295,8 @@ async function callClaudeHaiku(
       if (stopReason === "tool_use") {
         const toolUses = content.filter((c: any) => c.type === "tool_use");
         if (toolUses.length === 0) break;
+        // captura nomes pra logging do chat
+        for (const tu of toolUses) toolsUsedSet.add(tu.name);
 
         // Append assistant message com o conteúdo completo (texto + tool_use blocks)
         conversation = [...conversation, { role: "assistant", content }];
@@ -1321,7 +1334,7 @@ async function callClaudeHaiku(
       // Resposta final (end_turn ou stop_sequence)
       const text = content.filter((c: any) => c.type === "text").map((c: any) => c.text).join("");
       console.log(`[wisely-ai] Naval via Anthropic API · Haiku 4.5 ${useTools ? `(tools, ${iter} iter)` : "(sem tools)"} ✓`);
-      return { ok: true, text };
+      return { ok: true, text, usage: lastUsage, tools_used: Array.from(toolsUsedSet) };
     }
 
     return { ok: false, status: 500, error: "Loop de tool-use excedeu MAX_TOOL_ITER" };
@@ -1337,7 +1350,7 @@ async function callClaudeHaiku(
 // Versão do código deployado — log inicial em CADA invocação pra confirmar
 // que o deploy do edge function está atualizado. Bumpa toda vez que mudar
 // a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
-const WISELY_AI_VERSION = "2026.04.28-v10-cycle-rule";
+const WISELY_AI_VERSION = "2026.04.29-v11-history-save";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -1793,6 +1806,40 @@ Gere a leitura estratégica seguindo o formato obrigatório.`;
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    // ── Salva o chat no histórico (não-bloqueante) ──
+    // Tenta extrair user_id do JWT pra associar ao usuário correto. Se falhar,
+    // não trava a resposta — só perde o histórico daquela pergunta.
+    if (supabaseUrl && serviceKey && userQueryText) {
+      try {
+        const authHeader = req.headers.get("authorization") ?? "";
+        const jwt = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+        if (jwt) {
+          const sbAdmin = createClient(supabaseUrl, serviceKey);
+          const { data: userData } = await sbAdmin.auth.getUser(jwt);
+          const userId = userData?.user?.id;
+          if (userId) {
+            const u = result.usage ?? {};
+            // Salva sem await pra não bloquear a resposta
+            sbAdmin.from("naval_chats").insert({
+              user_id: userId,
+              question: userQueryText.slice(0, 5000),
+              answer: result.text.slice(0, 30000),
+              tools_used: result.tools_used && result.tools_used.length > 0 ? result.tools_used : null,
+              tokens_in: u.input_tokens ?? null,
+              tokens_cache_read: u.cache_read_input_tokens ?? null,
+              tokens_cache_write: u.cache_creation_input_tokens ?? null,
+              tokens_out: u.output_tokens ?? null,
+              version: WISELY_AI_VERSION,
+            }).then((r) => {
+              if (r.error) console.warn("[wisely-ai] save chat error:", r.error.message);
+            });
+          }
+        }
+      } catch (e) {
+        console.warn("[wisely-ai] save chat exception:", e instanceof Error ? e.message : String(e));
+      }
     }
 
     return new Response(JSON.stringify({ text: result.text }), {

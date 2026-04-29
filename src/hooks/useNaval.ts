@@ -137,7 +137,7 @@ export function useNavalContext() {
   return { context, isReady };
 }
 
-export function useNavalAnalysis() {
+export function useNavalAnalysis(autoGenerate: boolean = false) {
   const { context, isReady } = useNavalContext();
   const [analysis, setAnalysis] = useState("");
   const [loading, setLoading] = useState(false);
@@ -172,13 +172,16 @@ export function useNavalAnalysis() {
     [context],
   );
 
+  // Só dispara automaticamente se autoGenerate=true. Default false → user
+  // clica pra carregar (economiza tokens da IA + cache hit não é gasto).
   useEffect(() => {
+    if (!autoGenerate) return;
     if (!isReady || !context || generated.current) return;
     generated.current = true;
     void generate();
-  }, [isReady, context, generate]);
+  }, [autoGenerate, isReady, context, generate]);
 
-  return { analysis, loading, generate, context };
+  return { analysis, loading, generate, context, hasGenerated: generated.current };
 }
 
 type ChatMsg = { role: "user" | "assistant"; content: string };
@@ -222,14 +225,14 @@ export function useNavalChat() {
   return { messages, loading, send };
 }
 
-export function useNavalInsight(topic: string, prompt: string) {
+export function useNavalInsight(topic: string, prompt: string, autoGenerate: boolean = false) {
   const { context, isReady } = useNavalContext();
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
   const generated = useRef(false);
 
-  useEffect(() => {
-    if (!isReady || !context || generated.current) return;
+  const generate = useCallback(() => {
+    if (!isReady || !context) return;
     generated.current = true;
     setLoading(true);
     const fullPrompt = `${prompt}\n\nDados: ${JSON.stringify(context, null, 2)}`;
@@ -237,7 +240,13 @@ export function useNavalInsight(topic: string, prompt: string) {
       .then((responseText) => setText(responseText))
       .catch((error) => setText(getErrorMessage(error)))
       .finally(() => setLoading(false));
-  }, [isReady, context, prompt, topic]);
+  }, [isReady, context, prompt]);
 
-  return { text, loading };
+  useEffect(() => {
+    if (!autoGenerate) return;
+    if (!isReady || !context || generated.current) return;
+    generate();
+  }, [autoGenerate, isReady, context, generate]);
+
+  return { text, loading, generate, hasGenerated: generated.current };
 }
