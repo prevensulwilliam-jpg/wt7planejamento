@@ -513,6 +513,30 @@ const NAVAL_TOOLS: ClaudeTool[] = [
     },
   },
   {
+    name: "compare_months",
+    description:
+      "Compara 2 meses lado a lado: totais por bloco DRE (receitas, custeio, obras, " +
+      "casamento, eventos, outros_aportes) + diff por categoria + outliers (categorias " +
+      "que apareceram só em um dos meses) + top variações. " +
+      "USE pra perguntas tipo: 'por que abril foi diferente de março?', 'onde explodi gasto?', " +
+      "'comparar Q1', 'maior diferença entre os 2 meses'. " +
+      "Retorna ranking dos itens que MAIS variaram pra William saber rápido onde olhar.",
+    input_schema: {
+      type: "object",
+      properties: {
+        month_a: {
+          type: "string",
+          description: "Mês A (referência). Formato YYYY-MM.",
+        },
+        month_b: {
+          type: "string",
+          description: "Mês B (comparação). Formato YYYY-MM.",
+        },
+      },
+      required: ["month_a", "month_b"],
+    },
+  },
+  {
     name: "get_history",
     description:
       "Série temporal de uma métrica financeira nos últimos N meses. " +
@@ -859,6 +883,166 @@ function idxToMonth(idx: number): string {
   const y = Math.floor((idx - 1) / 12);
   const mo = ((idx - 1) % 12) + 1;
   return `${y}-${String(mo).padStart(2, "0")}`;
+}
+
+// ─── Handler: compare_months — comparativo detalhado por categoria ───
+// Retorna mapa { bucket::category: total } pra um mês.
+async function getBucketCategoryMap(sb: any, month: string): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+  const add = (key: string, val: number) => {
+    if (val === 0) return;
+    map.set(key, (map.get(key) ?? 0) + val);
+  };
+
+  const [yy, mm] = month.split("-").map(Number);
+  const mStart = `${month}-01`;
+  const lastDay = new Date(yy, mm, 0).getDate();
+  const mEnd = `${yy}-${String(mm).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+  const nextMonth = mm === 12 ? `${yy + 1}-01-01` : `${yy}-${String(mm + 1).padStart(2, "0")}-01`;
+
+  // Receitas
+  const { data: revs } = await sb.from("revenues").select("amount, source, counts_as_income, business_id, description").eq("reference_month", month);
+  const businessesRes = await sb.from("businesses").select("id, code");
+  const prevBiz = (businessesRes.data ?? []).find((b: any) => b.code === "PREVENSUL");
+  for (const r of revs ?? []) {
+    if (r.counts_as_income === false) continue;
+    if (r.source === "aluguel_kitnets") continue;
+    const src = (r.source || "").toLowerCase();
+    const desc = (r.description || "").toLowerCase();
+    const isPrev = r.business_id === prevBiz?.id || src.includes("prevensul") || src.includes("comiss") || src.includes("salar") || src.includes("clt") || desc.includes("prevensul") || desc.includes("salár");
+    add(`receitas::${isPrev ? "renda_ativa_prevensul" : "avulsas"}`, Number(r.amount ?? 0));
+  }
+
+  const { data: kit } = await sb.from("kitnet_entries").select("total_liquid, reconciled").eq("reference_month", month);
+  const aluguelTotal = (kit ?? []).filter((k: any) => k.reconciled).reduce((s: number, k: any) => s + Number(k.total_liquid ?? 0), 0);
+  if (aluguelTotal > 0) add("receitas::aluguel_kitnets", aluguelTotal);
+
+  const { data: paidInst } = await sb.from("other_commission_installments")
+    .select("amount, paid_amount, paid_at, other_commissions(description)")
+    .not("paid_at", "is", null).gte("paid_at", mStart).lte("paid_at", mEnd);
+  for (const p of paidInst ?? []) {
+    const desc = (p as any).other_commissions?.description ?? "comissão";
+    add(`receitas::${desc.slice(0, 35)}`, Number(p.paid_amount ?? p.amount ?? 0));
+  }
+
+  // Despesas (expenses)
+  const { data: exps } = await sb.from("expenses")
+    .select("amount, category, vector, counts_as_investment, description, is_card_payment, nature")
+    .eq("reference_month", month);
+  for (const e of exps ?? []) {
+    if (e.is_card_payment) continue;
+    if ((e.nature ?? "expense") === "transfer") continue;
+    const bloc = classifyExpense(e);
+    const cat = (e.category || "outros").toLowerCase();
+    add(`${bloc}::${cat}`, Number(e.amount ?? 0));
+  }
+
+  // Cartão regime caixa
+  const { data: invs } = await sb.from("card_invoices").select("id, paid_amount, total_amount").gte("paid_at", mStart).lt("paid_at", nextMonth);
+  const ratio: Record<string, number> = {};
+  for (const inv of invs ?? []) {
+    const t = Number(inv.total_amount ?? 0);
+    const p = Number(inv.paid_amount ?? t);
+    ratio[inv.id] = t > 0 ? Math.min(1, p / t) : 1;
+  }
+  const invIds = (invs ?? []).map((i: any) => i.id);
+  if (invIds.length > 0) {
+    const { data: txs } = await sb.from("card_transactions")
+      .select("amount, vector, counts_as_investment, invoice_id, custom_categories(slug)")
+      .in("invoice_id", invIds);
+    for (const t of txs ?? []) {
+      const bloc = classifyCardTx(t);
+      if (bloc === "ignorar") continue;
+      const slug = t.custom_categories?.slug || "outros";
+      const v = Number(t.amount ?? 0) * (ratio[t.invoice_id] ?? 1);
+      add(`${bloc}::cartao__${slug}`, v);
+    }
+  }
+  return map;
+}
+
+async function handleCompareMonths(
+  input: Record<string, unknown>,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<string> {
+  const sb = createClient(supabaseUrl, serviceKey);
+  const monthA = String(input.month_a ?? "");
+  const monthB = String(input.month_b ?? "");
+  if (!/^\d{4}-\d{2}$/.test(monthA) || !/^\d{4}-\d{2}$/.test(monthB)) {
+    return JSON.stringify({ error: "month_a e month_b devem ser YYYY-MM" });
+  }
+
+  const [mapA, mapB] = await Promise.all([
+    getBucketCategoryMap(sb, monthA),
+    getBucketCategoryMap(sb, monthB),
+  ]);
+
+  // Totais por bucket
+  const bucketsA: Record<string, number> = {};
+  const bucketsB: Record<string, number> = {};
+  for (const [key, val] of mapA) {
+    const bucket = key.split("::")[0];
+    bucketsA[bucket] = (bucketsA[bucket] ?? 0) + val;
+  }
+  for (const [key, val] of mapB) {
+    const bucket = key.split("::")[0];
+    bucketsB[bucket] = (bucketsB[bucket] ?? 0) + val;
+  }
+
+  const allBuckets = Array.from(new Set([...Object.keys(bucketsA), ...Object.keys(bucketsB)]));
+  const summary: Record<string, { a: number; b: number; diff: number; pct_change: number | null }> = {};
+  for (const b of allBuckets) {
+    const a = Math.round((bucketsA[b] ?? 0) * 100) / 100;
+    const bv = Math.round((bucketsB[b] ?? 0) * 100) / 100;
+    summary[b] = {
+      a,
+      b: bv,
+      diff: Math.round((bv - a) * 100) / 100,
+      pct_change: a !== 0 ? Math.round(((bv - a) / Math.abs(a)) * 1000) / 10 : null,
+    };
+  }
+
+  // Diff por categoria
+  const allKeys = new Set([...mapA.keys(), ...mapB.keys()]);
+  type CatDiff = { bucket: string; category: string; a: number; b: number; diff: number; pct_change: number | null };
+  const catDiffs: CatDiff[] = [];
+  for (const key of allKeys) {
+    const [bucket, ...rest] = key.split("::");
+    const cat = rest.join("::");
+    const a = Math.round((mapA.get(key) ?? 0) * 100) / 100;
+    const b = Math.round((mapB.get(key) ?? 0) * 100) / 100;
+    const diff = Math.round((b - a) * 100) / 100;
+    if (Math.abs(diff) < 1) continue; // ignora variações <R$ 1
+    catDiffs.push({
+      bucket,
+      category: cat,
+      a,
+      b,
+      diff,
+      pct_change: a !== 0 ? Math.round(((b - a) / Math.abs(a)) * 1000) / 10 : null,
+    });
+  }
+
+  // Top 10 maiores aumentos e quedas (em valor absoluto, ignorando bucket receitas)
+  const despesaDiffs = catDiffs.filter((d) => d.bucket !== "receitas");
+  const topAumentos = [...despesaDiffs].filter((d) => d.diff > 0).sort((a, b) => b.diff - a.diff).slice(0, 10);
+  const topQuedas = [...despesaDiffs].filter((d) => d.diff < 0).sort((a, b) => a.diff - b.diff).slice(0, 10);
+
+  // Outliers: categorias que apareceram em só um dos meses
+  const onlyInA = catDiffs.filter((d) => d.b === 0 && d.a > 100).slice(0, 5);
+  const onlyInB = catDiffs.filter((d) => d.a === 0 && d.b > 100).slice(0, 5);
+
+  return JSON.stringify({
+    month_a: monthA,
+    month_b: monthB,
+    summary_by_bucket: summary,
+    top_increases: topAumentos,
+    top_decreases: topQuedas,
+    only_in_a: onlyInA,
+    only_in_b: onlyInB,
+    note: "diff = month_b - month_a. Positivo = aumento. Categorias com variação <R$1 omitidas.",
+  });
 }
 
 // ─── Handler: histórico de métrica financeira ────────────────────────
@@ -1732,7 +1916,7 @@ async function callClaudeHaiku(
 // Versão do código deployado — log inicial em CADA invocação pra confirmar
 // que o deploy do edge function está atualizado. Bumpa toda vez que mudar
 // a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
-const WISELY_AI_VERSION = "2026.04.29-v14-history-metric";
+const WISELY_AI_VERSION = "2026.04.29-v15-pacote1-completo";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -2169,6 +2353,7 @@ Gere a leitura estratégica seguindo o formato obrigatório.`;
             get_prevensul_cycle: (input) => handleGetPrevensulCycle(input, supabaseUrl, serviceKey),
             get_construction_status: (input) => handleGetConstructionStatus(input, supabaseUrl, serviceKey),
             get_history: (input) => handleGetHistory(input, supabaseUrl, serviceKey),
+            compare_months: (input) => handleCompareMonths(input, supabaseUrl, serviceKey),
           }
         : undefined,
     });
