@@ -1139,7 +1139,7 @@ function PrevensulHistory({ month, userId, onLoadRecord }: { month: string; user
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <button
-                          onClick={() => onLoadRecord(r)}
+                          onClick={() => { onLoadRecord(r); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
                           className="font-medium text-left w-full truncate transition-colors hover:underline"
                           style={{ color: '#F0F4F8', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
                           title={r.client_name}
