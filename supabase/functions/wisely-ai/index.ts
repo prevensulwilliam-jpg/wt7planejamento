@@ -1777,7 +1777,7 @@ async function handleGetConstructionStatus(
 
   // 1) Busca obras
   let q = sb.from("constructions").select(
-    "id, name, status, ownership_pct, partner_name, total_budget, total_units_planned, total_units_built, total_units_rented, estimated_rent_per_unit, start_date, estimated_completion, end_date",
+    "id, name, status, ownership_pct, partner_name, total_budget, land_total_amount, total_units_planned, total_units_built, total_units_rented, estimated_rent_per_unit, start_date, estimated_completion, end_date",
   );
   if (!includeCompleted) q = q.neq("status", "concluida");
   if (filter) q = q.ilike("name", `%${filter}%`);
@@ -1799,6 +1799,7 @@ async function handleGetConstructionStatus(
   for (const c of constructions as any[]) {
     const cota = Number(c.ownership_pct ?? 100);
     const orcadoTotal = Number(c.total_budget ?? 0);
+    const terrenoTotalContratado = Number(c.land_total_amount ?? 0);
 
     // Expenses (lançamentos sem expense_kind = legado, contam como 'obra')
     const { data: exps } = await sb.from("construction_expenses")
@@ -1897,7 +1898,14 @@ async function handleGetConstructionStatus(
       pct_executado: Math.round(pctExecutado * 10) / 10,
       // TERRENO (aquisição) — separado pra não inflar % executado da obra
       terreno: {
+        total_contratado: Math.round(terrenoTotalContratado * 100) / 100,
         total_pago: Math.round(terrenoTotal * 100) / 100,
+        saldo_pendente: terrenoTotalContratado > 0
+          ? Math.round((terrenoTotalContratado - terrenoTotal) * 100) / 100
+          : null,
+        pct_pago: terrenoTotalContratado > 0
+          ? Math.round((terrenoTotal / terrenoTotalContratado) * 100 * 10) / 10
+          : null,
         cota_william_paga: Math.round(terrenoWilliam * 100) / 100,
         cota_socio_paga: Math.round(terrenoPartner * 100) / 100,
         n_pagamentos: terrenoExps.length,
@@ -3321,7 +3329,7 @@ async function callClaudeHaiku(
 // Versão do código deployado — log inicial em CADA invocação pra confirmar
 // que o deploy do edge function está atualizado. Bumpa toda vez que mudar
 // a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
-const WISELY_AI_VERSION = "2026.04.29-v19-obra-vs-terreno";
+const WISELY_AI_VERSION = "2026.04.29-v20-land-total-bar";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {

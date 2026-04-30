@@ -430,6 +430,7 @@ const emptyForm = {
   total_units_planned: "", total_units_built: "", total_units_rented: "",
   estimated_rent_per_unit: "",
   total_budget: "",
+  land_total_amount: "",
   estimated_value_ready: "", ownership_pct: "100",
   partner_name: "", partner_pct: "", notes: "",
   debt_to_partner: "", debt_partner_name: "", debt_target_date: "",
@@ -499,9 +500,17 @@ function ConstructionFormModal({ title, form, setF, assets, onSave, onClose, isP
             <Input type="number" value={form.estimated_rent_per_unit} onChange={e => setF("estimated_rent_per_unit", e.target.value)} style={inputStyle} placeholder="0,00" />
           </div>
 
-          <div>
-            <Label style={{ color: '#A78BFA' }}>Orçamento total da obra (R$)</Label>
-            <Input type="number" value={form.total_budget} onChange={e => setF("total_budget", e.target.value)} style={{ ...inputStyle, borderColor: 'rgba(167,139,250,0.4)', background: 'rgba(167,139,250,0.03)' }} placeholder="ex: 180.000,00" />
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label style={{ color: '#A78BFA' }}>🏗️ Orçamento da obra (R$)</Label>
+              <Input type="number" value={form.total_budget} onChange={e => setF("total_budget", e.target.value)} style={{ ...inputStyle, borderColor: 'rgba(167,139,250,0.4)', background: 'rgba(167,139,250,0.03)' }} placeholder="ex: 180.000,00" />
+              <p className="text-[10px] mt-1" style={{ color: '#64748B' }}>Execução: mão de obra + materiais</p>
+            </div>
+            <div>
+              <Label style={{ color: '#E8C97A' }}>📍 Total contratado terreno (R$)</Label>
+              <Input type="number" value={form.land_total_amount} onChange={e => setF("land_total_amount", e.target.value)} style={{ ...inputStyle, borderColor: 'rgba(232,201,122,0.4)', background: 'rgba(232,201,122,0.03)' }} placeholder="ex: 140.000,00" />
+              <p className="text-[10px] mt-1" style={{ color: '#64748B' }}>Aquisição (entrada + parcelas)</p>
+            </div>
           </div>
 
           <div>
@@ -1391,6 +1400,7 @@ export default function ConstructionsPage() {
       total_units_rented:     parseInt(form.total_units_rented) || 0,
       estimated_rent_per_unit: parseFloat(form.estimated_rent_per_unit) || 0,
       total_budget:           form.total_budget ? parseFloat(form.total_budget) : null,
+      land_total_amount:      form.land_total_amount ? parseFloat(form.land_total_amount) : null,
       estimated_value_ready:  form.estimated_value_ready ? parseFloat(form.estimated_value_ready) : null,
       ownership_pct:          parseFloat(form.ownership_pct) || 100,
       partner_name:           form.partner_name || null,
@@ -1427,6 +1437,7 @@ export default function ConstructionsPage() {
       total_units_rented:     String(c.total_units_rented ?? ""),
       estimated_rent_per_unit: String(c.estimated_rent_per_unit ?? ""),
       total_budget:           String(c.total_budget ?? ""),
+      land_total_amount:      String(c.land_total_amount ?? ""),
       estimated_value_ready:  String(c.estimated_value_ready ?? ""),
       ownership_pct:          String(c.ownership_pct ?? 100),
       partner_name:           c.partner_name ?? "",
@@ -1454,7 +1465,13 @@ export default function ConstructionsPage() {
     const progress = c.total_units_planned ? ((c.total_units_built ?? 0) / c.total_units_planned) * 100 : 0;
     const rentProj = (c.total_units_planned ?? 0) * (c.estimated_rent_per_unit ?? 0) * ((c.ownership_pct ?? 100) / 100);
     const addr     = assetAddress(c.assets);
-    const spentOnCard = (allExpenses as any[]).filter((e: any) => e.construction_id === c.id).reduce((s: number, e: any) => s + (e.total_amount ?? 0), 0);
+
+    // Split obra × terreno (lançamentos sem expense_kind = legado, conta como obra)
+    const expsOfCard = (allExpenses as any[]).filter((e: any) => e.construction_id === c.id);
+    const spentObra    = expsOfCard.filter(e => (e.expense_kind ?? "obra") === "obra")
+                                   .reduce((s: number, e: any) => s + (e.total_amount ?? 0), 0);
+    const spentTerreno = expsOfCard.filter(e => e.expense_kind === "terreno")
+                                   .reduce((s: number, e: any) => s + (e.total_amount ?? 0), 0);
 
     return (
       <PremiumCard className="space-y-3 h-full">
@@ -1520,30 +1537,71 @@ export default function ConstructionsPage() {
           </p>
         )}
 
-        {/* Budget bar */}
+        {/* Caixa OBRA (execução) */}
         {(c.total_budget ?? 0) > 0 && (() => {
           const budget = c.total_budget as number;
-          const spent  = spentOnCard;
+          const spent  = spentObra;
           const pct    = budget > 0 ? Math.min((spent / budget) * 100, 100) : 0;
+          const isOver = spent > budget;
           const remaining = budget - spent;
+          const barColor = isOver ? '#F43F5E' : '#A78BFA';
           return (
-            <div className="rounded-lg px-3 py-2" style={{ background: 'rgba(201,168,76,0.05)', border: '1px solid rgba(201,168,76,0.15)' }}>
+            <div className="rounded-lg px-3 py-2" style={{ background: 'rgba(167,139,250,0.05)', border: '1px solid rgba(167,139,250,0.2)' }}>
               <div className="flex justify-between text-xs mb-1">
-                <span style={{ color: '#64748B' }}>Orçamento total da obra</span>
-                <span className="font-mono" style={{ color: '#E8C97A' }}>{formatCurrency(budget)}</span>
+                <span style={{ color: '#A78BFA', fontWeight: 600 }}>🏗️ Obra</span>
+                <span className="font-mono" style={{ color: '#A78BFA' }}>{formatCurrency(budget)}</span>
               </div>
               {spent > 0 && (
                 <div className="flex justify-between text-xs mb-1.5">
-                  <span style={{ color: '#64748B' }}>Gasto até agora</span>
-                  <span className="font-mono" style={{ color: '#F87171' }}>{formatCurrency(spent)}</span>
+                  <span style={{ color: '#64748B' }}>Gasto execução</span>
+                  <span className="font-mono" style={{ color: isOver ? '#F87171' : '#CBD5E1' }}>{formatCurrency(spent)}</span>
                 </div>
               )}
               <div style={{ height: 4, background: '#1A2535', borderRadius: 99, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${pct}%`, background: '#E8C97A', borderRadius: 99 }} />
+                <div style={{ height: '100%', width: `${pct}%`, background: barColor, borderRadius: 99 }} />
               </div>
               <p className="text-right mt-1" style={{ fontSize: 10, color: '#94A3B8' }}>
-                {pct.toFixed(1)}% consumido{remaining > 0 ? ` · ${formatCurrency(remaining)} restante` : ''}
+                {pct.toFixed(1)}% consumido{remaining > 0 ? ` · ${formatCurrency(remaining)} restante` : isOver ? ` · ⚠ ${formatCurrency(spent - budget)} acima` : ''}
               </p>
+            </div>
+          );
+        })()}
+
+        {/* Caixa TERRENO (aquisição) */}
+        {((c.land_total_amount ?? 0) > 0 || spentTerreno > 0) && (() => {
+          const total = c.land_total_amount as number ?? 0;
+          const paid  = spentTerreno;
+          const pct   = total > 0 ? Math.min((paid / total) * 100, 100) : 0;
+          const remaining = total - paid;
+          return (
+            <div className="rounded-lg px-3 py-2" style={{ background: 'rgba(232,201,122,0.05)', border: '1px solid rgba(232,201,122,0.2)' }}>
+              <div className="flex justify-between text-xs mb-1">
+                <span style={{ color: '#E8C97A', fontWeight: 600 }}>📍 Terreno</span>
+                {total > 0
+                  ? <span className="font-mono" style={{ color: '#E8C97A' }}>{formatCurrency(total)}</span>
+                  : <span className="text-[10px]" style={{ color: '#64748B' }}>(total não cadastrado)</span>}
+              </div>
+              {paid > 0 && (
+                <div className="flex justify-between text-xs mb-1.5">
+                  <span style={{ color: '#64748B' }}>Pago aquisição</span>
+                  <span className="font-mono" style={{ color: '#10B981' }}>{formatCurrency(paid)}</span>
+                </div>
+              )}
+              {total > 0 && (
+                <>
+                  <div style={{ height: 4, background: '#1A2535', borderRadius: 99, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${pct}%`, background: '#E8C97A', borderRadius: 99 }} />
+                  </div>
+                  <p className="text-right mt-1" style={{ fontSize: 10, color: '#94A3B8' }}>
+                    {pct.toFixed(1)}% pago{remaining > 0 ? ` · ${formatCurrency(remaining)} restante` : ' · ✓ quitado'}
+                  </p>
+                </>
+              )}
+              {total === 0 && paid > 0 && (
+                <p className="text-[10px]" style={{ color: '#64748B' }}>
+                  Edite a obra e preencha "Total contratado terreno" pra ver % pago
+                </p>
+              )}
             </div>
           );
         })()}
