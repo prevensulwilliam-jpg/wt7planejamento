@@ -1096,6 +1096,7 @@ export type Database = {
           created_by: string | null
           description: string | null
           expense_date: string | null
+          expense_kind: string
           id: string
           installments_paid: number | null
           installments_total: number | null
@@ -1117,6 +1118,7 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           expense_date?: string | null
+          expense_kind?: string
           id?: string
           installments_paid?: number | null
           installments_total?: number | null
@@ -1138,6 +1140,7 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           expense_date?: string | null
+          expense_kind?: string
           id?: string
           installments_paid?: number | null
           installments_total?: number | null
