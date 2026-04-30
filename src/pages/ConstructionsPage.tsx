@@ -551,8 +551,34 @@ function ConstructionFormModal({ title, form, setF, assets, onSave, onClose, isP
 // ─── Expense Form (nível de módulo — evita remount) ─────────────────────────
 
 function ExpenseForm({ expForm, setExpForm, stages }: { expForm: any; setExpForm: (fn: (f: any) => any) => void; stages: any[] }) {
+  const isTerreno = expForm.expense_kind === "terreno";
   return (
     <div className="space-y-3">
+      {/* Tipo do gasto: obra (execução) × terreno (aquisição) */}
+      <div>
+        <Label style={{ color: '#94A3B8' }}>Tipo do gasto</Label>
+        <div className="grid grid-cols-2 gap-2 mt-1">
+          {[
+            { val: "obra",    lbl: "🏗️ Obra",     hint: "Execução: mão de obra, materiais" },
+            { val: "terreno", lbl: "📍 Terreno", hint: "Aquisição do lote" },
+          ].map(opt => {
+            const active = (expForm.expense_kind ?? "obra") === opt.val;
+            return (
+              <button key={opt.val} type="button"
+                onClick={() => setExpForm(f => ({ ...f, expense_kind: opt.val }))}
+                className="rounded-lg px-3 py-2 text-left transition-colors"
+                style={{
+                  background: active ? "rgba(232,201,122,0.08)" : "#080C10",
+                  border: active ? "1px solid rgba(232,201,122,0.4)" : "1px solid #1A2535",
+                  color: active ? "#E8C97A" : "#94A3B8",
+                }}>
+                <p className="text-xs font-bold">{opt.lbl}</p>
+                <p className="text-[10px] mt-0.5" style={{ color: active ? "#94A3B8" : "#64748B" }}>{opt.hint}</p>
+              </button>
+            );
+          })}
+        </div>
+      </div>
       <div><Label style={{ color: '#94A3B8' }}>Data</Label><DatePicker value={expForm.expense_date} onChange={v => setExpForm(f => ({ ...f, expense_date: v }))} /></div>
       <div><Label style={{ color: '#94A3B8' }}>Descrição</Label><Input value={expForm.description} onChange={e => setExpForm(f => ({ ...f, description: e.target.value }))} style={inputStyle} /></div>
       <div className="grid grid-cols-2 gap-3">
@@ -614,10 +640,11 @@ const emptyExpForm = {
   description: "", category: "", total_amount: "", paid_by: "william",
   payment_type: "avista", installments_total: "", installments_paid: "",
   next_due_date: "", expense_date: "", stage_id: "",
+  expense_kind: "obra",
 };
 
 function DespesasView({ construction, onClose }: { construction: any; onClose: () => void }) {
-  const { data: expenses = [] } = useConstructionExpenses(construction.id);
+  const { data: allExpenses = [] } = useConstructionExpenses(construction.id);
   const { data: stages   = [] } = useConstructionStages(construction.id);
   const createExpense = useCreateConstructionExpense();
   const updateExpense = useUpdateConstructionExpense();
@@ -628,6 +655,12 @@ function DespesasView({ construction, onClose }: { construction: any; onClose: (
   const [expForm, setExpForm]   = useState({ ...emptyExpForm });
   const [sortCol, setSortCol]   = useState<string>("expense_date");
   const [sortDir, setSortDir]   = useState<"desc" | "asc">("desc");
+  const [kindFilter, setKindFilter] = useState<"obra" | "terreno">("obra");
+
+  // Filtra por aba ativa. Lançamentos sem expense_kind (legado) contam como "obra".
+  const expenses = (allExpenses as any[]).filter((e: any) => (e.expense_kind ?? "obra") === kindFilter);
+  const obraCount    = (allExpenses as any[]).filter(e => (e.expense_kind ?? "obra") === "obra").length;
+  const terrenoCount = (allExpenses as any[]).filter(e => e.expense_kind === "terreno").length;
 
   const totalBudget = construction.total_budget ?? 0;
   const expKPIs = {
@@ -635,7 +668,8 @@ function DespesasView({ construction, onClose }: { construction: any; onClose: (
     william: expenses.reduce((s: number, e: any) => s + (e.william_amount ?? 0), 0),
     partner: expenses.reduce((s: number, e: any) => s + (e.partner_amount ?? 0), 0),
   };
-  const budgetPct = totalBudget > 0 ? (expKPIs.total / totalBudget) * 100 : null;
+  // % Orçamento só faz sentido na aba Obra (orçamento da construção é da execução).
+  const budgetPct = kindFilter === "obra" && totalBudget > 0 ? (expKPIs.total / totalBudget) * 100 : null;
 
   // mapa stageId → order_index para ordenar por ordem de etapa
   const stageOrder: Record<string, number> = {};
@@ -695,10 +729,11 @@ function DespesasView({ construction, onClose }: { construction: any; onClose: (
         paid_by:            expForm.paid_by,
         payment_type:       expForm.payment_type,
         expense_date:       expForm.expense_date || null,
-        stage_id:           expForm.stage_id || null,
+        stage_id:           expForm.expense_kind === "terreno" ? null : (expForm.stage_id || null),
         installments_total: expForm.payment_type === "parcelado" ? parseInt(expForm.installments_total) || null : null,
         installments_paid:  expForm.payment_type === "parcelado" ? parseInt(expForm.installments_paid) || 0  : null,
         next_due_date:      expForm.next_due_date || null,
+        expense_kind:       expForm.expense_kind || "obra",
       } as any);
       toast({ title: "Despesa registrada!" });
       setAddOpen(false);
@@ -718,6 +753,7 @@ function DespesasView({ construction, onClose }: { construction: any; onClose: (
       next_due_date: e.next_due_date ?? "",
       expense_date: e.expense_date ?? "",
       stage_id: e.stage_id ?? "",
+      expense_kind: e.expense_kind ?? "obra",
     });
     setEditExp(e);
     setAddOpen(false);
@@ -738,10 +774,11 @@ function DespesasView({ construction, onClose }: { construction: any; onClose: (
         paid_by:            expForm.paid_by,
         payment_type:       expForm.payment_type,
         expense_date:       expForm.expense_date || null,
-        stage_id:           expForm.stage_id || null,
+        stage_id:           expForm.expense_kind === "terreno" ? null : (expForm.stage_id || null),
         installments_total: expForm.payment_type === "parcelado" ? parseInt(expForm.installments_total) || null : null,
         installments_paid:  expForm.payment_type === "parcelado" ? parseInt(expForm.installments_paid) || 0  : null,
         next_due_date:      expForm.next_due_date || null,
+        expense_kind:       expForm.expense_kind || "obra",
       });
       toast({ title: "Despesa atualizada!" });
       setEditExp(null);
@@ -815,9 +852,39 @@ function DespesasView({ construction, onClose }: { construction: any; onClose: (
         );
       })()}
 
+      {/* Abas: Obra (execução) × Terreno (aquisição) */}
+      <div style={{ borderBottom: '1px solid #1A2535', display: 'flex', gap: 4 }}>
+        {[
+          { id: "obra",    lbl: "🏗️ Obra",     hint: "Mão de obra, materiais, execução", count: obraCount },
+          { id: "terreno", lbl: "📍 Terreno", hint: "Aquisição do lote, parcelas",        count: terrenoCount },
+        ].map(t => {
+          const active = kindFilter === t.id;
+          return (
+            <button key={t.id} onClick={() => setKindFilter(t.id as "obra" | "terreno")}
+              className="px-4 py-2.5 transition-colors"
+              style={{
+                background: active ? "rgba(232,201,122,0.08)" : "transparent",
+                color: active ? "#E8C97A" : "#64748B",
+                borderBottom: `2px solid ${active ? "#E8C97A" : "transparent"}`,
+                borderRadius: "8px 8px 0 0",
+                fontSize: 13, fontWeight: 600,
+              }}>
+              <div className="flex items-center gap-2">
+                <span>{t.lbl}</span>
+                <span className="text-xs px-1.5 rounded" style={{
+                  background: active ? "rgba(232,201,122,0.15)" : "rgba(100,116,139,0.15)",
+                  color: active ? "#E8C97A" : "#94A3B8",
+                }}>{t.count}</span>
+              </div>
+              <p className="text-[10px] mt-0.5 font-normal" style={{ color: active ? "#94A3B8" : "#4A5568" }}>{t.hint}</p>
+            </button>
+          );
+        })}
+      </div>
+
       {/* KPIs */}
       <div className={`grid gap-3 ${budgetPct !== null ? 'grid-cols-4' : 'grid-cols-3'}`}>
-          <KpiCard label="Total Investido" value={expKPIs.total} color="gold" />
+          <KpiCard label={kindFilter === "terreno" ? "Total em Terreno" : "Total Investido"} value={expKPIs.total} color="gold" />
           <KpiCard label="Parte William"   value={expKPIs.william} color="cyan" />
           <KpiCard label="Parte Sócio"     value={expKPIs.partner} color="green" />
           {budgetPct !== null && (
@@ -828,6 +895,11 @@ function DespesasView({ construction, onClose }: { construction: any; onClose: (
             </div>
           )}
         </div>
+        {kindFilter === "terreno" && terrenoCount === 0 && (
+          <div className="rounded-lg p-3 text-xs" style={{ background: 'rgba(232,201,122,0.04)', border: '1px solid rgba(232,201,122,0.2)', color: '#94A3B8' }}>
+            💡 Aba <span style={{ color: '#E8C97A' }}>Terreno</span> isola pagamentos de aquisição (entrada + cheques + parcelas) das despesas de execução, evitando inflar o "% Orçamento" da obra. Adicione o 1º lançamento clicando em <span style={{ color: '#E8C97A' }}>+ Despesa</span> e marcando <span style={{ color: '#E8C97A' }}>📍 Terreno</span>.
+          </div>
+        )}
 
         {/* Tabela */}
         <PremiumCard className="overflow-hidden">
@@ -915,8 +987,8 @@ function DespesasView({ construction, onClose }: { construction: any; onClose: (
           </Dialog>
         )}
         {!editExp && !addOpen && (
-          <GoldButton onClick={() => setAddOpen(true)}>
-            <Plus className="w-4 h-4" />Nova Despesa
+          <GoldButton onClick={() => { setExpForm({ ...emptyExpForm, expense_kind: kindFilter }); setAddOpen(true); }}>
+            <Plus className="w-4 h-4" />Nova {kindFilter === "terreno" ? "Parcela do Terreno" : "Despesa"}
           </GoldButton>
         )}
     </div>

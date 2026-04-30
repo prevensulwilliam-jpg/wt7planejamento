@@ -675,10 +675,13 @@ const NAVAL_TOOLS: ClaudeTool[] = [
     name: "get_construction_status",
     description:
       "Status real de cada obra (constructions) — orçado vs gasto, % executado, próxima etapa, " +
-      "renda mensal esperada (cota William). USE pra perguntas tipo: 'Como vai a obra X?', " +
-      "'Quanto falta gastar em RWT05?', 'Estou no orçamento?', 'Quanto vai entrar de aluguel quando " +
-      "todas obras estiverem prontas?'. Cruza constructions + construction_expenses (com cota William) " +
-      "+ construction_stages. Filtro opcional pelo nome da obra.",
+      "renda mensal esperada (cota William). Retorno tem 2 blocos: " +
+      "(a) OBRA (execução: gasto_total, pct_executado, stages) — só conta lançamentos expense_kind='obra'. " +
+      "(b) TERRENO (aquisição: bloco 'terreno' com total_pago, cota_william_paga, n_pagamentos) — só conta expense_kind='terreno'. " +
+      "Isso evita inflar '% executado' da obra com pagamento de lote. " +
+      "USE pra perguntas tipo: 'Como vai a obra X?', 'Quanto falta gastar em RWT05?', 'Estou no orçamento?', " +
+      "'Quanto já paguei do terreno?', 'Quando vai entrar aluguel quando obras prontas?'. " +
+      "Cruza constructions + construction_expenses + construction_stages. Filtro opcional pelo nome.",
     input_schema: {
       type: "object",
       properties: {
@@ -1797,15 +1800,28 @@ async function handleGetConstructionStatus(
     const cota = Number(c.ownership_pct ?? 100);
     const orcadoTotal = Number(c.total_budget ?? 0);
 
-    // Expenses
+    // Expenses (lançamentos sem expense_kind = legado, contam como 'obra')
     const { data: exps } = await sb.from("construction_expenses")
-      .select("total_amount, william_amount, partner_amount, expense_date, description, category, stage_id")
+      .select("total_amount, william_amount, partner_amount, expense_date, description, category, stage_id, expense_kind")
       .eq("construction_id", c.id);
-    const gastoTotal = (exps ?? []).reduce((s: number, e: any) => s + Number(e.total_amount ?? 0), 0);
-    const gastoWilliam = (exps ?? []).reduce((s: number, e: any) => s + Number(e.william_amount ?? 0), 0);
+    const allExps = exps ?? [];
+    const obraExps    = allExps.filter((e: any) => (e.expense_kind ?? "obra") === "obra");
+    const terrenoExps = allExps.filter((e: any) => e.expense_kind === "terreno");
+
+    // Obra (execução) — alimenta orçamento/% executado
+    const gastoTotal   = obraExps.reduce((s: number, e: any) => s + Number(e.total_amount ?? 0), 0);
+    const gastoWilliam = obraExps.reduce((s: number, e: any) => s + Number(e.william_amount ?? 0), 0);
     const pctExecutado = orcadoTotal > 0 ? (gastoTotal / orcadoTotal) * 100 : 0;
     const orcadoCotaW = orcadoTotal * (cota / 100);
     const restanteCotaW = Math.max(0, orcadoCotaW - gastoWilliam);
+
+    // Terreno (aquisição) — bloco separado, NÃO infla % executado
+    const terrenoTotal       = terrenoExps.reduce((s: number, e: any) => s + Number(e.total_amount ?? 0), 0);
+    const terrenoWilliam     = terrenoExps.reduce((s: number, e: any) => s + Number(e.william_amount ?? 0), 0);
+    const terrenoPartner     = terrenoExps.reduce((s: number, e: any) => s + Number(e.partner_amount ?? 0), 0);
+    const terrenoLastDate    = terrenoExps.length > 0
+      ? terrenoExps.reduce((d: string, e: any) => (e.expense_date ?? "") > d ? (e.expense_date ?? "") : d, "")
+      : null;
 
     // Stages
     const { data: stages } = await sb.from("construction_stages")
@@ -1813,9 +1829,9 @@ async function handleGetConstructionStatus(
       .eq("construction_id", c.id)
       .order("order_index", { ascending: true });
 
-    // Gasto real por stage (somando expenses com stage_id correspondente)
+    // Gasto real por stage (somando SÓ obra com stage_id — terreno não tem stage)
     const gastoPorStage = new Map<string, { total: number; william: number }>();
-    for (const e of exps ?? []) {
+    for (const e of obraExps) {
       const sid = (e as any).stage_id;
       if (!sid) continue;
       const cur = gastoPorStage.get(sid) ?? { total: 0, william: 0 };
@@ -1872,12 +1888,21 @@ async function handleGetConstructionStatus(
       status: c.status,
       partner: c.partner_name,
       ownership_pct: cota,
+      // OBRA (execução) — orçamento/gasto/% só consideram expense_kind='obra'
       orcado_total: Math.round(orcadoTotal * 100) / 100,
       orcado_cota_william: Math.round(orcadoCotaW * 100) / 100,
       gasto_total: Math.round(gastoTotal * 100) / 100,
       gasto_cota_william: Math.round(gastoWilliam * 100) / 100,
       restante_cota_william: Math.round(restanteCotaW * 100) / 100,
       pct_executado: Math.round(pctExecutado * 10) / 10,
+      // TERRENO (aquisição) — separado pra não inflar % executado da obra
+      terreno: {
+        total_pago: Math.round(terrenoTotal * 100) / 100,
+        cota_william_paga: Math.round(terrenoWilliam * 100) / 100,
+        cota_socio_paga: Math.round(terrenoPartner * 100) / 100,
+        n_pagamentos: terrenoExps.length,
+        last_payment_date: terrenoLastDate || null,
+      },
       total_units_planned: units,
       total_units_built: c.total_units_built,
       estimated_rent_per_unit: Math.round(rentPerUnit * 100) / 100,
@@ -1887,7 +1912,8 @@ async function handleGetConstructionStatus(
       eta: c.estimated_completion,
       meses_decorridos: mesesDecorridos,
       meses_restantes: mesesRestantes,
-      n_expenses: (exps ?? []).length,
+      n_expenses_obra: obraExps.length,
+      n_expenses_terreno: terrenoExps.length,
       stages: stagesOut,
       proxima_etapa: proxima ? { name: proxima.name, budget: proxima.budget_estimated, pct_complete: proxima.pct_complete } : null,
       sinais_alerta: sinais,
@@ -1897,15 +1923,26 @@ async function handleGetConstructionStatus(
   // 3) Sumário geral
   const summary = {
     total_obras: out.length,
+    // OBRA (execução)
     total_orcado_cota_william: Math.round(out.reduce((s, c) => s + c.orcado_cota_william, 0) * 100) / 100,
     total_gasto_cota_william: Math.round(out.reduce((s, c) => s + c.gasto_cota_william, 0) * 100) / 100,
     total_restante_cota_william: Math.round(out.reduce((s, c) => s + c.restante_cota_william, 0) * 100) / 100,
+    // TERRENO (aquisição) — só pagamentos lançados; saldo a pagar pode estar em debts
+    total_terreno_pago_cota_william: Math.round(out.reduce((s, c) => s + (c.terreno?.cota_william_paga ?? 0), 0) * 100) / 100,
+    n_obras_com_pagamento_terreno: out.filter((c) => (c.terreno?.n_pagamentos ?? 0) > 0).length,
     total_units_planned: out.reduce((s, c) => s + (c.total_units_planned ?? 0), 0),
     renda_total_mensal_cota_william_quando_todas_prontas: Math.round(out.reduce((s, c) => s + c.renda_cota_william_mensal, 0) * 100) / 100,
     obras_com_alerta: out.filter((c) => c.sinais_alerta.length > 0).length,
   };
 
-  return JSON.stringify({ summary, constructions: out });
+  return JSON.stringify({
+    summary,
+    constructions: out,
+    note:
+      "OBRA (orcado/gasto/% executado) considera SÓ lançamentos com expense_kind='obra' (mão de obra, materiais, execução). " +
+      "TERRENO (bloco terreno{}) considera lançamentos com expense_kind='terreno' (aquisição, parcelas/cheques do lote). " +
+      "Saldo a pagar do terreno (parcelas pendentes) NÃO está aqui — verifique tabela 'debts' se cadastrada.",
+  });
 }
 
 // Handler: comissão Prevensul do ciclo X (paga dia 20 do mês X+1)
@@ -3284,7 +3321,7 @@ async function callClaudeHaiku(
 // Versão do código deployado — log inicial em CADA invocação pra confirmar
 // que o deploy do edge function está atualizado. Bumpa toda vez que mudar
 // a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
-const WISELY_AI_VERSION = "2026.04.29-v18-tool-only-numbers";
+const WISELY_AI_VERSION = "2026.04.29-v19-obra-vs-terreno";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
