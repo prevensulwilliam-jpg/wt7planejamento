@@ -226,6 +226,7 @@ export type Database = {
           external_id: string | null
           id: string
           kitnet_entry_id: string | null
+          matched_construction_expense_id: string | null
           matched_expense_id: string | null
           matched_revenue_id: string | null
           raw_data: Json | null
@@ -248,6 +249,7 @@ export type Database = {
           external_id?: string | null
           id?: string
           kitnet_entry_id?: string | null
+          matched_construction_expense_id?: string | null
           matched_expense_id?: string | null
           matched_revenue_id?: string | null
           raw_data?: Json | null
@@ -270,6 +272,7 @@ export type Database = {
           external_id?: string | null
           id?: string
           kitnet_entry_id?: string | null
+          matched_construction_expense_id?: string | null
           matched_expense_id?: string | null
           matched_revenue_id?: string | null
           raw_data?: Json | null
@@ -291,6 +294,13 @@ export type Database = {
             columns: ["kitnet_entry_id"]
             isOneToOne: false
             referencedRelation: "kitnet_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bank_transactions_matched_construction_expense_id_fkey"
+            columns: ["matched_construction_expense_id"]
+            isOneToOne: false
+            referencedRelation: "construction_expenses"
             referencedColumns: ["id"]
           },
           {
