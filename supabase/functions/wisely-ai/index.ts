@@ -2931,10 +2931,17 @@ async function handleGetEnergySolarStatus(
   // 2) Energy readings do período (o que William cobra dos inquilinos)
   // Faz 2 queries separadas: readings + kitnets, junta no JS.
   // Evita ambiguidade do PostgREST inline join (pode vir array ou objeto).
-  const { data: readingsRaw } = await sb
+  // Coluna real é consumption_kwh (NÃO kwh_consumed). Se errar nome,
+  // PostgREST retorna 400 silencioso → readings vazio → bug visível só no resultado.
+  const { data: readingsRaw, error: readingsErr } = await sb
     .from("energy_readings")
-    .select("reference_month, amount_to_charge, kwh_consumed, kitnet_id")
+    .select("reference_month, amount_to_charge, consumption_kwh, kitnet_id")
     .gte("reference_month", fromMonth);
+  if (readingsErr) {
+    return JSON.stringify({
+      error: `energy_readings query falhou: ${readingsErr.message}. Verificar schema.`,
+    });
+  }
   const readingsRows = readingsRaw ?? [];
 
   // Mapa kitnet_id → residencial_code
@@ -3021,7 +3028,7 @@ async function handleGetEnergySolarStatus(
     }
     const stats = monthMap.get(month)!;
     stats.cobrado_inquilinos += Number(r.amount_to_charge ?? 0);
-    stats.kwh_consumido_total += Number(r.kwh_consumed ?? 0);
+    stats.kwh_consumido_total += Number(r.consumption_kwh ?? 0);
     stats.n_leituras++;
   }
 
@@ -3477,7 +3484,7 @@ async function callClaudeHaiku(
 // Versão do código deployado — log inicial em CADA invocação pra confirmar
 // que o deploy do edge function está atualizado. Bumpa toda vez que mudar
 // a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
-const WISELY_AI_VERSION = "2026.04.30-v24-energy-join-fix";
+const WISELY_AI_VERSION = "2026.04.30-v25-energy-column-fix";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
