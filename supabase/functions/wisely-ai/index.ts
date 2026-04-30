@@ -2929,12 +2929,35 @@ async function handleGetEnergySolarStatus(
   const invoices = invoicesData ?? [];
 
   // 2) Energy readings do período (o que William cobra dos inquilinos)
-  // Join em kitnets pra pegar residencial_code (já que readings só tem kitnet_id)
-  const { data: readingsData } = await sb
+  // Faz 2 queries separadas: readings + kitnets, junta no JS.
+  // Evita ambiguidade do PostgREST inline join (pode vir array ou objeto).
+  const { data: readingsRaw } = await sb
     .from("energy_readings")
-    .select("reference_month, amount_to_charge, kwh_consumed, kitnet:kitnets(residencial_code, code, tenant_name)")
+    .select("reference_month, amount_to_charge, kwh_consumed, kitnet_id")
     .gte("reference_month", fromMonth);
-  const readings = readingsData ?? [];
+  const readingsRows = readingsRaw ?? [];
+
+  // Mapa kitnet_id → residencial_code
+  const kitnetIds = Array.from(new Set(readingsRows.map((r: any) => r.kitnet_id).filter(Boolean)));
+  let kitnetMap = new Map<string, { residencial_code: string; code: string }>();
+  if (kitnetIds.length > 0) {
+    const { data: kitnetsData } = await sb
+      .from("kitnets")
+      .select("id, residencial_code, code")
+      .in("id", kitnetIds);
+    for (const k of kitnetsData ?? []) {
+      kitnetMap.set((k as any).id, {
+        residencial_code: (k as any).residencial_code,
+        code: (k as any).code,
+      });
+    }
+  }
+
+  // Anota residencial_code em cada reading
+  const readings = readingsRows.map((r: any) => ({
+    ...r,
+    residencial_code: kitnetMap.get(r.kitnet_id)?.residencial_code ?? null,
+  }));
 
   // 3) Agrupa: { residencial_code → { reference_month → {fatura, cobrado, n_leituras, ...} } }
   type MonthStats = {
@@ -2975,7 +2998,7 @@ async function handleGetEnergySolarStatus(
 
   // Soma cobrança dos inquilinos
   for (const r of readings as any[]) {
-    const code = r.kitnet?.residencial_code;
+    const code = r.residencial_code;
     if (!code) continue;
     if (residencialFilter && code !== residencialFilter) continue;
     const month = r.reference_month;
@@ -3454,7 +3477,7 @@ async function callClaudeHaiku(
 // Versão do código deployado — log inicial em CADA invocação pra confirmar
 // que o deploy do edge function está atualizado. Bumpa toda vez que mudar
 // a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
-const WISELY_AI_VERSION = "2026.04.30-v23-energy-financial";
+const WISELY_AI_VERSION = "2026.04.30-v24-energy-join-fix";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
