@@ -28,6 +28,17 @@ Você NÃO é um chatbot. Você é um analista financeiro + estrategista comerci
 🚨 **REGRA #0 — TOOL > MEMÓRIA PRA QUALQUER NÚMERO** 🚨
 Se a pergunta envolve um valor em R$, %, quantidade de unidades, status de obra, saldo, comissão recebida, pipeline a receber, posição de caixa, dívida ou QUALQUER dado que muda no tempo: **VOCÊ DEVE CHAMAR A TOOL**, não citar memória. Memória de números está PROIBIDA — todo número que parecer vir da memória é histórico congelado e provavelmente desatualizado. Veja o **index_tools** na memória para o mapa "pergunta tipo → tool". Se o mapa apontar pra uma tool que ainda não existe, diga: "Esse dado precisa de tool [nome] — ainda não implementada. Não vou estimar."
 
+**EXEMPLOS DE PERGUNTAS QUE EXIGEM TOOL OBRIGATÓRIA (NÃO RESPONDER COM MEMÓRIA):**
+- "Renda Prevensul média Q1/2026?" → CHAME \`get_prevensul_history(n_months=4)\`. NÃO cite "R$ 45.912" ou "R$ 35.912 média comissão" da memória — esses números são histórico congelado.
+- "Quanto recebi de aluguel em [mês]?" → CHAME \`get_kitnets_status(month)\`. NÃO use "R$ 20k/mês" do prompt.
+- "Como vai a obra X?" → CHAME \`get_construction_status(filter)\`. Use filtro NORMALIZADO se preciso (a tool já tolera espaços/case).
+- "Patrimônio hoje?" → CHAME \`get_net_worth_snapshot\`. NÃO some "R$ 4.94M" da memória.
+- "Comissão de [mês]?" → CHAME \`get_prevensul_cycle(cycle_month)\`. NÃO chute.
+
+**ANTES DE RESPONDER: pergunte mentalmente "tem R$ na minha resposta?" → se sim, "veio de tool? se não, PARE e chame a tool".**
+
+**NUNCA escreva "Segundo o contexto que você trouxe" ou "Segundo sua memória" pra justificar um R$. Tool ou nada.**
+
 REGRAS INVIOLÁVEIS (quebrar qualquer uma = resposta inválida):
 1. **Nunca invente vetores de renda** fora da estrutura em \`negocios.md\` (WT7 Holding + T7 Sales + Prevensul empregador). Se surgir algo novo, diga: "isso não está na estrutura — pergunte ao William antes de eu considerar".
 2. **Nunca invente metas ou números.** Meta-fim (R$ 70M / 2041 / R$ 200k mês) e regras invioláveis vêm de \`metas.md\`. **Qualquer número dinâmico (saldo, comissão, kitnet, obra, cartão) vem APENAS de tool — nunca da memória.** Se faltar tool ou dado, peça/avise. NUNCA estime.
@@ -1775,21 +1786,39 @@ async function handleGetConstructionStatus(
   const filter = typeof input.construction_filter === "string" ? input.construction_filter.trim() : null;
   const includeCompleted = input.include_completed === true;
 
-  // 1) Busca obras
+  // 1) Busca obras (sem ilike no DB — filtro robusto no JS depois pra
+  // tolerar nomes com espaços/acentos/case: "RWT05" casa com "Residencial
+  // RWT 05 & Corrêa", "rwt-05", "RWT 05" etc.)
   let q = sb.from("constructions").select(
     "id, name, status, ownership_pct, partner_name, total_budget, land_total_amount, total_units_planned, total_units_built, total_units_rented, estimated_rent_per_unit, start_date, estimated_completion, end_date",
   );
   if (!includeCompleted) q = q.neq("status", "concluida");
-  if (filter) q = q.ilike("name", `%${filter}%`);
 
-  const { data: constructions, error: ec } = await q;
+  const { data: allConstructions, error: ec } = await q;
   if (ec) return JSON.stringify({ error: `constructions query: ${ec.message}` });
 
+  // Normaliza pra comparação: lowercase + remove acentos + remove tudo
+  // que não é letra/número. Tolera "Residencial RWT 05 & Corrêa" vs "RWT05".
+  const normalize = (s: string) =>
+    (s ?? "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "") // diacríticos combinados (NFD divide acentos)
+      .replace(/[^a-z0-9]/g, "");
+  const filterNorm = filter ? normalize(filter) : null;
+
+  const constructions = filterNorm
+    ? (allConstructions ?? []).filter((c: any) => normalize(c.name).includes(filterNorm))
+    : (allConstructions ?? []);
+
   if (!constructions || constructions.length === 0) {
+    const allNames = (allConstructions ?? []).map((c: any) => c.name).slice(0, 10);
     return JSON.stringify({
       constructions: [],
       summary: { total: 0 },
-      note: filter ? `Nenhuma obra encontrada com filtro '${filter}'.` : "Nenhuma obra em andamento.",
+      note: filter
+        ? `Nenhuma obra encontrada com filtro '${filter}' (filtro normalizado: '${filterNorm}'). Obras existentes: ${allNames.join(" | ")}`
+        : "Nenhuma obra em andamento.",
     });
   }
 
@@ -3329,7 +3358,7 @@ async function callClaudeHaiku(
 // Versão do código deployado — log inicial em CADA invocação pra confirmar
 // que o deploy do edge function está atualizado. Bumpa toda vez que mudar
 // a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
-const WISELY_AI_VERSION = "2026.04.29-v20-land-total-bar";
+const WISELY_AI_VERSION = "2026.04.29-v21-tool-strict";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
