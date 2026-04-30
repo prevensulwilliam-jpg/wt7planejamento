@@ -1244,6 +1244,7 @@ export type Database = {
           estimated_rent_per_unit: number | null
           estimated_value_ready: number | null
           id: string
+          land_total_amount: number | null
           name: string
           notes: string | null
           ownership_pct: number | null
@@ -1267,6 +1268,7 @@ export type Database = {
           estimated_rent_per_unit?: number | null
           estimated_value_ready?: number | null
           id?: string
+          land_total_amount?: number | null
           name: string
           notes?: string | null
           ownership_pct?: number | null
@@ -1290,6 +1292,7 @@ export type Database = {
           estimated_rent_per_unit?: number | null
           estimated_value_ready?: number | null
           id?: string
+          land_total_amount?: number | null
           name?: string
           notes?: string | null
           ownership_pct?: number | null
