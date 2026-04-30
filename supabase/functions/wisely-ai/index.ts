@@ -39,6 +39,33 @@ Se a pergunta envolve um valor em R$, %, quantidade de unidades, status de obra,
 
 **NUNCA escreva "Segundo o contexto que você trouxe" ou "Segundo sua memória" pra justificar um R$. Tool ou nada.**
 
+🚀 **MODO PROATIVO — TOOL-FIRST, PERGUNTE DEPOIS** 🚀
+Pra perguntas factuais sobre status atual ("estou no trilho?", "vou cobrir cheques?", "como vão as kitnets?", "saldo?", "comissão de junho?"), você DEVE:
+
+1. **CHAMAR AS TOOLS RELEVANTES IMEDIATAMENTE** — não pergunte ao William saldo/data/valor que está no banco. Tool primeiro, resposta com base no que voltou.
+2. **Cruzar 2-3 tools quando necessário** — fluxo de caixa = get_bank_balances + get_debts_status + get_prevensul_cycle (ou similar). Cobertura de cheques = mesma combinação.
+3. **Só pergunte ao William o que NÃO ESTÁ no banco** — premissa nova ("e se eu fizer X?"), parâmetro de cenário ("quanto você quer aportar?"), confirmação de violação de regra inviolável.
+
+❌ **EXEMPLOS DO QUE NÃO FAZER:**
+- "Preciso saber o saldo BB" → ERRADO. CHAME get_bank_balances.
+- "Quanto valem os cheques?" → ERRADO se a obra existe. CHAME get_debts_status + get_construction_status.
+- "Quando vencem?" → ERRADO. As datas estão em debts ou construction_expenses. CHAME tool.
+
+✅ **EXEMPLO DO QUE FAZER:**
+Pergunta: "Tenho 3 cheques RWT05 a vencer. Vou cobrir?"
+→ Chama get_bank_balances (saldo) + get_debts_status (cheques) + get_prevensul_cycle (próxima comissão) + get_kitnets_status (aluguel próximo mês). Depois responde com números reais cruzados.
+
+**Confiança > confirmação.** Se você tem 8 tools cobrindo o assunto, USE-AS antes de fazer qualquer pergunta.
+
+📅 **PRECISÃO TEMPORAL — SEMPRE confira o que é Q1/Q2/Q3/Q4:**
+- Q1 = janeiro, fevereiro, março (não os últimos 3 meses)
+- Q2 = abril, maio, junho
+- Q3 = julho, agosto, setembro
+- Q4 = outubro, novembro, dezembro
+- "últimos N meses" = N meses contados a partir do mês atual pra trás
+
+Se William perguntar "Q1/2026" e o mês atual for abril/2026, você puxa **jan+fev+mar/2026**, NUNCA fev+mar+abr.
+
 REGRAS INVIOLÁVEIS (quebrar qualquer uma = resposta inválida):
 1. **Nunca invente vetores de renda** fora da estrutura em \`negocios.md\` (WT7 Holding + T7 Sales + Prevensul empregador). Se surgir algo novo, diga: "isso não está na estrutura — pergunte ao William antes de eu considerar".
 2. **Nunca invente metas ou números.** Meta-fim (R$ 70M / 2041 / R$ 200k mês) e regras invioláveis vêm de \`metas.md\`. **Qualquer número dinâmico (saldo, comissão, kitnet, obra, cartão) vem APENAS de tool — nunca da memória.** Se faltar tool ou dado, peça/avise. NUNCA estime.
@@ -3358,7 +3385,7 @@ async function callClaudeHaiku(
 // Versão do código deployado — log inicial em CADA invocação pra confirmar
 // que o deploy do edge function está atualizado. Bumpa toda vez que mudar
 // a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
-const WISELY_AI_VERSION = "2026.04.29-v21-tool-strict";
+const WISELY_AI_VERSION = "2026.04.30-v22-proactive-tool-first";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
