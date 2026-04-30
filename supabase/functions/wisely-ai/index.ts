@@ -939,11 +939,14 @@ const NAVAL_TOOLS: ClaudeTool[] = [
   {
     name: "get_energy_solar_status",
     description:
-      "Status do sistema solar dos residenciais (RWT02 + RWT03 — geração solar abate Celesc). " +
-      "Lê celesc_invoices. Retorna: por residencial e por mês, kWh consumido, kWh abatido pelo solar, " +
-      "valor da fatura, tendência últimos 6 meses, % offset (geração / consumo). " +
-      "USE pra: 'como está a geração solar?', 'quanto economizo com solar?', 'fatura Celesc do RWT02?', " +
-      "'tendência da conta de luz', 'solar está rendendo?'.",
+      "Status FINANCEIRO da Energia Solar (RWT02 + RWT03). MODELO DE NEGÓCIO: " +
+      "William paga a fatura Celesc real e cobra dos inquilinos uma tarifa fixa por kWh consumido. " +
+      "A diferença é LUCRO MENSAL desse vetor. Saldo Solar = cobrado_inquilinos − fatura_celesc. " +
+      "Tabelas: celesc_invoices.amount_paid (custo) + SUM(energy_readings.amount_to_charge) por residencial (receita). " +
+      "Retorna por residencial: saldo mensal R$, fatura, cobrança total, n leituras, histórico mês a mês. " +
+      "USE pra: 'como está a energia solar?', 'quanto a solar deu de lucro este mês?', " +
+      "'saldo solar?', 'fatura Celesc?', 'cobrança dos inquilinos?'. " +
+      "NÃO É análise técnica de geração (kWh) — É análise FINANCEIRA do vetor.",
     input_schema: {
       type: "object",
       properties: {
@@ -2916,80 +2919,146 @@ async function handleGetEnergySolarStatus(
   const fromDate = new Date(today.getFullYear(), today.getMonth() - nMonths + 1, 1);
   const fromMonth = `${fromDate.getFullYear()}-${String(fromDate.getMonth() + 1).padStart(2, "0")}`;
 
-  let q = sb
+  // 1) Faturas Celesc do período (o que William paga)
+  let invQuery = sb
     .from("celesc_invoices")
     .select("residencial_code, reference_month, due_date, kwh_total, invoice_total, solar_kwh_offset, amount_paid, tariff_per_kwh, payment_date")
-    .gte("reference_month", fromMonth)
-    .order("reference_month", { ascending: false });
-  if (residencialFilter) q = q.eq("residencial_code", residencialFilter);
-  const { data } = await q;
-  const rows = data ?? [];
+    .gte("reference_month", fromMonth);
+  if (residencialFilter) invQuery = invQuery.eq("residencial_code", residencialFilter);
+  const { data: invoicesData } = await invQuery;
+  const invoices = invoicesData ?? [];
 
-  const byResidencial = new Map<string, any[]>();
-  for (const r of rows) {
-    const code = r.residencial_code || "?";
-    if (!byResidencial.has(code)) byResidencial.set(code, []);
-    byResidencial.get(code)!.push(r);
-  }
+  // 2) Energy readings do período (o que William cobra dos inquilinos)
+  // Join em kitnets pra pegar residencial_code (já que readings só tem kitnet_id)
+  const { data: readingsData } = await sb
+    .from("energy_readings")
+    .select("reference_month, amount_to_charge, kwh_consumed, kitnet:kitnets(residencial_code, code, tenant_name)")
+    .gte("reference_month", fromMonth);
+  const readings = readingsData ?? [];
 
-  const residenciaisOut = Array.from(byResidencial.entries()).map(([code, invoices]) => {
-    invoices.sort((a, b) => (a.reference_month ?? "").localeCompare(b.reference_month ?? ""));
-    const months = invoices.map((inv: any) => ({
-      reference_month: inv.reference_month,
-      kwh_total: Number(inv.kwh_total ?? 0),
-      solar_kwh_offset: Number(inv.solar_kwh_offset ?? 0),
-      offset_pct:
-        Number(inv.kwh_total ?? 0) > 0
-          ? Math.round((Number(inv.solar_kwh_offset ?? 0) / Number(inv.kwh_total ?? 1)) * 100)
-          : 0,
-      invoice_total: Math.round(Number(inv.invoice_total ?? 0) * 100) / 100,
-      amount_paid: Math.round(Number(inv.amount_paid ?? 0) * 100) / 100,
-      tariff_per_kwh: inv.tariff_per_kwh ? Math.round(Number(inv.tariff_per_kwh) * 10000) / 10000 : null,
+  // 3) Agrupa: { residencial_code → { reference_month → {fatura, cobrado, n_leituras, ...} } }
+  type MonthStats = {
+    reference_month: string;
+    fatura_celesc: number;     // amount_paid (regime caixa) ou invoice_total (regime competência)
+    cobrado_inquilinos: number; // soma amount_to_charge
+    saldo_solar: number;        // cobrado - fatura
+    n_leituras: number;
+    kwh_consumido_total: number;
+    due_date: string | null;
+    payment_date: string | null;
+    kwh_total_celesc: number;
+    solar_kwh_offset: number;
+    tariff_per_kwh: number | null;
+  };
+
+  const byResidencial = new Map<string, Map<string, MonthStats>>();
+
+  // Inicializa pelas faturas
+  for (const inv of invoices) {
+    const code = inv.residencial_code || "?";
+    const month = inv.reference_month;
+    if (!byResidencial.has(code)) byResidencial.set(code, new Map());
+    byResidencial.get(code)!.set(month, {
+      reference_month: month,
+      fatura_celesc: Number(inv.amount_paid ?? inv.invoice_total ?? 0),
+      cobrado_inquilinos: 0,
+      saldo_solar: 0,
+      n_leituras: 0,
+      kwh_consumido_total: 0,
       due_date: inv.due_date,
       payment_date: inv.payment_date,
-    }));
+      kwh_total_celesc: Number(inv.kwh_total ?? 0),
+      solar_kwh_offset: Number(inv.solar_kwh_offset ?? 0),
+      tariff_per_kwh: inv.tariff_per_kwh ? Number(inv.tariff_per_kwh) : null,
+    });
+  }
 
-    const totalConsumo = months.reduce((s, m) => s + m.kwh_total, 0);
-    const totalOffset = months.reduce((s, m) => s + m.solar_kwh_offset, 0);
-    const totalPago = months.reduce((s, m) => s + m.amount_paid, 0);
-    const avgInvoice = months.length ? months.reduce((s, m) => s + m.invoice_total, 0) / months.length : 0;
-    const avgTariff = months.filter((m) => m.tariff_per_kwh).length
-      ? months.filter((m) => m.tariff_per_kwh).reduce((s, m) => s + (m.tariff_per_kwh as number), 0) /
-        months.filter((m) => m.tariff_per_kwh).length
-      : null;
+  // Soma cobrança dos inquilinos
+  for (const r of readings as any[]) {
+    const code = r.kitnet?.residencial_code;
+    if (!code) continue;
+    if (residencialFilter && code !== residencialFilter) continue;
+    const month = r.reference_month;
+    if (!byResidencial.has(code)) byResidencial.set(code, new Map());
+    const monthMap = byResidencial.get(code)!;
+    if (!monthMap.has(month)) {
+      monthMap.set(month, {
+        reference_month: month,
+        fatura_celesc: 0,
+        cobrado_inquilinos: 0,
+        saldo_solar: 0,
+        n_leituras: 0,
+        kwh_consumido_total: 0,
+        due_date: null,
+        payment_date: null,
+        kwh_total_celesc: 0,
+        solar_kwh_offset: 0,
+        tariff_per_kwh: null,
+      });
+    }
+    const stats = monthMap.get(month)!;
+    stats.cobrado_inquilinos += Number(r.amount_to_charge ?? 0);
+    stats.kwh_consumido_total += Number(r.kwh_consumed ?? 0);
+    stats.n_leituras++;
+  }
 
-    const economiaEstimada = avgTariff ? totalOffset * avgTariff : null;
+  // Calcula saldo
+  for (const monthMap of byResidencial.values()) {
+    for (const s of monthMap.values()) {
+      s.saldo_solar = s.cobrado_inquilinos - s.fatura_celesc;
+    }
+  }
+
+  // Monta saída
+  const residenciaisOut = Array.from(byResidencial.entries()).map(([code, monthMap]) => {
+    const months = Array.from(monthMap.values()).sort((a, b) =>
+      a.reference_month.localeCompare(b.reference_month),
+    );
+
+    const totalFatura = months.reduce((s, m) => s + m.fatura_celesc, 0);
+    const totalCobrado = months.reduce((s, m) => s + m.cobrado_inquilinos, 0);
+    const totalSaldo = totalCobrado - totalFatura;
+    const avgSaldoMes = months.length ? totalSaldo / months.length : 0;
 
     return {
       residencial: code,
       n_months: months.length,
-      avg_kwh_consumo: months.length ? Math.round(totalConsumo / months.length) : 0,
-      avg_kwh_offset_solar: months.length ? Math.round(totalOffset / months.length) : 0,
-      offset_pct_medio:
-        totalConsumo > 0 ? Math.round((totalOffset / totalConsumo) * 100) : 0,
-      avg_invoice: Math.round(avgInvoice * 100) / 100,
-      total_pago_periodo: Math.round(totalPago * 100) / 100,
-      economia_estimada_solar: economiaEstimada ? Math.round(economiaEstimada * 100) / 100 : null,
-      months,
+      total_fatura_celesc_periodo: Math.round(totalFatura * 100) / 100,
+      total_cobrado_inquilinos_periodo: Math.round(totalCobrado * 100) / 100,
+      saldo_solar_periodo: Math.round(totalSaldo * 100) / 100,
+      saldo_solar_medio_mensal: Math.round(avgSaldoMes * 100) / 100,
+      months: months.map((m) => ({
+        reference_month: m.reference_month,
+        fatura_celesc: Math.round(m.fatura_celesc * 100) / 100,
+        cobrado_inquilinos: Math.round(m.cobrado_inquilinos * 100) / 100,
+        saldo_solar: Math.round(m.saldo_solar * 100) / 100,
+        n_leituras_inquilinos: m.n_leituras,
+        kwh_consumido_inquilinos_total: m.kwh_consumido_total,
+        kwh_total_celesc: m.kwh_total_celesc,
+        solar_kwh_offset: m.solar_kwh_offset,
+        due_date: m.due_date,
+        payment_date: m.payment_date,
+      })),
     };
   });
 
-  const totalEconomia = residenciaisOut.reduce(
-    (s, r) => s + (r.economia_estimada_solar || 0),
-    0,
-  );
+  const totalSaldoGeral = residenciaisOut.reduce((s, r) => s + r.saldo_solar_periodo, 0);
+  const totalSaldoMensalGeral = residenciaisOut.reduce((s, r) => s + r.saldo_solar_medio_mensal, 0);
 
   return JSON.stringify({
     period: { from_month: fromMonth, n_months: nMonths },
     summary: {
       n_residenciais: residenciaisOut.length,
-      total_economia_estimada_solar_periodo: Math.round(totalEconomia * 100) / 100,
+      saldo_solar_periodo_total: Math.round(totalSaldoGeral * 100) / 100,
+      saldo_solar_medio_mensal_total: Math.round(totalSaldoMensalGeral * 100) / 100,
     },
     by_residencial: residenciaisOut,
     note:
-      "economia_estimada_solar = solar_kwh_offset × tariff_per_kwh médio (estimativa). " +
-      "offset_pct = % do consumo abatido pela geração solar. 100% = autossuficiência. " +
-      "Lê celesc_invoices, fonte oficial das contas de luz dos residenciais.",
+      "MODELO DE NEGÓCIO: Energia Solar gera RECEITA via cobrança dos inquilinos. " +
+      "saldo_solar = cobrado_inquilinos - fatura_celesc = LUCRO MENSAL DO VETOR SOLAR. " +
+      "Esse é o KPI primário (não kWh/offset técnico). " +
+      "Tabelas: celesc_invoices.amount_paid (custo) + energy_readings.amount_to_charge somado por residencial (receita). " +
+      "Ex: RWT02 abril/2026 — fatura R$ 190 / cobrado R$ 1.218 / SALDO R$ 1.028 ✓",
   });
 }
 
@@ -3385,7 +3454,7 @@ async function callClaudeHaiku(
 // Versão do código deployado — log inicial em CADA invocação pra confirmar
 // que o deploy do edge function está atualizado. Bumpa toda vez que mudar
 // a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
-const WISELY_AI_VERSION = "2026.04.30-v22-proactive-tool-first";
+const WISELY_AI_VERSION = "2026.04.30-v23-energy-financial";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
