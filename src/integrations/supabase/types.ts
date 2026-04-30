@@ -1096,6 +1096,7 @@ export type Database = {
           created_by: string | null
           description: string | null
           expense_date: string | null
+          expense_kind: string
           id: string
           installments_paid: number | null
           installments_total: number | null
@@ -1117,6 +1118,7 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           expense_date?: string | null
+          expense_kind?: string
           id?: string
           installments_paid?: number | null
           installments_total?: number | null
@@ -1138,6 +1140,7 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           expense_date?: string | null
+          expense_kind?: string
           id?: string
           installments_paid?: number | null
           installments_total?: number | null
@@ -1241,6 +1244,7 @@ export type Database = {
           estimated_rent_per_unit: number | null
           estimated_value_ready: number | null
           id: string
+          land_total_amount: number | null
           name: string
           notes: string | null
           ownership_pct: number | null
@@ -1264,6 +1268,7 @@ export type Database = {
           estimated_rent_per_unit?: number | null
           estimated_value_ready?: number | null
           id?: string
+          land_total_amount?: number | null
           name: string
           notes?: string | null
           ownership_pct?: number | null
@@ -1287,6 +1292,7 @@ export type Database = {
           estimated_rent_per_unit?: number | null
           estimated_value_ready?: number | null
           id?: string
+          land_total_amount?: number | null
           name?: string
           notes?: string | null
           ownership_pct?: number | null
