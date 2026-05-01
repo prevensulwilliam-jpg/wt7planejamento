@@ -227,6 +227,7 @@ export type Database = {
           id: string
           kitnet_entry_id: string | null
           matched_construction_expense_id: string | null
+          matched_debt_installment_id: string | null
           matched_expense_id: string | null
           matched_revenue_id: string | null
           raw_data: Json | null
@@ -250,6 +251,7 @@ export type Database = {
           id?: string
           kitnet_entry_id?: string | null
           matched_construction_expense_id?: string | null
+          matched_debt_installment_id?: string | null
           matched_expense_id?: string | null
           matched_revenue_id?: string | null
           raw_data?: Json | null
@@ -273,6 +275,7 @@ export type Database = {
           id?: string
           kitnet_entry_id?: string | null
           matched_construction_expense_id?: string | null
+          matched_debt_installment_id?: string | null
           matched_expense_id?: string | null
           matched_revenue_id?: string | null
           raw_data?: Json | null
@@ -301,6 +304,13 @@ export type Database = {
             columns: ["matched_construction_expense_id"]
             isOneToOne: false
             referencedRelation: "construction_expenses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bank_transactions_matched_debt_installment_id_fkey"
+            columns: ["matched_debt_installment_id"]
+            isOneToOne: false
+            referencedRelation: "debt_installments"
             referencedColumns: ["id"]
           },
           {
@@ -3178,6 +3188,10 @@ export type Database = {
       }
       naval_alerts_cleanup_old: { Args: never; Returns: undefined }
       naval_chats_cleanup_old: { Args: never; Returns: undefined }
+      recompute_debt_remaining: {
+        Args: { p_debt_id: string }
+        Returns: undefined
+      }
       request_manager_access:
         | { Args: { p_user_id: string }; Returns: undefined }
         | { Args: { p_role?: string; p_user_id: string }; Returns: undefined }
