@@ -1863,7 +1863,7 @@ async function handleGetConstructionStatus(
 
     // Expenses (lançamentos sem expense_kind = legado, contam como 'obra')
     const { data: exps } = await sb.from("construction_expenses")
-      .select("total_amount, william_amount, partner_amount, expense_date, description, category, stage_id, expense_kind, paid_by, excluded_from_partner_balance")
+      .select("total_amount, william_amount, partner_amount, expense_date, description, category, stage_id, expense_kind")
       .eq("construction_id", c.id);
     const allExps = exps ?? [];
     const obraExps    = allExps.filter((e: any) => (e.expense_kind ?? "obra") === "obra");
@@ -1930,46 +1930,9 @@ async function handleGetConstructionStatus(
     const mesesDecorridos = start ? Math.max(0, Math.round((today.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 30))) : null;
     const mesesRestantes = eta ? Math.max(0, Math.round((eta.getTime() - today.getTime()) / (1000 * 60 * 60 * 24 * 30))) : null;
 
-    // ─── Saldo do sócio (Walmir/Jairo) ─────────────────────────────────
-    // Quanto o sócio te deve (positivo) ou você deve a ele (negativo).
-    // Modelo: gastos onde William desembolsou (paid_by IN ['william','ambos'])
-    // criam crédito a receber do sócio (cota dele = partner_amount).
-    // construction_partner_payments abate/aumenta o saldo.
-    let partnerBalanceObrigado = 0;  // total que sócio deveria pagar (cota dele em gastos não-excluídos)
-    for (const e of allExps as any[]) {
-      if (e.excluded_from_partner_balance === true) continue;
-      const paidBy = (e.paid_by ?? "ambos").toLowerCase();
-      // 'william' ou 'ambos' → William adiantou cota do sócio
-      // 'partner' (raro) → ao contrário; conta NEGATIVO (William deve cota dele)
-      if (paidBy === "william" || paidBy === "ambos") {
-        partnerBalanceObrigado += Number(e.partner_amount ?? 0);
-      } else if (paidBy === "partner" || paidBy === "socio" || paidBy === "walmir" || paidBy === "jairo") {
-        partnerBalanceObrigado -= Number(e.william_amount ?? 0);
-      }
-    }
-    // Lê pagamentos cruzando entre sócios
-    const { data: partnerPayments } = await sb.from("construction_partner_payments")
-      .select("direction, amount, payment_date, payment_method, notes")
-      .eq("construction_id", c.id)
-      .order("payment_date", { ascending: true });
-    const partnerToWilliam = (partnerPayments ?? []).filter((p: any) => p.direction === "partner_to_william")
-      .reduce((s: number, p: any) => s + Number(p.amount ?? 0), 0);
-    const williamToPartner = (partnerPayments ?? []).filter((p: any) => p.direction === "william_to_partner")
-      .reduce((s: number, p: any) => s + Number(p.amount ?? 0), 0);
-
-    // Saldo final: positivo = sócio te deve, negativo = você deve a ele
-    const partnerBalance = partnerBalanceObrigado - partnerToWilliam + williamToPartner;
-
     // Sinais auto-gerados
     const sinais: string[] = [];
     if (orcadoTotal > 0 && pctExecutado > 100) sinais.push(`⚠ Estouro: gasto ${pctExecutado.toFixed(1)}% do orçamento`);
-    if (Math.abs(partnerBalance) > 5000) {
-      sinais.push(
-        partnerBalance > 0
-          ? `💰 ${c.partner_name ?? "Sócio"} te deve R$ ${partnerBalance.toFixed(0)} — cobrar`
-          : `💸 Você deve R$ ${Math.abs(partnerBalance).toFixed(0)} ao ${c.partner_name ?? "sócio"}`,
-      );
-    }
     if (eta && mesesRestantes != null && mesesRestantes <= 1 && pctExecutado < 90) {
       sinais.push(`⚠ Prazo apertado: ${mesesRestantes} mês(es) até ETA, mas só ${pctExecutado.toFixed(1)}% executado`);
     }
@@ -2021,21 +1984,6 @@ async function handleGetConstructionStatus(
       n_expenses_terreno: terrenoExps.length,
       stages: stagesOut,
       proxima_etapa: proxima ? { name: proxima.name, budget: proxima.budget_estimated, pct_complete: proxima.pct_complete } : null,
-      // SALDO ENTRE SÓCIOS (RWT05 = Walmir, JW7 = Jairo)
-      partner_balance: c.partner_name
-        ? {
-            partner_name: c.partner_name,
-            obrigado_socio_pelos_gastos: Math.round(partnerBalanceObrigado * 100) / 100,
-            ja_reembolsado_pelo_socio: Math.round(partnerToWilliam * 100) / 100,
-            adiantado_pra_socio_william: Math.round(williamToPartner * 100) / 100,
-            saldo_a_receber_do_socio: Math.round(partnerBalance * 100) / 100,
-            interpretation: partnerBalance > 0
-              ? `${c.partner_name} te deve R$ ${partnerBalance.toFixed(2)}`
-              : partnerBalance < 0
-                ? `Você deve R$ ${Math.abs(partnerBalance).toFixed(2)} ao ${c.partner_name}`
-                : `Saldo zero com ${c.partner_name}`,
-          }
-        : null,
       sinais_alerta: sinais,
     });
   }
@@ -3566,7 +3514,7 @@ async function callClaudeHaiku(
 // Versão do código deployado — log inicial em CADA invocação pra confirmar
 // que o deploy do edge function está atualizado. Bumpa toda vez que mudar
 // a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
-const WISELY_AI_VERSION = "2026.04.30-v26-partner-balance-clt-renda";
+const WISELY_AI_VERSION = "2026.05.01-v27-rollback-partner-balance";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
