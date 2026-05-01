@@ -39,6 +39,23 @@ Se a pergunta envolve um valor em R$, %, quantidade de unidades, status de obra,
 
 **NUNCA escreva "Segundo o contexto que você trouxe" ou "Segundo sua memória" pra justificar um R$. Tool ou nada.**
 
+📚 **REGRA #-1 — FONTES DA VERDADE (consultar SEMPRE primeiro)** 📚
+
+A memória `fontes_da_verdade` (priority 0) tem o mapa canônico de TODOS os tipos de dado financeiro do sistema → fonte → tabela WT7 → tool Naval. ANTES de qualquer análise, identifique:
+
+1. **Que tipo de dado é a pergunta?** (comissão, salário, aluguel, despesa, kitnet, obra, etc)
+2. **Qual a fonte canônica?** (portal externo / tela interna)
+3. **Qual tabela WT7 reflete essa fonte?**
+4. **Qual tool acessa essa tabela?**
+
+Só DEPOIS de identificar isso → chame a tool.
+
+**SEMPRE cite a fonte na resposta.** Ex: "Pelo portal de comissões..." / "Modelo A kitnets..." / "Saldo Balancete solar..." / "Pipeline em prevensul_billing..."
+
+⚠ **Regra anti-divergência**: se projeção mensal divergir do histórico recente em mais de 5×, PARE. Provavelmente a fonte está dessincronizada (tabela WT7 desatualizada vs portal externo). NÃO construa análise em cima — chame `audit_data_sources` ou avise o usuário.
+
+⚠ **Regra anti-divisão preguiçosa**: NUNCA divida pipeline_total ÷ 12 cegamente. Cada contrato em `prevensul_billing` tem `installment_total` próprio com prazos diferentes (alguns 12, outros 24, 48). Itere contrato a contrato. Se a tool retornar agregado, calcule por contrato individualmente usando `installment_total - installment_current = parcelas restantes`. Cap em 12 quando a janela for 12m.
+
 🚀 **MODO PROATIVO — TOOL-FIRST, PERGUNTE DEPOIS** 🚀
 Pra perguntas factuais sobre status atual ("estou no trilho?", "vou cobrir cheques?", "como vão as kitnets?", "saldo?", "comissão de junho?"), você DEVE:
 
@@ -873,6 +890,88 @@ const NAVAL_TOOLS: ClaudeTool[] = [
       "Lê wedding_installments. " +
       "USE pra: 'como está o casamento?', 'quanto falta pagar do casamento?', 'próxima parcela do casamento?', " +
       "'algum boleto do casamento atrasou?'.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "get_dre_monthly",
+    description:
+      "DRE mensal canônico. Retorna receitas (avulsas + kitnets) e despesas (custeio + obras + casamento + cartão pago) agrupadas por bucket. " +
+      "Replica a lógica de useDRE.ts. " +
+      "USE pra: 'DRE deste mês?', 'P&L?', 'demonstração de resultado?', 'sobra deste mês?'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        month: { type: "string", description: "YYYY-MM. Default: mês atual." },
+      },
+    },
+  },
+  {
+    name: "get_cashflow_forecast",
+    description:
+      "Fluxo de caixa projetado dos próximos N meses. Combina: receitas previstas (CLT, comissões pipeline, aluguéis kitnets), despesas previstas (recurring_bills, debt_installments, obras planejadas, casamento). " +
+      "USE pra: 'plano de caixa próximos meses', 'vou ter saldo?', 'quanto entra/sai em [mês]?', 'fluxo previsto'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        n_months: { type: "number", description: "Meses à frente. Default 6, max 24." },
+        starting_cash: { type: "number", description: "Caixa inicial (default = soma bank_accounts)." },
+      },
+    },
+  },
+  {
+    name: "get_projections",
+    description:
+      "Projeções financeiras 3/6/12/24 meses. Combina histórico (média móvel) + pipeline confirmado + recurring + obras planejadas. " +
+      "USE pra: 'projeção 12 meses?', 'onde estarei em 2 anos?', 'tendência'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        n_months: { type: "number", description: "Default 12. Min 3, max 24." },
+      },
+    },
+  },
+  {
+    name: "get_reconciliation_status",
+    description:
+      "Status de conciliação bancária no mês. Retorna: nº transações pending/matched/ignored, valor não conciliado, top categorias problemáticas. " +
+      "USE pra: 'tenho transações pendentes?', 'quanto falta conciliar?', 'extrato bate com lançamentos?'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        month: { type: "string", description: "YYYY-MM. Default: mês atual." },
+      },
+    },
+  },
+  {
+    name: "get_taxes_status",
+    description:
+      "Status de impostos e obrigações fiscais. Lê tabela `taxes`. Retorna: vencimentos próximos, valor pendente, atrasados. " +
+      "USE pra: 'tem imposto a pagar?', 'IRPF?', 'IPTU?'. " +
+      "ATENÇÃO: tabela pode estar vazia — informa explicitamente.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "get_strategic_plan",
+    description:
+      "Plano estratégico 2026-2028: marcos, obras planejadas, contratos previstos, datas-âncora. " +
+      "Combina: memórias `metas.md` (R$ 70M / 2041, marcos 2027/2030/2035/2041) + `goals` table + obras em construções + pipeline contratos. " +
+      "USE pra: 'plano 2026-28?', 'marcos do casamento?', 'cronograma das obras?', 'estou no trilho?'.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "list_categories",
+    description:
+      "Lista categorias customizadas (`custom_categories`). Útil pra Naval saber o que existe quando classificar. " +
+      "USE pra: 'que categorias tenho?', 'qual categoria certa pra isso?'.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "audit_data_sources",
+    description:
+      "Audita sincronização de dados: detecta dessincronização entre tabelas WT7 e fontes canônicas. " +
+      "Verifica: prevensul_billing (saldo dessincronizado de CSV), bank_accounts (last_updated stale), celesc_invoices (faturas atrasadas), kitnet_entries (mês corrente sem fechamento). " +
+      "USE pra: 'meus dados estão atualizados?', 'tem alguma fonte stale?'. " +
+      "CHAME ANTES de análises grandes pra detectar fundação podre.",
     input_schema: { type: "object", properties: {} },
   },
   {
@@ -2912,6 +3011,593 @@ function formatCurrencyBR(n: number): string {
   return `R$ ${Number(n).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// HANDLERS NOVOS v31 — Cobertura completa do sidebar (DRE, Cashflow,
+// Projeções, Reconciliação, Impostos, Plano Estratégico, Categorias, Audit)
+// ═══════════════════════════════════════════════════════════════════
+
+async function handleGetDREMonthly(
+  input: Record<string, unknown>,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<string> {
+  const sb = createClient(supabaseUrl, serviceKey);
+  const month = (input.month as string) || new Date().toISOString().slice(0, 7);
+  const [yy, mm] = month.split("-").map(Number);
+  const nextMonth = mm === 12 ? `${yy + 1}-01` : `${yy}-${String(mm + 1).padStart(2, "0")}`;
+  const monthStart = `${month}-01`;
+  const nextStart = `${nextMonth}-01`;
+
+  // RECEITAS
+  const [{ data: revs }, { data: kitEntries }] = await Promise.all([
+    sb.from("revenues").select("amount, source, counts_as_income").eq("reference_month", month),
+    sb.from("kitnet_entries").select("total_liquid, reconciled").eq("reference_month", month),
+  ]);
+  const receitaAvulsa = (revs ?? [])
+    .filter((r: any) => r.counts_as_income !== false && r.source !== "aluguel_kitnets")
+    .reduce((s: number, r: any) => s + Number(r.amount), 0);
+  const receitaKitnets = (kitEntries ?? [])
+    .filter((k: any) => k.reconciled)
+    .reduce((s: number, k: any) => s + Number(k.total_liquid ?? 0), 0);
+  const receitaTotal = receitaAvulsa + receitaKitnets;
+
+  // DESPESAS expenses (excluindo card_payment + investimentos)
+  const { data: exps } = await sb
+    .from("expenses")
+    .select("amount, category, counts_as_investment, vector, is_card_payment, nature, description")
+    .eq("reference_month", month);
+
+  let custeio = 0;
+  let obras = 0;
+  let casamento = 0;
+  let outros_aportes = 0;
+  let eventos = 0;
+  for (const e of exps ?? []) {
+    const v = Number((e as any).amount);
+    if ((e as any).is_card_payment) continue;
+    if ((e as any).nature === "transfer") continue;
+    const cat = ((e as any).category || "").toLowerCase();
+    const vec = ((e as any).vector || "").toLowerCase();
+    if (cat.includes("obra") || vec.includes("wt7") || (e as any).counts_as_investment) {
+      if (cat.includes("casamento") || vec.includes("casamento")) casamento += v;
+      else if (cat.includes("evento")) eventos += v;
+      else if (cat.includes("obra") || vec.includes("wt7")) obras += v;
+      else outros_aportes += v;
+    } else {
+      custeio += v;
+    }
+  }
+
+  // CARTÃO regime caixa (faturas pagas no mês)
+  const { data: paidInvs } = await sb
+    .from("card_invoices")
+    .select("id, paid_amount, total_amount")
+    .gte("paid_at", monthStart)
+    .lt("paid_at", nextStart);
+  const paidInvIds = (paidInvs ?? []).map((i: any) => i.id);
+  let custeio_cartao = 0;
+  let invest_cartao = 0;
+  if (paidInvIds.length > 0) {
+    const { data: txs } = await sb
+      .from("card_transactions")
+      .select("amount, counts_as_investment, vector")
+      .in("invoice_id", paidInvIds);
+    for (const t of txs ?? []) {
+      const v = Number((t as any).amount);
+      if ((t as any).counts_as_investment) invest_cartao += v;
+      else custeio_cartao += v;
+    }
+  }
+
+  // CONSTRUCTION expenses do mês (cota William)
+  const { data: cExps } = await sb
+    .from("construction_expenses")
+    .select("william_amount, expense_kind")
+    .gte("expense_date", monthStart)
+    .lt("expense_date", nextStart);
+  const obras_william = (cExps ?? []).reduce((s: number, e: any) => s + Number(e.william_amount ?? 0), 0);
+
+  // CASAMENTO pago no mês
+  const { data: weddPaid } = await sb
+    .from("wedding_installments")
+    .select("amount")
+    .gte("paid_at", monthStart)
+    .lt("paid_at", nextStart);
+  const casamento_pago_mes = (weddPaid ?? []).reduce((s: number, w: any) => s + Number(w.amount ?? 0), 0);
+
+  const custeio_total = custeio + custeio_cartao;
+  const investimento_total = obras + obras_william + invest_cartao + outros_aportes;
+  const sobra_bruta = receitaTotal - custeio_total;
+  const sobra_pct = receitaTotal > 0 ? (sobra_bruta / receitaTotal) * 100 : 0;
+  const investido_pct = receitaTotal > 0 ? (investimento_total / receitaTotal) * 100 : 0;
+
+  return JSON.stringify({
+    month,
+    fonte: "DRE canônico WT7. Modelo A para kitnets. Regime caixa para cartão.",
+    receitas: {
+      total: Math.round(receitaTotal * 100) / 100,
+      avulsa: Math.round(receitaAvulsa * 100) / 100,
+      aluguel_kitnets_modelo_a: Math.round(receitaKitnets * 100) / 100,
+    },
+    despesas: {
+      custeio_total: Math.round(custeio_total * 100) / 100,
+      custeio_expenses: Math.round(custeio * 100) / 100,
+      custeio_cartao_pago: Math.round(custeio_cartao * 100) / 100,
+      obras: Math.round((obras + obras_william) * 100) / 100,
+      casamento: Math.round((casamento + casamento_pago_mes) * 100) / 100,
+      eventos: Math.round(eventos * 100) / 100,
+      outros_aportes: Math.round(outros_aportes * 100) / 100,
+      invest_cartao: Math.round(invest_cartao * 100) / 100,
+    },
+    resultado: {
+      investimento_total: Math.round(investimento_total * 100) / 100,
+      sobra_bruta: Math.round(sobra_bruta * 100) / 100,
+      sobra_pct_potencial: Math.round(sobra_pct * 10) / 10,
+      investido_pct_real: Math.round(investido_pct * 10) / 10,
+      meta_pct: 50,
+      gap_meta_50pct: Math.max(0, Math.round((receitaTotal * 0.5 - investimento_total) * 100) / 100),
+    },
+  });
+}
+
+async function handleGetCashflowForecast(
+  input: Record<string, unknown>,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<string> {
+  const sb = createClient(supabaseUrl, serviceKey);
+  const nMonths = Math.min(Math.max(Number(input.n_months) || 6, 1), 24);
+
+  // Saldo inicial = bank_accounts soma
+  let startingCash = Number(input.starting_cash ?? 0);
+  if (!startingCash) {
+    const { data: banks } = await sb.from("bank_accounts").select("balance");
+    startingCash = (banks ?? []).reduce((s: number, b: any) => s + Number(b.balance ?? 0), 0);
+  }
+
+  const today = new Date();
+  const startIdx = today.getFullYear() * 12 + today.getMonth();
+
+  // Receitas previstas
+  // 1. Recurring bills (categoria receita? não, é despesa) — só despesas
+  // 2. Aluguel kitnets — assume estável (média últimos 3m)
+  const { data: kitHistory } = await sb
+    .from("kitnet_entries")
+    .select("total_liquid, reconciled, reference_month")
+    .eq("reconciled", true);
+  const monthsRecent: Record<string, number> = {};
+  for (const k of kitHistory ?? []) {
+    const m = (k as any).reference_month;
+    monthsRecent[m] = (monthsRecent[m] ?? 0) + Number((k as any).total_liquid ?? 0);
+  }
+  const recentMonths = Object.values(monthsRecent).slice(-3);
+  const aluguelMedia = recentMonths.length > 0 ? recentMonths.reduce((s, v) => s + v, 0) / recentMonths.length : 20000;
+
+  // 3. CLT estimado
+  const { data: clt } = await sb
+    .from("revenues")
+    .select("amount")
+    .eq("source", "salario")
+    .order("received_at", { ascending: false })
+    .limit(3);
+  const cltMedia = (clt ?? []).length > 0
+    ? (clt ?? []).reduce((s: number, r: any) => s + Number(r.amount), 0) / (clt ?? []).length
+    : 10903;
+
+  // 4. Comissões Prevensul futuras (calcula por contrato individual)
+  const { data: pipe } = await sb
+    .from("prevensul_billing")
+    .select("client_name, contract_total, balance_remaining, commission_rate, installment_total, installment_current, closing_date");
+  const commissionByMonth = new Map<string, number>();
+  for (const p of pipe ?? []) {
+    const remaining = Number((p as any).installment_total ?? 0) - Number((p as any).installment_current ?? 0);
+    if (remaining <= 0) continue;
+    const mensal = Number((p as any).contract_total ?? 0) / Number((p as any).installment_total ?? 1);
+    const rate = Number((p as any).commission_rate ?? 0.03);
+    const commPerMonth = mensal * rate;
+    const closing = (p as any).closing_date ? new Date((p as any).closing_date) : today;
+    for (let m = 0; m < remaining; m++) {
+      const dt = new Date(closing.getFullYear(), closing.getMonth() + m + 1, 1); // +1 mês delay
+      const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`;
+      commissionByMonth.set(key, (commissionByMonth.get(key) ?? 0) + commPerMonth);
+    }
+  }
+
+  // Despesas previstas
+  const { data: recurring } = await sb.from("recurring_bills").select("amount, due_day").eq("active", true);
+  const fixoMensal = (recurring ?? []).reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0);
+
+  const { data: debtInsts } = await sb
+    .from("debt_installments")
+    .select("due_date, amount, paid_at")
+    .is("paid_at", null);
+  const debtByMonth = new Map<string, number>();
+  for (const d of debtInsts ?? []) {
+    const dt = new Date((d as any).due_date);
+    const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`;
+    debtByMonth.set(key, (debtByMonth.get(key) ?? 0) + Number((d as any).amount ?? 0));
+  }
+
+  const { data: weddInsts } = await sb
+    .from("wedding_installments")
+    .select("due_date, amount, paid_at")
+    .is("paid_at", null);
+  const weddByMonth = new Map<string, number>();
+  for (const w of weddInsts ?? []) {
+    if (!(w as any).due_date) continue;
+    const dt = new Date((w as any).due_date);
+    const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`;
+    weddByMonth.set(key, (weddByMonth.get(key) ?? 0) + Number((w as any).amount ?? 0));
+  }
+
+  // Monta forecast
+  const forecast: any[] = [];
+  let runningCash = startingCash;
+  for (let i = 0; i < nMonths; i++) {
+    const idx = startIdx + i;
+    const yyM = Math.floor(idx / 12);
+    const mmM = (idx % 12) + 1;
+    const key = `${yyM}-${String(mmM).padStart(2, "0")}`;
+    const comm = commissionByMonth.get(key) ?? 0;
+    const debt = debtByMonth.get(key) ?? 0;
+    const wedd = weddByMonth.get(key) ?? 0;
+    const entradas = aluguelMedia + cltMedia + comm;
+    const saidas = fixoMensal + debt + wedd;
+    const liquido = entradas - saidas;
+    runningCash += liquido;
+    forecast.push({
+      month: key,
+      entradas: {
+        aluguel_kitnets: Math.round(aluguelMedia * 100) / 100,
+        clt: Math.round(cltMedia * 100) / 100,
+        comissao_prevensul_pipeline: Math.round(comm * 100) / 100,
+        total: Math.round(entradas * 100) / 100,
+      },
+      saidas: {
+        recurring_fixo: Math.round(fixoMensal * 100) / 100,
+        debt_installments: Math.round(debt * 100) / 100,
+        casamento: Math.round(wedd * 100) / 100,
+        total: Math.round(saidas * 100) / 100,
+      },
+      liquido_mes: Math.round(liquido * 100) / 100,
+      caixa_acumulado: Math.round(runningCash * 100) / 100,
+    });
+  }
+
+  return JSON.stringify({
+    fonte: "Cashflow forecast: aluguel_média(3m últimos) + CLT_média + comissão pipeline (por contrato) + recurring_bills + debt_installments + wedding pendente",
+    starting_cash: Math.round(startingCash * 100) / 100,
+    n_months: nMonths,
+    forecast,
+    note: "Cartão NÃO incluído no fixo (regime caixa, varia mês a mês). Custeio variável também não.",
+  });
+}
+
+async function handleGetProjections(
+  input: Record<string, unknown>,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<string> {
+  const sb = createClient(supabaseUrl, serviceKey);
+  const nMonths = Math.min(Math.max(Number(input.n_months) || 12, 3), 24);
+
+  // Histórico últimos 6m (revenues + kitnets)
+  const today = new Date();
+  const startIdx = today.getFullYear() * 12 + today.getMonth() - 5;
+  const histMonths: string[] = [];
+  for (let i = 0; i < 6; i++) {
+    const idx = startIdx + i;
+    histMonths.push(`${Math.floor(idx / 12)}-${String((idx % 12) + 1).padStart(2, "0")}`);
+  }
+
+  const [{ data: revs }, { data: kits }] = await Promise.all([
+    sb.from("revenues").select("amount, source, reference_month, counts_as_income").in("reference_month", histMonths),
+    sb.from("kitnet_entries").select("total_liquid, reference_month, reconciled").in("reference_month", histMonths),
+  ]);
+
+  let totalReceitaHist = 0;
+  for (const r of revs ?? []) {
+    if ((r as any).counts_as_income !== false && (r as any).source !== "aluguel_kitnets") {
+      totalReceitaHist += Number((r as any).amount);
+    }
+  }
+  for (const k of kits ?? []) {
+    if ((k as any).reconciled) totalReceitaHist += Number((k as any).total_liquid ?? 0);
+  }
+  const mediaReceitaMensalHist = totalReceitaHist / 6;
+
+  // Custeio histórico (média 6m)
+  const { data: exps } = await sb
+    .from("expenses")
+    .select("amount, counts_as_investment, is_card_payment, nature, reference_month")
+    .in("reference_month", histMonths);
+  let totalCusteioHist = 0;
+  for (const e of exps ?? []) {
+    if ((e as any).is_card_payment) continue;
+    if ((e as any).nature === "transfer") continue;
+    if ((e as any).counts_as_investment) continue;
+    totalCusteioHist += Number((e as any).amount);
+  }
+  const mediaCusteioHist = totalCusteioHist / 6;
+
+  // Projeção linear (sem inflação)
+  const proj: any[] = [];
+  let cumulReceita = 0;
+  let cumulCusteio = 0;
+  for (let i = 1; i <= nMonths; i++) {
+    cumulReceita += mediaReceitaMensalHist;
+    cumulCusteio += mediaCusteioHist;
+    proj.push({
+      mes: i,
+      receita_estimada: Math.round(mediaReceitaMensalHist * 100) / 100,
+      custeio_estimado: Math.round(mediaCusteioHist * 100) / 100,
+      sobra_estimada: Math.round((mediaReceitaMensalHist - mediaCusteioHist) * 100) / 100,
+      acumulado_receita: Math.round(cumulReceita * 100) / 100,
+      acumulado_sobra: Math.round((cumulReceita - cumulCusteio) * 100) / 100,
+    });
+  }
+
+  return JSON.stringify({
+    fonte: "Projeção linear baseada em média 6m de histórico real (revenues + kitnet_entries reconciled - expenses custeio)",
+    n_months: nMonths,
+    historico_base: {
+      meses_analisados: 6,
+      media_receita_mensal: Math.round(mediaReceitaMensalHist * 100) / 100,
+      media_custeio_mensal: Math.round(mediaCusteioHist * 100) / 100,
+      media_sobra_mensal: Math.round((mediaReceitaMensalHist - mediaCusteioHist) * 100) / 100,
+    },
+    projecao: proj,
+    avisos: [
+      "Não considera inflação, novos contratos ou mudanças estruturais.",
+      "Pra cenários mais sofisticados use simulate_scenario.",
+      "Pra projeção de comissão Prevensul use get_cashflow_forecast (cruza pipeline real por contrato).",
+    ],
+  });
+}
+
+async function handleGetReconciliationStatus(
+  input: Record<string, unknown>,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<string> {
+  const sb = createClient(supabaseUrl, serviceKey);
+  const month = (input.month as string) || new Date().toISOString().slice(0, 7);
+  const [yy, mm] = month.split("-").map(Number);
+  const nextMonth = mm === 12 ? `${yy + 1}-01-01` : `${yy}-${String(mm + 1).padStart(2, "0")}-01`;
+  const monthStart = `${month}-01`;
+
+  const { data: txs } = await sb
+    .from("bank_transactions")
+    .select("status, amount, type, category_intent, description")
+    .gte("date", monthStart)
+    .lt("date", nextMonth);
+
+  const byStatus: Record<string, { count: number; total: number }> = {};
+  for (const t of txs ?? []) {
+    const s = (t as any).status || "unknown";
+    if (!byStatus[s]) byStatus[s] = { count: 0, total: 0 };
+    byStatus[s].count++;
+    byStatus[s].total += Number((t as any).amount ?? 0);
+  }
+
+  const pending = (txs ?? []).filter((t: any) => t.status === "pending");
+  const topPendingDescriptions = pending.slice(0, 10).map((t: any) => ({
+    date: t.date,
+    amount: Number(t.amount),
+    type: t.type,
+    description: t.description,
+  }));
+
+  return JSON.stringify({
+    month,
+    fonte: "bank_transactions filtrado por mês",
+    summary: {
+      total_transactions: (txs ?? []).length,
+      by_status: Object.fromEntries(
+        Object.entries(byStatus).map(([k, v]) => [k, { count: v.count, total: Math.round(v.total * 100) / 100 }]),
+      ),
+    },
+    pending_top_10: topPendingDescriptions,
+    note: "Status pending = ainda precisa classificar/conciliar. Acesse /reconciliation pra resolver.",
+  });
+}
+
+async function handleGetTaxesStatus(
+  _input: Record<string, unknown>,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<string> {
+  const sb = createClient(supabaseUrl, serviceKey);
+  const { data, error } = await sb.from("taxes").select("*");
+  if (error) return JSON.stringify({ error: `taxes query failed: ${error.message}` });
+  const rows = data ?? [];
+  if (rows.length === 0) {
+    return JSON.stringify({
+      fonte: "tabela taxes",
+      status: "VAZIA",
+      message: "Nenhum registro de impostos cadastrado. Tela /taxes está pronta mas sem dados. Avise o William que precisa popular pra rastreio.",
+      n_records: 0,
+    });
+  }
+  return JSON.stringify({
+    fonte: "tabela taxes",
+    n_records: rows.length,
+    records: rows,
+  });
+}
+
+async function handleGetStrategicPlan(
+  _input: Record<string, unknown>,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<string> {
+  const sb = createClient(supabaseUrl, serviceKey);
+
+  const [{ data: goals }, { data: cons }, { data: pipe }] = await Promise.all([
+    sb.from("goals").select("*"),
+    sb.from("constructions").select("name, status, estimated_completion, estimated_value_ready, total_units_planned, ownership_pct").neq("status", "concluida"),
+    sb.from("prevensul_billing").select("client_name, balance_remaining, commission_rate").gt("balance_remaining", 0),
+  ]);
+
+  const totalPipelineSaldo = (pipe ?? []).reduce((s: number, p: any) => s + Number(p.balance_remaining ?? 0), 0);
+  const totalComissaoFutura = (pipe ?? []).reduce((s: number, p: any) => s + Number(p.balance_remaining ?? 0) * Number(p.commission_rate ?? 0.03), 0);
+
+  return JSON.stringify({
+    fonte: "memoria/metas.md (R$70M/2041) + goals table + constructions ativas + prevensul_billing pipeline",
+    meta_canonica: {
+      patrimonio_alvo: 70000000,
+      ano_alvo: 2041,
+      idade_alvo: 55,
+      renda_mensal_alvo: 200000,
+      sobra_meta_pct: 50,
+    },
+    marcos_canonicos: [
+      { ano: 2027, descricao: "Casamento + caixa mín R$100k", patrimonio_alvo: 6500000, renda_alvo_mes: 100000 },
+      { ano: 2030, descricao: "Consolidação 41 unidades", patrimonio_alvo: 7750000, renda_alvo_mes: 165000 },
+      { ano: 2035, descricao: "Apto frente-mar Brava", patrimonio_alvo: 15000000, renda_alvo_mes: 200000 },
+      { ano: 2041, descricao: "Destino", patrimonio_alvo: 70000000, renda_alvo_mes: 200000 },
+    ],
+    obras_em_andamento: (cons ?? []).map((c: any) => ({
+      name: c.name,
+      status: c.status,
+      eta: c.estimated_completion,
+      unidades: c.total_units_planned,
+      ownership_pct: c.ownership_pct,
+      valor_pronto_estimado: c.estimated_value_ready,
+    })),
+    pipeline_atual: {
+      total_saldo_clientes: Math.round(totalPipelineSaldo * 100) / 100,
+      total_comissao_futura: Math.round(totalComissaoFutura * 100) / 100,
+      n_contratos_ativos: (pipe ?? []).length,
+    },
+    goals_individuais: goals ?? [],
+  });
+}
+
+async function handleListCategories(
+  _input: Record<string, unknown>,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<string> {
+  const sb = createClient(supabaseUrl, serviceKey);
+  const { data } = await sb.from("custom_categories").select("name, slug, type, counts_as_investment, vector, active").eq("active", true).order("type").order("name");
+  return JSON.stringify({
+    fonte: "custom_categories",
+    n_categories: (data ?? []).length,
+    categories: data ?? [],
+  });
+}
+
+async function handleAuditDataSources(
+  _input: Record<string, unknown>,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<string> {
+  const sb = createClient(supabaseUrl, serviceKey);
+  const today = new Date();
+  const todayStr = today.toISOString().slice(0, 10);
+  const monthStr = today.toISOString().slice(0, 7);
+  const issues: any[] = [];
+
+  // 1. Bancos com last_updated > 7 dias
+  const { data: banks } = await sb.from("bank_accounts").select("bank_name, last_updated, balance");
+  for (const b of banks ?? []) {
+    if (!(b as any).last_updated) {
+      issues.push({ severity: "warning", source: "bank_accounts", item: (b as any).bank_name, problem: "last_updated null" });
+      continue;
+    }
+    const days = Math.floor((today.getTime() - new Date((b as any).last_updated).getTime()) / 86400000);
+    if (days > 7) {
+      issues.push({
+        severity: days > 30 ? "critical" : "warning",
+        source: "bank_accounts",
+        item: (b as any).bank_name,
+        problem: `last_updated há ${days} dias atrás (saldo R$ ${Number((b as any).balance ?? 0).toFixed(2)})`,
+      });
+    }
+  }
+
+  // 2. Celesc invoices: última fatura > 35 dias atrás
+  const { data: celesc } = await sb
+    .from("celesc_invoices")
+    .select("residencial_code, reference_month, due_date")
+    .order("reference_month", { ascending: false })
+    .limit(20);
+  const lastByResi = new Map<string, string>();
+  for (const c of celesc ?? []) {
+    const code = (c as any).residencial_code;
+    if (!lastByResi.has(code)) lastByResi.set(code, (c as any).reference_month);
+  }
+  for (const [code, lastMonth] of lastByResi.entries()) {
+    if (lastMonth < monthStr) {
+      issues.push({
+        severity: "warning",
+        source: "celesc_invoices",
+        item: code,
+        problem: `última fatura ${lastMonth} (mês corrente é ${monthStr})`,
+      });
+    }
+  }
+
+  // 3. Kitnet entries: mês corrente sem fechamento
+  const { data: kitnets } = await sb.from("kitnets").select("id, code, status").eq("status", "occupied");
+  const { data: kitEntries } = await sb.from("kitnet_entries").select("kitnet_id").eq("reference_month", monthStr);
+  const fechouEsteMes = new Set((kitEntries ?? []).map((k: any) => k.kitnet_id));
+  const semFechamento = (kitnets ?? []).filter((k: any) => !fechouEsteMes.has(k.id));
+  if (semFechamento.length > 0) {
+    issues.push({
+      severity: "info",
+      source: "kitnet_entries",
+      item: "Modelo A",
+      problem: `${semFechamento.length} kitnets ocupadas sem fechamento em ${monthStr}: ${semFechamento.map((k: any) => k.code).join(", ")}`,
+    });
+  }
+
+  // 4. Prevensul billing: total saldo agregado
+  const { data: pipe } = await sb.from("prevensul_billing").select("balance_remaining").gt("balance_remaining", 0);
+  const totalPipe = (pipe ?? []).reduce((s: number, p: any) => s + Number(p.balance_remaining ?? 0), 0);
+  issues.push({
+    severity: "info",
+    source: "prevensul_billing",
+    item: "saldo_total",
+    problem: `Saldo total clientes: R$ ${totalPipe.toFixed(2)}. Compare com CSV do portal /commissions/portal — se divergir, importe novo CSV.`,
+  });
+
+  // 5. Bank transactions pending no mês corrente
+  const { data: pendingTxs } = await sb
+    .from("bank_transactions")
+    .select("amount")
+    .eq("status", "pending")
+    .gte("date", `${monthStr}-01`);
+  if ((pendingTxs ?? []).length > 0) {
+    const total = (pendingTxs ?? []).reduce((s: number, t: any) => s + Number(t.amount ?? 0), 0);
+    issues.push({
+      severity: (pendingTxs ?? []).length > 20 ? "warning" : "info",
+      source: "bank_transactions",
+      item: "conciliação",
+      problem: `${(pendingTxs ?? []).length} transações pending no mês (total R$ ${total.toFixed(2)}). Acesse /reconciliation.`,
+    });
+  }
+
+  const counts = {
+    critical: issues.filter((i) => i.severity === "critical").length,
+    warning: issues.filter((i) => i.severity === "warning").length,
+    info: issues.filter((i) => i.severity === "info").length,
+  };
+
+  return JSON.stringify({
+    audit_date: todayStr,
+    summary: counts,
+    issues,
+    recommendation:
+      counts.critical > 0
+        ? "🚨 Há issues críticas — resolver antes de análises grandes."
+        : counts.warning > 0
+          ? "⚠ Há issues warning — revisar quando puder."
+          : "✓ Fontes parecem sincronizadas.",
+  });
+}
+
 // ─── Handler: mark_installment_paid ──────────────────────────────────
 async function handleMarkInstallmentPaid(
   input: Record<string, unknown>,
@@ -3800,7 +4486,7 @@ async function callClaudeHaiku(
 // Versão do código deployado — log inicial em CADA invocação pra confirmar
 // que o deploy do edge function está atualizado. Bumpa toda vez que mudar
 // a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
-const WISELY_AI_VERSION = "2026.05.01-v30-ofx-construction-match";
+const WISELY_AI_VERSION = "2026.05.01-v31-fontes-da-verdade";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -4248,6 +4934,14 @@ Gere a leitura estratégica seguindo o formato obrigatório.`;
             get_wedding_status: (input) => handleGetWeddingStatus(input, supabaseUrl, serviceKey),
             mark_installment_paid: (input) => handleMarkInstallmentPaid(input, supabaseUrl, serviceKey),
             link_bank_tx_to_construction_expense: (input) => handleLinkBankTxToConstructionExpense(input, supabaseUrl, serviceKey),
+            get_dre_monthly: (input) => handleGetDREMonthly(input, supabaseUrl, serviceKey),
+            get_cashflow_forecast: (input) => handleGetCashflowForecast(input, supabaseUrl, serviceKey),
+            get_projections: (input) => handleGetProjections(input, supabaseUrl, serviceKey),
+            get_reconciliation_status: (input) => handleGetReconciliationStatus(input, supabaseUrl, serviceKey),
+            get_taxes_status: (input) => handleGetTaxesStatus(input, supabaseUrl, serviceKey),
+            get_strategic_plan: (input) => handleGetStrategicPlan(input, supabaseUrl, serviceKey),
+            list_categories: (input) => handleListCategories(input, supabaseUrl, serviceKey),
+            audit_data_sources: (input) => handleAuditDataSources(input, supabaseUrl, serviceKey),
             get_recurring_bills: (input) => handleGetRecurringBills(input, supabaseUrl, serviceKey),
             get_other_commissions_status: (input) => handleGetOtherCommissionsStatus(input, supabaseUrl, serviceKey),
             get_energy_solar_status: (input) => handleGetEnergySolarStatus(input, supabaseUrl, serviceKey),
