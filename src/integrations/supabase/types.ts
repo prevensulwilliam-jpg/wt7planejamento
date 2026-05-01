@@ -1364,6 +1364,63 @@ export type Database = {
         }
         Relationships: []
       }
+      debt_installments: {
+        Row: {
+          amount: number
+          bank_tx_id: string | null
+          created_at: string
+          debt_id: string
+          due_date: string
+          id: string
+          notes: string | null
+          paid_amount: number | null
+          paid_at: string | null
+          sequence_number: number
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          bank_tx_id?: string | null
+          created_at?: string
+          debt_id: string
+          due_date: string
+          id?: string
+          notes?: string | null
+          paid_amount?: number | null
+          paid_at?: string | null
+          sequence_number: number
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          bank_tx_id?: string | null
+          created_at?: string
+          debt_id?: string
+          due_date?: string
+          id?: string
+          notes?: string | null
+          paid_amount?: number | null
+          paid_at?: string | null
+          sequence_number?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "debt_installments_bank_tx_id_fkey"
+            columns: ["bank_tx_id"]
+            isOneToOne: false
+            referencedRelation: "bank_transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "debt_installments_debt_id_fkey"
+            columns: ["debt_id"]
+            isOneToOne: false
+            referencedRelation: "debts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       debts: {
         Row: {
           created_at: string | null
