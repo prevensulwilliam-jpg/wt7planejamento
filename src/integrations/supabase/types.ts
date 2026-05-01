@@ -1105,6 +1105,7 @@ export type Database = {
           created_at: string | null
           created_by: string | null
           description: string | null
+          excluded_from_partner_balance: boolean
           expense_date: string | null
           expense_kind: string
           id: string
@@ -1127,6 +1128,7 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           description?: string | null
+          excluded_from_partner_balance?: boolean
           expense_date?: string | null
           expense_kind?: string
           id?: string
@@ -1149,6 +1151,7 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           description?: string | null
+          excluded_from_partner_balance?: boolean
           expense_date?: string | null
           expense_kind?: string
           id?: string
@@ -1185,6 +1188,63 @@ export type Database = {
             columns: ["stage_id"]
             isOneToOne: false
             referencedRelation: "construction_stages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      construction_partner_payments: {
+        Row: {
+          amount: number
+          bank_tx_id: string | null
+          construction_id: string
+          created_at: string
+          created_by: string | null
+          direction: string
+          id: string
+          notes: string | null
+          partner_name: string
+          payment_date: string
+          payment_method: string | null
+        }
+        Insert: {
+          amount: number
+          bank_tx_id?: string | null
+          construction_id: string
+          created_at?: string
+          created_by?: string | null
+          direction: string
+          id?: string
+          notes?: string | null
+          partner_name: string
+          payment_date: string
+          payment_method?: string | null
+        }
+        Update: {
+          amount?: number
+          bank_tx_id?: string | null
+          construction_id?: string
+          created_at?: string
+          created_by?: string | null
+          direction?: string
+          id?: string
+          notes?: string | null
+          partner_name?: string
+          payment_date?: string
+          payment_method?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "construction_partner_payments_bank_tx_id_fkey"
+            columns: ["bank_tx_id"]
+            isOneToOne: false
+            referencedRelation: "bank_transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "construction_partner_payments_construction_id_fkey"
+            columns: ["construction_id"]
+            isOneToOne: false
+            referencedRelation: "constructions"
             referencedColumns: ["id"]
           },
         ]
