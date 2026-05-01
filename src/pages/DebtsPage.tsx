@@ -84,7 +84,7 @@ export default function DebtsPage() {
                     )}
                   </div>
                   {overdue.length > 0 && (
-                    <WtBadge variant="danger">{overdue.length} atrasada{overdue.length > 1 ? "s" : ""}</WtBadge>
+                    <WtBadge variant="red">{overdue.length} atrasada{overdue.length > 1 ? "s" : ""}</WtBadge>
                   )}
                 </div>
 
