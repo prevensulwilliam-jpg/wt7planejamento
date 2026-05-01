@@ -164,13 +164,20 @@ export default function RevenuesPage() {
     reimbursement: { emoji: "💳", label: "Reembolso", color: "#F59E0B" },
     refund: { emoji: "↩️", label: "Estorno", color: "#94A3B8" },
   };
-  const totalRealIncomeFromTable = revenues.filter((r: any) => r.counts_as_income !== false).reduce((s, r) => s + (r.amount ?? 0), 0);
+  // Receita real avulsa: counts_as_income=true E source != 'aluguel_kitnets'
+  // (Modelo A — kitnet_entries é fonte única; revenues source='aluguel_kitnets'
+  // são repassões da Lara que duplicam kitnet_entries reconciled).
+  const dupAluguelKitnets = revenues.filter((r: any) => r.counts_as_income !== false && r.source === "aluguel_kitnets");
+  const totalDupAluguelKitnets = dupAluguelKitnets.reduce((s, r) => s + (r.amount ?? 0), 0);
+  const totalRealIncomeFromTable = revenues
+    .filter((r: any) => r.counts_as_income !== false && r.source !== "aluguel_kitnets")
+    .reduce((s, r) => s + (r.amount ?? 0), 0);
   const totalKitnetRev = kitnetRev?.total ?? 0;
   const kitnetEntriesCount = kitnetRev?.count ?? 0;
   const kitnetGap = kitnetRev?.gap ?? 0;
   const kitnetHasGap = kitnetRev?.hasGap ?? false;
   const kitnetBankLinked = kitnetRev?.totalBankLinked ?? 0;
-  // Receita real total = lançamentos avulsos + aluguéis kitnets do mês (Modelo A: kitnet_entries é fonte única)
+  // Receita real total = avulsas (já filtrado) + kitnet_entries reconciled (Modelo A)
   const totalRealIncome = totalRealIncomeFromTable + totalKitnetRev;
   const totalNeutral = revenues.filter((r: any) => r.counts_as_income === false).reduce((s, r) => s + (r.amount ?? 0), 0);
 
@@ -404,6 +411,23 @@ export default function RevenuesPage() {
                 <span style={{ color: "#F0F4F8", fontWeight: 600 }}>Aluguéis das kitnets vêm da tela /kitnets</span> (Modelo A — fonte única).
                 Este mês: <span className="font-mono" style={{ color: "#2DD4BF" }}>{formatCurrency(totalKitnetRev)}</span> de <span style={{ color: "#F0F4F8" }}>{kitnetEntriesCount} fechamentos conciliados</span> com a Lara (administradora).
                 A tabela abaixo lista apenas receitas <span style={{ color: "#F0F4F8" }}>avulsas</span> (comissões Prevensul, JABPP, NRSX, transferências, etc).
+              </div>
+            </div>
+          )}
+
+          {/* Warning de duplicação aluguel_kitnets em revenues */}
+          {dupAluguelKitnets.length > 0 && (
+            <div className="rounded-xl px-4 py-3 flex items-start gap-3 text-xs"
+              style={{ background: "rgba(244,63,94,0.08)", border: "1px solid rgba(244,63,94,0.3)" }}>
+              <span style={{ color: "#F43F5E" }}>🚨</span>
+              <div className="flex-1 leading-relaxed" style={{ color: "#FCA5A5" }}>
+                <span style={{ fontWeight: 600 }}>Duplicação detectada:</span>{" "}
+                {dupAluguelKitnets.length} receita{dupAluguelKitnets.length > 1 ? "s" : ""} em{" "}
+                <span className="font-mono">revenues source='aluguel_kitnets'</span>{" "}
+                (total <span className="font-mono">{formatCurrency(totalDupAluguelKitnets)}</span>) — duplicam
+                kitnet_entries reconciled. <span style={{ color: "#F0F4F8" }}>Não estão somadas no card Receita Real</span>{" "}
+                pra evitar inflar (alinhado com /hoje). Considere DELETE essas linhas — repassões da administradora
+                já estão refletidas via tela /kitnets.
               </div>
             </div>
           )}
