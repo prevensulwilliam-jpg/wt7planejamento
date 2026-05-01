@@ -762,12 +762,13 @@ const NAVAL_TOOLS: ClaudeTool[] = [
   {
     name: "get_prevensul_history",
     description:
-      "Retorna o HISTÓRICO REAL de comissão Prevensul recebida nos últimos N meses, " +
-      "lendo de revenues com source=comissao_prevensul + business_id=Prevensul. " +
-      "USE SEMPRE pra responder 'quanto vou receber em [mês]', 'tendência de comissão', " +
-      "'média mensal'. O pagamento Prevensul vem em LUMP SUMS irregulares (CREDIFOZ DEPOSITO BLOQ), " +
-      "não em parcelas mensais regulares — alguns meses zeram, outros vêm 2x. NÃO use forecast " +
-      "teórico de get_prevensul_pipeline isoladamente. SEMPRE cruzar com este histórico real.",
+      "Retorna RENDA PREVENSUL REAL (CLT + comissão) recebida nos últimos N meses. " +
+      "Lê revenues com source IN ('salario', 'comissao_prevensul'). " +
+      "Retorna por mês: salary_clt, commission, total — SEMPRE apresente AMBOS, não só comissão. " +
+      "USE pra: 'renda Prevensul de Q1?', 'quanto vou receber em [mês]?', 'tendência', 'média mensal'. " +
+      "Comissão vem em LUMP SUMS irregulares (CREDIFOZ DEPOSITO BLOQ), CLT é fixo R$ 10k. " +
+      "NÃO use forecast teórico de get_prevensul_pipeline isoladamente — sempre cruzar com este histórico real. " +
+      "QUANDO USUÁRIO PERGUNTAR 'renda Prevensul', responda com TOTAL (CLT+comissão), não só comissão.",
     input_schema: {
       type: "object",
       properties: {
@@ -1862,7 +1863,7 @@ async function handleGetConstructionStatus(
 
     // Expenses (lançamentos sem expense_kind = legado, contam como 'obra')
     const { data: exps } = await sb.from("construction_expenses")
-      .select("total_amount, william_amount, partner_amount, expense_date, description, category, stage_id, expense_kind")
+      .select("total_amount, william_amount, partner_amount, expense_date, description, category, stage_id, expense_kind, paid_by, excluded_from_partner_balance")
       .eq("construction_id", c.id);
     const allExps = exps ?? [];
     const obraExps    = allExps.filter((e: any) => (e.expense_kind ?? "obra") === "obra");
@@ -1929,9 +1930,46 @@ async function handleGetConstructionStatus(
     const mesesDecorridos = start ? Math.max(0, Math.round((today.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 30))) : null;
     const mesesRestantes = eta ? Math.max(0, Math.round((eta.getTime() - today.getTime()) / (1000 * 60 * 60 * 24 * 30))) : null;
 
+    // ─── Saldo do sócio (Walmir/Jairo) ─────────────────────────────────
+    // Quanto o sócio te deve (positivo) ou você deve a ele (negativo).
+    // Modelo: gastos onde William desembolsou (paid_by IN ['william','ambos'])
+    // criam crédito a receber do sócio (cota dele = partner_amount).
+    // construction_partner_payments abate/aumenta o saldo.
+    let partnerBalanceObrigado = 0;  // total que sócio deveria pagar (cota dele em gastos não-excluídos)
+    for (const e of allExps as any[]) {
+      if (e.excluded_from_partner_balance === true) continue;
+      const paidBy = (e.paid_by ?? "ambos").toLowerCase();
+      // 'william' ou 'ambos' → William adiantou cota do sócio
+      // 'partner' (raro) → ao contrário; conta NEGATIVO (William deve cota dele)
+      if (paidBy === "william" || paidBy === "ambos") {
+        partnerBalanceObrigado += Number(e.partner_amount ?? 0);
+      } else if (paidBy === "partner" || paidBy === "socio" || paidBy === "walmir" || paidBy === "jairo") {
+        partnerBalanceObrigado -= Number(e.william_amount ?? 0);
+      }
+    }
+    // Lê pagamentos cruzando entre sócios
+    const { data: partnerPayments } = await sb.from("construction_partner_payments")
+      .select("direction, amount, payment_date, payment_method, notes")
+      .eq("construction_id", c.id)
+      .order("payment_date", { ascending: true });
+    const partnerToWilliam = (partnerPayments ?? []).filter((p: any) => p.direction === "partner_to_william")
+      .reduce((s: number, p: any) => s + Number(p.amount ?? 0), 0);
+    const williamToPartner = (partnerPayments ?? []).filter((p: any) => p.direction === "william_to_partner")
+      .reduce((s: number, p: any) => s + Number(p.amount ?? 0), 0);
+
+    // Saldo final: positivo = sócio te deve, negativo = você deve a ele
+    const partnerBalance = partnerBalanceObrigado - partnerToWilliam + williamToPartner;
+
     // Sinais auto-gerados
     const sinais: string[] = [];
     if (orcadoTotal > 0 && pctExecutado > 100) sinais.push(`⚠ Estouro: gasto ${pctExecutado.toFixed(1)}% do orçamento`);
+    if (Math.abs(partnerBalance) > 5000) {
+      sinais.push(
+        partnerBalance > 0
+          ? `💰 ${c.partner_name ?? "Sócio"} te deve R$ ${partnerBalance.toFixed(0)} — cobrar`
+          : `💸 Você deve R$ ${Math.abs(partnerBalance).toFixed(0)} ao ${c.partner_name ?? "sócio"}`,
+      );
+    }
     if (eta && mesesRestantes != null && mesesRestantes <= 1 && pctExecutado < 90) {
       sinais.push(`⚠ Prazo apertado: ${mesesRestantes} mês(es) até ETA, mas só ${pctExecutado.toFixed(1)}% executado`);
     }
@@ -1983,6 +2021,21 @@ async function handleGetConstructionStatus(
       n_expenses_terreno: terrenoExps.length,
       stages: stagesOut,
       proxima_etapa: proxima ? { name: proxima.name, budget: proxima.budget_estimated, pct_complete: proxima.pct_complete } : null,
+      // SALDO ENTRE SÓCIOS (RWT05 = Walmir, JW7 = Jairo)
+      partner_balance: c.partner_name
+        ? {
+            partner_name: c.partner_name,
+            obrigado_socio_pelos_gastos: Math.round(partnerBalanceObrigado * 100) / 100,
+            ja_reembolsado_pelo_socio: Math.round(partnerToWilliam * 100) / 100,
+            adiantado_pra_socio_william: Math.round(williamToPartner * 100) / 100,
+            saldo_a_receber_do_socio: Math.round(partnerBalance * 100) / 100,
+            interpretation: partnerBalance > 0
+              ? `${c.partner_name} te deve R$ ${partnerBalance.toFixed(2)}`
+              : partnerBalance < 0
+                ? `Você deve R$ ${Math.abs(partnerBalance).toFixed(2)} ao ${c.partner_name}`
+                : `Saldo zero com ${c.partner_name}`,
+          }
+        : null,
       sinais_alerta: sinais,
     });
   }
@@ -2097,44 +2150,64 @@ async function handleGetPrevensulHistory(
   const startIdx = curIdx - nMonths + 1;
   const startMonth = idxToMonth(startIdx);
 
+  // Renda Prevensul = CLT salário + comissão. Pega ambos.
   const { data, error } = await sb.from("revenues")
     .select("amount, received_at, source, description, reference_month, business_id")
-    .eq("source", "comissao_prevensul")
+    .in("source", ["comissao_prevensul", "salario"])
     .gte("reference_month", startMonth);
 
   if (error) {
     return JSON.stringify({ error: `revenues query failed: ${error.message}` });
   }
 
-  // Agrupa por reference_month
-  const byMonth = new Map<string, { total: number; deposits: Array<{ date: string; amount: number; description: string }> }>();
+  // Agrupa por reference_month + separa salário × comissão
+  const byMonth = new Map<string, {
+    salary: number;
+    commission: number;
+    total: number;
+    deposits: Array<{ date: string; amount: number; description: string; tipo: string }>;
+  }>();
   for (const r of data ?? []) {
     const month = (r as any).reference_month as string;
     if (!month) continue;
-    const cur = byMonth.get(month) ?? { total: 0, deposits: [] };
-    cur.total += Number((r as any).amount ?? 0);
+    const src = (r as any).source as string;
+    const amt = Number((r as any).amount ?? 0);
+    const cur = byMonth.get(month) ?? { salary: 0, commission: 0, total: 0, deposits: [] };
+    if (src === "salario") cur.salary += amt;
+    else cur.commission += amt;
+    cur.total += amt;
     cur.deposits.push({
       date: (r as any).received_at,
-      amount: Number((r as any).amount ?? 0),
+      amount: amt,
       description: (r as any).description ?? "",
+      tipo: src === "salario" ? "CLT" : "comissao",
     });
     byMonth.set(month, cur);
   }
 
   // Preenche meses sem nenhum recebimento (zeros explícitos)
-  const months: Array<{ month: string; total: number; n_deposits: number; deposits: Array<{ date: string; amount: number; description: string }> }> = [];
+  const months: Array<{
+    month: string;
+    salary_clt: number;
+    commission: number;
+    total: number;
+    n_deposits: number;
+    deposits: Array<{ date: string; amount: number; description: string; tipo: string }>;
+  }> = [];
   for (let i = startIdx; i <= curIdx; i++) {
     const m = idxToMonth(i);
     const entry = byMonth.get(m);
     months.push({
       month: m,
+      salary_clt: entry ? Math.round(entry.salary * 100) / 100 : 0,
+      commission: entry ? Math.round(entry.commission * 100) / 100 : 0,
       total: entry ? Math.round(entry.total * 100) / 100 : 0,
       n_deposits: entry ? entry.deposits.length : 0,
       deposits: entry ? entry.deposits.sort((a, b) => b.amount - a.amount).slice(0, 5) : [],
     });
   }
 
-  // Estatísticas
+  // Estatísticas (no TOTAL = CLT + comissão)
   const totals = months.map((m) => m.total);
   const sum = totals.reduce((s, v) => s + v, 0);
   const avg = totals.length > 0 ? sum / totals.length : 0;
@@ -2150,26 +2223,35 @@ async function handleGetPrevensulHistory(
 
   const variability = avg > 0 ? (max - min) / avg : 0;
 
+  // Breakdowns separados pra clareza
+  const totalSalary = months.reduce((s, m) => s + m.salary_clt, 0);
+  const totalCommission = months.reduce((s, m) => s + m.commission, 0);
+
   return JSON.stringify({
     n_months: months.length,
+    note:
+      "Renda Prevensul = SALÁRIO CLT (R$ 10k fixo, source=salario) + COMISSÃO (3% sobre pagos, source=comissao_prevensul). " +
+      "Sempre apresente AMBOS — não confunda renda total com só comissão.",
     by_month: months,
-    statistics: {
+    statistics_total: {
       total_period: Math.round(sum * 100) / 100,
-      average_monthly: Math.round(avg * 100) / 100,
-      median_monthly: Math.round(median * 100) / 100,
-      min_monthly: Math.round(min * 100) / 100,
-      max_monthly: Math.round(max * 100) / 100,
-      months_with_zero: monthsWithZero,
+      total_salary_clt: Math.round(totalSalary * 100) / 100,
+      total_commission: Math.round(totalCommission * 100) / 100,
+      average_monthly_total: Math.round(avg * 100) / 100,
+      median_monthly_total: Math.round(median * 100) / 100,
+      min_monthly_total: Math.round(min * 100) / 100,
+      max_monthly_total: Math.round(max * 100) / 100,
+      months_with_zero_total: monthsWithZero,
       variability_index: Math.round(variability * 100) / 100,
     },
     interpretation: {
       pattern: monthsWithZero > 0
-        ? "IRREGULAR — alguns meses zeram (lump sums acumulados em outros). NÃO use média como previsão."
+        ? "IRREGULAR — alguns meses zeram comissão (lump sums acumulados em outros). NÃO use média como previsão de comissão."
         : (variability > 1.5
           ? "VOLÁTIL — diferença max/min > 1.5×. Use mediana, não média. Indique range."
           : "ESTÁVEL — receita relativamente uniforme."),
       recommendation: monthsWithZero > 0 || variability > 1.5
-        ? "Pra forecast: indique RANGE [min, max] em vez de valor único. Avise sobre variabilidade."
+        ? "Pra forecast: indique RANGE [min, max] em vez de valor único. Avise sobre variabilidade. CLT é estável, comissão é volátil."
         : "Pode usar a média como projeção razoável.",
     },
   });
@@ -3484,7 +3566,7 @@ async function callClaudeHaiku(
 // Versão do código deployado — log inicial em CADA invocação pra confirmar
 // que o deploy do edge function está atualizado. Bumpa toda vez que mudar
 // a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
-const WISELY_AI_VERSION = "2026.04.30-v25-energy-column-fix";
+const WISELY_AI_VERSION = "2026.04.30-v26-partner-balance-clt-renda";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {

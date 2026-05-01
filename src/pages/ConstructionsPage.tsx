@@ -19,6 +19,7 @@ import {
   useConstructions, useCreateConstruction, useUpdateConstruction, useDeleteConstruction,
   useConstructionExpenses, useCreateConstructionExpense, useUpdateConstructionExpense, useDeleteConstructionExpense,
   useConstructionStages, useCreateStage, useUpdateStage, useDeleteStage,
+  useConstructionPartnerPayments, useCreateConstructionPartnerPayment, useDeleteConstructionPartnerPayment,
 } from "@/hooks/useConstructions";
 import { useAssets } from "@/hooks/useFinances";
 import { supabase } from "@/integrations/supabase/client";
@@ -172,6 +173,174 @@ function StageForm({ form, setForm, onSave, onCancel, isPending }: {
         <GoldButton onClick={onSave} disabled={isPending}>Salvar</GoldButton>
       </div>
     </div>
+  );
+}
+
+// ─── Partner Payment Modal — saldo entre sócios ───────────────────────────────
+
+function PartnerPaymentModal({ construction, onClose }: { construction: any; onClose: () => void }) {
+  const { data: payments = [] } = useConstructionPartnerPayments(construction.id);
+  const createPayment = useCreateConstructionPartnerPayment();
+  const deletePayment = useDeleteConstructionPartnerPayment();
+  const { toast } = useToast();
+
+  const [form, setForm] = useState({
+    direction: "partner_to_william" as "partner_to_william" | "william_to_partner",
+    payment_date: new Date().toISOString().slice(0, 10),
+    amount: "",
+    payment_method: "pix",
+    notes: "",
+  });
+
+  const setF = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
+
+  const onSave = async () => {
+    const amt = parseFloat(form.amount);
+    if (!amt || amt <= 0) {
+      toast({ title: "Valor inválido", variant: "destructive" });
+      return;
+    }
+    try {
+      await createPayment.mutateAsync({
+        construction_id: construction.id,
+        partner_name: construction.partner_name ?? "Sócio",
+        direction: form.direction,
+        payment_date: form.payment_date,
+        amount: amt,
+        payment_method: form.payment_method || null,
+        notes: form.notes || null,
+      });
+      toast({ title: "Pagamento registrado" });
+      setForm({ ...form, amount: "", notes: "" });
+    } catch (e: any) {
+      toast({ title: "Erro ao registrar", description: e.message, variant: "destructive" });
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" style={{ background: "#0D1318", border: "1px solid #1A2535" }}>
+        <DialogHeader>
+          <DialogTitle style={{ color: "#F0F4F8" }}>
+            👥 Pagamentos com {construction.partner_name ?? "Sócio"} — {construction.name}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* Form de novo pagamento */}
+          <PremiumCard className="p-4 space-y-3">
+            <p className="text-sm font-semibold" style={{ color: "#F0F4F8" }}>+ Novo pagamento</p>
+
+            <div>
+              <Label style={{ color: "#94A3B8" }}>Direção *</Label>
+              <Select value={form.direction} onValueChange={(v) => setF("direction", v)}>
+                <SelectTrigger style={inputStyle}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent style={{ background: "#0D1318", border: "1px solid #1A2535" }}>
+                  <SelectItem value="partner_to_william">
+                    💰 {construction.partner_name ?? "Sócio"} → William (reembolso recebido)
+                  </SelectItem>
+                  <SelectItem value="william_to_partner">
+                    💸 William → {construction.partner_name ?? "Sócio"} (transferência feita)
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label style={{ color: "#94A3B8" }}>Data *</Label>
+                <DatePicker value={form.payment_date} onChange={(v) => setF("payment_date", v)} placeholder="Data" />
+              </div>
+              <div>
+                <Label style={{ color: "#94A3B8" }}>Valor (R$) *</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={form.amount}
+                  onChange={(e) => setF("amount", e.target.value)}
+                  style={inputStyle}
+                  placeholder="0,00"
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label style={{ color: "#94A3B8" }}>Forma de pagamento</Label>
+              <Select value={form.payment_method} onValueChange={(v) => setF("payment_method", v)}>
+                <SelectTrigger style={inputStyle}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent style={{ background: "#0D1318", border: "1px solid #1A2535" }}>
+                  <SelectItem value="pix">Pix</SelectItem>
+                  <SelectItem value="transferencia">Transferência</SelectItem>
+                  <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                  <SelectItem value="cheque">Cheque</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label style={{ color: "#94A3B8" }}>Observações</Label>
+              <Input
+                value={form.notes}
+                onChange={(e) => setF("notes", e.target.value)}
+                style={inputStyle}
+                placeholder="Ex: cota cheque 20/04 + reembolso material"
+              />
+            </div>
+
+            <GoldButton onClick={onSave} disabled={createPayment.isPending} className="w-full">
+              {createPayment.isPending ? "Salvando..." : "Registrar pagamento"}
+            </GoldButton>
+          </PremiumCard>
+
+          {/* Histórico */}
+          <div>
+            <p className="text-sm font-semibold mb-2" style={{ color: "#F0F4F8" }}>
+              Histórico ({payments.length})
+            </p>
+            {payments.length === 0 ? (
+              <p className="text-xs" style={{ color: "#64748B" }}>Nenhum pagamento registrado ainda.</p>
+            ) : (
+              <div className="space-y-1">
+                {payments.map((p) => {
+                  const isInbound = p.direction === "partner_to_william";
+                  return (
+                    <div
+                      key={p.id}
+                      className="flex justify-between items-center px-3 py-2 rounded"
+                      style={{ background: "#0F1620", border: "1px solid #1A2535" }}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs" style={{ color: isInbound ? "#22C55E" : "#F87171" }}>
+                          {isInbound ? "💰 Recebido" : "💸 Pago"} · {formatDate(p.payment_date)}
+                          {p.payment_method ? ` · ${p.payment_method}` : ""}
+                        </p>
+                        {p.notes && <p className="text-[10px] truncate" style={{ color: "#94A3B8" }}>{p.notes}</p>}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-sm" style={{ color: isInbound ? "#22C55E" : "#F87171" }}>
+                          {formatCurrency(p.amount)}
+                        </span>
+                        <button
+                          onClick={() => deletePayment.mutate(p.id)}
+                          className="p-1 rounded hover:bg-red-500/10"
+                          title="Excluir"
+                        >
+                          <Trash2 className="w-3 h-3 text-red-400" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1362,9 +1531,11 @@ export default function ConstructionsPage() {
   const { data: constructions = [], isLoading } = useConstructions();
   const { data: assets = [] }                   = useAssets();
   const { data: allExpenses = [] }              = useConstructionExpenses(undefined, true);
+  const { data: allPartnerPayments = [] }       = useConstructionPartnerPayments(undefined, true);
   const createConstruction = useCreateConstruction();
   const updateConstruction = useUpdateConstruction();
   const deleteConstruction = useDeleteConstruction();
+  const [partnerModalFor, setPartnerModalFor] = useState<any>(null);
   const { toast } = useToast();
 
   const [stagesFor, setStagesFor]     = useState<any>(null);
@@ -1472,6 +1643,26 @@ export default function ConstructionsPage() {
                                    .reduce((s: number, e: any) => s + (e.total_amount ?? 0), 0);
     const spentTerreno = expsOfCard.filter(e => e.expense_kind === "terreno")
                                    .reduce((s: number, e: any) => s + (e.total_amount ?? 0), 0);
+
+    // Saldo entre sócios (Walmir/Jairo): cota dele em gastos não-excluídos
+    // − reembolsos dele pra William + transferências de William pra ele.
+    // Positivo: sócio te deve. Negativo: você deve a ele.
+    const partnerBalanceObrigado = expsOfCard
+      .filter((e: any) => !e.excluded_from_partner_balance)
+      .reduce((acc: number, e: any) => {
+        const paidBy = (e.paid_by ?? "ambos").toLowerCase();
+        if (paidBy === "william" || paidBy === "ambos") return acc + Number(e.partner_amount ?? 0);
+        if (paidBy === "partner" || paidBy === "socio") return acc - Number(e.william_amount ?? 0);
+        return acc;
+      }, 0);
+    const paymentsOfCard = (allPartnerPayments as any[]).filter((p: any) => p.construction_id === c.id);
+    const partnerToWilliam = paymentsOfCard
+      .filter((p: any) => p.direction === "partner_to_william")
+      .reduce((s: number, p: any) => s + Number(p.amount ?? 0), 0);
+    const williamToPartner = paymentsOfCard
+      .filter((p: any) => p.direction === "william_to_partner")
+      .reduce((s: number, p: any) => s + Number(p.amount ?? 0), 0);
+    const partnerBalance = partnerBalanceObrigado - partnerToWilliam + williamToPartner;
 
     return (
       <PremiumCard className="space-y-3 h-full">
@@ -1606,6 +1797,38 @@ export default function ConstructionsPage() {
           );
         })()}
 
+        {/* Saldo Sócio (cash flow entre parceiros) */}
+        {c.partner_name && (Math.abs(partnerBalance) > 0.01 || paymentsOfCard.length > 0) && (() => {
+          const owesYou    = partnerBalance > 0;
+          const youOwe     = partnerBalance < 0;
+          const settled    = Math.abs(partnerBalance) < 0.01;
+          const accent     = owesYou ? "#22C55E" : youOwe ? "#F43F5E" : "#64748B";
+          const accentBg   = owesYou ? "rgba(34,197,94,0.05)" : youOwe ? "rgba(244,63,94,0.05)" : "rgba(100,116,139,0.05)";
+          const accentBd   = owesYou ? "rgba(34,197,94,0.2)"  : youOwe ? "rgba(244,63,94,0.2)"  : "rgba(100,116,139,0.2)";
+          const labelTitle = owesYou ? `${c.partner_name} te deve` : youOwe ? `Você deve a ${c.partner_name}` : `Saldo zero com ${c.partner_name}`;
+          return (
+            <div className="rounded-lg px-3 py-2" style={{ background: accentBg, border: `1px solid ${accentBd}` }}>
+              <div className="flex justify-between items-baseline mb-1">
+                <span className="text-xs font-semibold" style={{ color: accent }}>👥 {labelTitle}</span>
+                <span className="font-mono font-bold text-sm" style={{ color: accent }}>
+                  {formatCurrency(Math.abs(partnerBalance))}
+                </span>
+              </div>
+              <div className="flex justify-between text-[10px]" style={{ color: '#64748B' }}>
+                <span>Cota dele em gastos: {formatCurrency(partnerBalanceObrigado)}</span>
+                <span>Reembolsos: {formatCurrency(partnerToWilliam)}</span>
+              </div>
+              <button
+                onClick={() => setPartnerModalFor(c)}
+                className="w-full mt-2 px-2 py-1 rounded text-[11px]"
+                style={{ background: accentBg, border: `1px solid ${accentBd}`, color: accent }}
+              >
+                + Registrar pagamento ({paymentsOfCard.length} histórico{paymentsOfCard.length !== 1 ? "s" : ""})
+              </button>
+            </div>
+          );
+        })()}
+
         {/* Dívida com sócio */}
         {(c.debt_to_partner ?? 0) > 0 && (() => {
           const debtOrig  = c.debt_to_partner as number;
@@ -1728,6 +1951,7 @@ export default function ConstructionsPage() {
       {editItem && <ConstructionFormModal title="Editar Obra" form={form} setF={setF} assets={assets as any[]} onSave={handleSaveConstruction} onClose={() => { setEditItem(null); setForm({ ...emptyForm }); }} isPending={createConstruction.isPending || updateConstruction.isPending} />}
       {stagesFor && <StagesModal construction={stagesFor} onClose={() => setStagesFor(null)} />}
       {importFor && <ImportPdfModal construction={importFor} onClose={() => setImportFor(null)} />}
+      {partnerModalFor && <PartnerPaymentModal construction={partnerModalFor} onClose={() => setPartnerModalFor(null)} />}
 
       {/* Delete confirm */}
       {delItem && (
