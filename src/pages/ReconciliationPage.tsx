@@ -234,13 +234,25 @@ function ImportTab({ accounts }: { accounts: any[] }) {
         .is("matched_revenue_id", null)
         .is("matched_expense_id", null);
 
-      if (!txs?.length) return { revenues: 0, expenses: 0 };
+      if (!txs?.length) return { revenues: 0, expenses: 0, skipped_construction: 0, skipped_debt: 0 };
 
-      let revenues = 0, expenses = 0;
+      let revenues = 0, expenses = 0, skippedConstruction = 0, skippedDebt = 0;
       for (const tx of txs as any[]) {
         const intent = tx.category_intent;
         const category = tx.category_confirmed || tx.category_suggestion;
         if (!category || intent === "transferencia") continue;
+
+        // SKIP se já vinculado a construction_expense ou debt_installment.
+        // Trigger auto_match_construction_expense + auto_match_debt_installment
+        // já fizeram esse vínculo no INSERT. Criar expense aqui = duplicação no DRE.
+        if (tx.matched_construction_expense_id) {
+          skippedConstruction++;
+          continue;
+        }
+        if (tx.matched_debt_installment_id && intent === "despesa") {
+          skippedDebt++;
+          continue;
+        }
 
         if (intent === "receita") {
           const { data, error } = await supabase.from("revenues").insert({
@@ -272,7 +284,7 @@ function ImportTab({ accounts }: { accounts: any[] }) {
           }
         }
       }
-      return { revenues, expenses };
+      return { revenues, expenses, skipped_construction: skippedConstruction, skipped_debt: skippedDebt };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["bank_transactions"] });
@@ -392,10 +404,15 @@ function ImportTab({ accounts }: { accounts: any[] }) {
       for (const tx of autoRows) {
         const { data: btRow } = await supabase
           .from("bank_transactions" as any)
-          .select("id, matched_revenue_id, matched_expense_id")
+          .select("id, matched_revenue_id, matched_expense_id, matched_construction_expense_id, matched_debt_installment_id")
           .eq("external_id", tx.external_id)
           .single();
         const btId = (btRow as any)?.id;
+
+        // Triggers do banco já podem ter vinculado a construction_expense ou debt_installment.
+        // Nesse caso, NÃO criar expense — geraria duplicação no DRE.
+        const alreadyLinkedToObra = !!(btRow as any)?.matched_construction_expense_id;
+        const alreadyLinkedToDebt = !!(btRow as any)?.matched_debt_installment_id;
 
         if (tx.category_intent === "receita" && !(btRow as any)?.matched_revenue_id) {
           const { data, error } = await supabase.from("revenues").insert({
@@ -411,7 +428,12 @@ function ImportTab({ accounts }: { accounts: any[] }) {
               .update({ matched_revenue_id: data.id }).eq("id", btId);
             revenues++;
           }
-        } else if (tx.category_intent === "despesa" && !(btRow as any)?.matched_expense_id) {
+        } else if (
+          tx.category_intent === "despesa" &&
+          !(btRow as any)?.matched_expense_id &&
+          !alreadyLinkedToObra &&
+          !alreadyLinkedToDebt
+        ) {
           const { data, error } = await supabase.from("expenses").insert({
             category: tx.category_suggestion,
             description: tx.description,
@@ -781,6 +803,10 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
         let revenueId: string | null = null;
         let expenseId: string | null = null;
 
+        // Skip auto-create se já vinculado a obra/dívida
+        const linkedToObra = !!tx.matched_construction_expense_id;
+        const linkedToDebt = !!tx.matched_debt_installment_id;
+
         if (isAuto && result.intent === "receita" && !tx.matched_revenue_id) {
           const { data, error } = await supabase.from("revenues").insert({
             source: result.category,
@@ -791,7 +817,7 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
             received_at: tx.date,
           }).select("id").single();
           if (!error && data) { revenueId = data.id; revenues++; }
-        } else if (isAuto && result.intent === "despesa" && !tx.matched_expense_id) {
+        } else if (isAuto && result.intent === "despesa" && !tx.matched_expense_id && !linkedToObra && !linkedToDebt) {
           const { data, error } = await supabase.from("expenses").insert({
             category: result.category,
             description: tx.description,
@@ -848,13 +874,23 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
         .is("matched_revenue_id", null)
         .is("matched_expense_id", null);
 
-      if (!txs?.length) return { revenues: 0, expenses: 0 };
+      if (!txs?.length) return { revenues: 0, expenses: 0, skipped_obra: 0, skipped_debt: 0 };
 
-      let revenues = 0, expenses = 0;
+      let revenues = 0, expenses = 0, skippedObra = 0, skippedDebt = 0;
       for (const tx of txs as any[]) {
         const intent = tx.category_intent;
         const category = tx.category_confirmed || tx.category_suggestion;
         if (!category || intent === "transferencia") continue;
+
+        // Não cria expense se já vinculado a construction_expense ou debt_installment
+        if (intent === "despesa" && tx.matched_construction_expense_id) {
+          skippedObra++;
+          continue;
+        }
+        if (intent === "despesa" && tx.matched_debt_installment_id) {
+          skippedDebt++;
+          continue;
+        }
 
         if (intent === "receita") {
           const { data, error } = await supabase.from("revenues").insert({
@@ -886,14 +922,18 @@ function ReconcileTab({ month, accounts, statusFilter, setStatusFilter, accountF
           }
         }
       }
-      return { revenues, expenses };
+      return { revenues, expenses, skipped_obra: skippedObra, skipped_debt: skippedDebt };
     },
     onSuccess: (r) => {
       queryClient.invalidateQueries({ queryKey: ["bank_transactions"] });
       queryClient.invalidateQueries({ queryKey: ["revenues"] });
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      const extra =
+        (r?.skipped_obra ?? 0) > 0 || (r?.skipped_debt ?? 0) > 0
+          ? ` · ${r?.skipped_obra ?? 0} pulou (já em obra) · ${r?.skipped_debt ?? 0} pulou (já em parcela de dívida)`
+          : "";
       toast.success(
-        `🔗 Sincronizado: ${r?.revenues ?? 0} receitas e ${r?.expenses ?? 0} despesas criadas para transações já conciliadas`
+        `🔗 Sincronizado: ${r?.revenues ?? 0} receitas e ${r?.expenses ?? 0} despesas criadas${extra}`
       );
     },
     onError: () => toast.error("Erro ao sincronizar."),

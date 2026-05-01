@@ -876,6 +876,22 @@ const NAVAL_TOOLS: ClaudeTool[] = [
     input_schema: { type: "object", properties: {} },
   },
   {
+    name: "link_bank_tx_to_construction_expense",
+    description:
+      "AÇÃO: vincula manualmente um bank_transaction a um construction_expense quando o trigger automático não bateu (ex: data fora da janela ±10 dias, valor com diferença grande). " +
+      "Ao vincular, o bank_tx NÃO gera expense duplicada no DRE — fica reconciliado direto com o gasto da obra. " +
+      "USE quando o William disser 'esse pix de R$ 3k é o material da obra X', 'liga essa transferência ao gasto Y da obra Z'. " +
+      "Quando possível, deixa o auto-match do trigger fazer o trabalho — usa essa tool só pra exceções.",
+    input_schema: {
+      type: "object",
+      properties: {
+        bank_tx_id: { type: "string", description: "UUID do bank_transaction (obrigatório)." },
+        construction_expense_id: { type: "string", description: "UUID do construction_expense alvo (obrigatório)." },
+      },
+      required: ["bank_tx_id", "construction_expense_id"],
+    },
+  },
+  {
     name: "mark_installment_paid",
     description:
       "AÇÃO DESTRUTIVA: marca uma parcela de dívida (debt_installment) como paga. " +
@@ -2842,6 +2858,60 @@ async function handleGetWeddingStatus(
   });
 }
 
+// ─── Handler: link_bank_tx_to_construction_expense ───────────────────
+async function handleLinkBankTxToConstructionExpense(
+  input: Record<string, unknown>,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<string> {
+  const sb = createClient(supabaseUrl, serviceKey);
+  const bankTxId = input.bank_tx_id as string;
+  const ceId = input.construction_expense_id as string;
+
+  if (!bankTxId || !ceId) {
+    return JSON.stringify({ ok: false, error: "Forneça bank_tx_id e construction_expense_id." });
+  }
+
+  // Valida que ambos existem
+  const [{ data: bt }, { data: ce }] = await Promise.all([
+    sb.from("bank_transactions").select("id, amount, date, description, matched_expense_id, matched_construction_expense_id").eq("id", bankTxId).single(),
+    sb.from("construction_expenses").select("id, total_amount, expense_date, description, construction_id").eq("id", ceId).single(),
+  ]);
+
+  if (!bt) return JSON.stringify({ ok: false, error: `bank_transaction ${bankTxId} não existe.` });
+  if (!ce) return JSON.stringify({ ok: false, error: `construction_expense ${ceId} não existe.` });
+
+  if ((bt as any).matched_construction_expense_id) {
+    return JSON.stringify({
+      ok: false,
+      error: `bank_tx já está vinculado a construction_expense ${(bt as any).matched_construction_expense_id}. Desvincula manualmente antes via SQL.`,
+    });
+  }
+
+  // Vincula
+  const update: any = { matched_construction_expense_id: ceId };
+  // Se também tem expense duplicada, desvincula (pra evitar contagem dupla no DRE)
+  if ((bt as any).matched_expense_id) {
+    update.matched_expense_id = null;
+  }
+  const { error: updErr } = await sb.from("bank_transactions").update(update).eq("id", bankTxId);
+  if (updErr) return JSON.stringify({ ok: false, error: `Falha ao vincular: ${updErr.message}` });
+
+  return JSON.stringify({
+    ok: true,
+    message: `bank_tx (${formatCurrencyBR((bt as any).amount)}, ${(bt as any).date}) vinculado a construction_expense da obra.`,
+    bank_tx: { id: bankTxId, amount: (bt as any).amount, date: (bt as any).date, description: (bt as any).description },
+    construction_expense: { id: ceId, amount: (ce as any).total_amount, date: (ce as any).expense_date, description: (ce as any).description },
+    note: (bt as any).matched_expense_id
+      ? "Tinha matched_expense_id antiga (duplicação) — desvinculei. Considere DELETE da expense duplicada se ainda existir."
+      : "Vínculo criado. Sem duplicação detectada.",
+  });
+}
+
+function formatCurrencyBR(n: number): string {
+  return `R$ ${Number(n).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 // ─── Handler: mark_installment_paid ──────────────────────────────────
 async function handleMarkInstallmentPaid(
   input: Record<string, unknown>,
@@ -3730,7 +3800,7 @@ async function callClaudeHaiku(
 // Versão do código deployado — log inicial em CADA invocação pra confirmar
 // que o deploy do edge function está atualizado. Bumpa toda vez que mudar
 // a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
-const WISELY_AI_VERSION = "2026.05.01-v29-debt-automation";
+const WISELY_AI_VERSION = "2026.05.01-v30-ofx-construction-match";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -4177,6 +4247,7 @@ Gere a leitura estratégica seguindo o formato obrigatório.`;
             get_current_card_invoice: (input) => handleGetCurrentCardInvoice(input, supabaseUrl, serviceKey),
             get_wedding_status: (input) => handleGetWeddingStatus(input, supabaseUrl, serviceKey),
             mark_installment_paid: (input) => handleMarkInstallmentPaid(input, supabaseUrl, serviceKey),
+            link_bank_tx_to_construction_expense: (input) => handleLinkBankTxToConstructionExpense(input, supabaseUrl, serviceKey),
             get_recurring_bills: (input) => handleGetRecurringBills(input, supabaseUrl, serviceKey),
             get_other_commissions_status: (input) => handleGetOtherCommissionsStatus(input, supabaseUrl, serviceKey),
             get_energy_solar_status: (input) => handleGetEnergySolarStatus(input, supabaseUrl, serviceKey),
