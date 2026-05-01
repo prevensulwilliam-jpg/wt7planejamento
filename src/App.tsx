@@ -27,6 +27,7 @@ import GoalsPage from "@/pages/GoalsPage";
 import PlanPage from "@/pages/PlanPage";
 import AssetsPage from "@/pages/AssetsPage";
 import ConsortiumsPage from "@/pages/ConsortiumsPage";
+import DebtsPage from "@/pages/DebtsPage";
 import ProjectionsPage from "@/pages/ProjectionsPage";
 import KitnetsReportPage from "@/pages/KitnetsReportPage";
 import TaxesPage from "@/pages/TaxesPage";
@@ -137,6 +138,7 @@ const App = () => (
             <Route path="/constructions" element={<ConstructionsPage />} />
             <Route path="/assets" element={<AssetsPage />} />
             <Route path="/consortiums" element={<ConsortiumsPage />} />
+            <Route path="/debts" element={<DebtsPage />} />
             <Route path="/recurring-bills" element={<RecurringBillsPage />} />
             <Route path="/businesses" element={<BusinessesPage />} />
             <Route path="/cards" element={<CardsPage />} />

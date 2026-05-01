@@ -876,6 +876,41 @@ const NAVAL_TOOLS: ClaudeTool[] = [
     input_schema: { type: "object", properties: {} },
   },
   {
+    name: "mark_installment_paid",
+    description:
+      "AÇÃO DESTRUTIVA: marca uma parcela de dívida (debt_installment) como paga. " +
+      "Atualiza paid_at, paid_amount, e o trigger no banco recalcula automaticamente debts.remaining_amount. " +
+      "USE quando William disser 'marca o cheque 20/05 como pago', 'pago a parcela 1 do RWT05', etc. " +
+      "REQUER: identificar a parcela exata (debt_id + sequence_number, ou debt_installment_id direto). " +
+      "Se a parcela já foi auto-vinculada via trigger (bank_tx do extrato bateu por valor+data), não precisa chamar — Naval avisa.",
+    input_schema: {
+      type: "object",
+      properties: {
+        debt_installment_id: {
+          type: "string",
+          description: "ID UUID direto da debt_installment. Use se já tem.",
+        },
+        debt_name_filter: {
+          type: "string",
+          description:
+            "Nome (parcial) da debt pra busca: 'RWT05', 'terreno', etc. Use junto com sequence_number.",
+        },
+        sequence_number: {
+          type: "number",
+          description: "Número da parcela (1, 2, 3...) dentro da debt. Use junto com debt_name_filter.",
+        },
+        paid_date: {
+          type: "string",
+          description: "Data do pagamento YYYY-MM-DD. Default = hoje.",
+        },
+        paid_amount: {
+          type: "number",
+          description: "Valor pago em R$. Default = amount original da parcela.",
+        },
+      },
+    },
+  },
+  {
     name: "get_recurring_bills",
     description:
       "Contas fixas mensais ativas (recurring_bills): aluguel apt, internet, telefone, condomínio, academia, etc. " +
@@ -2807,6 +2842,120 @@ async function handleGetWeddingStatus(
   });
 }
 
+// ─── Handler: mark_installment_paid ──────────────────────────────────
+async function handleMarkInstallmentPaid(
+  input: Record<string, unknown>,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<string> {
+  const sb = createClient(supabaseUrl, serviceKey);
+  const directId = (input.debt_installment_id as string) || null;
+  const debtNameFilter = (input.debt_name_filter as string) || null;
+  const sequenceNumber = input.sequence_number != null ? Number(input.sequence_number) : null;
+  const paidDate = (input.paid_date as string) || new Date().toISOString().slice(0, 10);
+  const paidAmountInput = input.paid_amount != null ? Number(input.paid_amount) : null;
+
+  // Resolve installment_id
+  let installmentId: string | null = directId;
+  let installmentRow: any = null;
+
+  if (!installmentId) {
+    if (!debtNameFilter || sequenceNumber == null) {
+      return JSON.stringify({
+        ok: false,
+        error: "Faltam parâmetros. Forneça debt_installment_id OU (debt_name_filter + sequence_number).",
+      });
+    }
+    // Busca debt por nome (ilike) e installment por sequence_number
+    const { data: debts } = await sb
+      .from("debts")
+      .select("id, name")
+      .ilike("name", `%${debtNameFilter}%`);
+    if (!debts || debts.length === 0) {
+      return JSON.stringify({ ok: false, error: `Nenhuma debt encontrada com filtro '${debtNameFilter}'.` });
+    }
+    if (debts.length > 1) {
+      return JSON.stringify({
+        ok: false,
+        error: `${debts.length} debts encontradas com '${debtNameFilter}'. Refine: ${debts.map((d: any) => d.name).join(" | ")}`,
+      });
+    }
+    const { data: insts } = await sb
+      .from("debt_installments")
+      .select("*")
+      .eq("debt_id", debts[0].id)
+      .eq("sequence_number", sequenceNumber);
+    if (!insts || insts.length === 0) {
+      return JSON.stringify({
+        ok: false,
+        error: `Parcela ${sequenceNumber} não existe na debt '${debts[0].name}'.`,
+      });
+    }
+    installmentRow = insts[0];
+    installmentId = installmentRow.id;
+  } else {
+    const { data: row } = await sb
+      .from("debt_installments")
+      .select("*")
+      .eq("id", installmentId)
+      .single();
+    installmentRow = row;
+  }
+
+  if (!installmentRow) {
+    return JSON.stringify({ ok: false, error: `Parcela id=${installmentId} não encontrada.` });
+  }
+
+  if (installmentRow.paid_at) {
+    return JSON.stringify({
+      ok: false,
+      error: `Parcela já marcada como paga em ${installmentRow.paid_at} (R$ ${installmentRow.paid_amount}). Pra desfazer, use SQL manual.`,
+      already_paid: {
+        paid_at: installmentRow.paid_at,
+        paid_amount: installmentRow.paid_amount,
+        bank_tx_id: installmentRow.bank_tx_id,
+      },
+    });
+  }
+
+  const finalPaidAmount = paidAmountInput ?? Number(installmentRow.amount ?? 0);
+
+  const { error: updErr } = await sb
+    .from("debt_installments")
+    .update({
+      paid_at: paidDate,
+      paid_amount: finalPaidAmount,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", installmentId);
+
+  if (updErr) {
+    return JSON.stringify({ ok: false, error: `Falha ao atualizar: ${updErr.message}` });
+  }
+
+  // Re-busca pra confirmar (e ver remaining_amount atualizado pelo trigger)
+  const { data: debtAfter } = await sb
+    .from("debts")
+    .select("name, remaining_amount, due_date, status")
+    .eq("id", installmentRow.debt_id)
+    .single();
+
+  return JSON.stringify({
+    ok: true,
+    message: `Parcela ${installmentRow.sequence_number} marcada como paga em ${paidDate}.`,
+    installment_updated: {
+      id: installmentId,
+      sequence_number: installmentRow.sequence_number,
+      due_date: installmentRow.due_date,
+      paid_date: paidDate,
+      paid_amount: finalPaidAmount,
+      original_amount: Number(installmentRow.amount ?? 0),
+    },
+    debt_after: debtAfter,
+    note: "Trigger no banco recalculou debts.remaining_amount + due_date automaticamente. Se remaining_amount = 0, status virou 'paid'.",
+  });
+}
+
 // ─── Handler: get_recurring_bills ────────────────────────────────────
 async function handleGetRecurringBills(
   input: Record<string, unknown>,
@@ -3581,7 +3730,7 @@ async function callClaudeHaiku(
 // Versão do código deployado — log inicial em CADA invocação pra confirmar
 // que o deploy do edge function está atualizado. Bumpa toda vez que mudar
 // a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
-const WISELY_AI_VERSION = "2026.05.01-v28-debt-installments";
+const WISELY_AI_VERSION = "2026.05.01-v29-debt-automation";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -4027,6 +4176,7 @@ Gere a leitura estratégica seguindo o formato obrigatório.`;
             get_kitnets_status: (input) => handleGetKitnetsStatus(input, supabaseUrl, serviceKey),
             get_current_card_invoice: (input) => handleGetCurrentCardInvoice(input, supabaseUrl, serviceKey),
             get_wedding_status: (input) => handleGetWeddingStatus(input, supabaseUrl, serviceKey),
+            mark_installment_paid: (input) => handleMarkInstallmentPaid(input, supabaseUrl, serviceKey),
             get_recurring_bills: (input) => handleGetRecurringBills(input, supabaseUrl, serviceKey),
             get_other_commissions_status: (input) => handleGetOtherCommissionsStatus(input, supabaseUrl, serviceKey),
             get_energy_solar_status: (input) => handleGetEnergySolarStatus(input, supabaseUrl, serviceKey),

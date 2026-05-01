@@ -32,6 +32,7 @@ const navGroups = [
       { label: "Categorias", icon: Tag, href: "/categories" },
       { label: "Aplicações", icon: BarChart3, href: "/assets?tab=investimentos" },
       { label: "Consórcios", icon: RefreshCw, href: "/consortiums" },
+      { label: "Dívidas", icon: Receipt, href: "/debts" },
     ],
   },
   {
