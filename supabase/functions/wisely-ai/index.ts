@@ -623,9 +623,12 @@ const NAVAL_TOOLS: ClaudeTool[] = [
   {
     name: "get_debts_status",
     description:
-      "Lista todas as dívidas ativas (debts) + cronograma de pagamento. " +
-      "USE pra: 'quanto pago de dívida este mês?', 'quando termina meu financiamento?', 'qual minha exposição total a dívida?'. " +
-      "Retorna por dívida: credor, valor restante, parcela mensal, parcelas restantes, due_date, total a pagar.",
+      "Lista todas as dívidas ativas + cronograma quando disponível. " +
+      "Cada dívida pode ter 'installments' (parcelas detalhadas, ex: cheques RWT05) ou só monthly_payment + due_date (mensais regulares: Rampage, NRSX 288 parcelas, Jairo). " +
+      "Quando há installments cadastrados, Naval mostra: próxima parcela pendente + total pago + total pendente + status de cada (paga/pendente/atrasada). " +
+      "Sem installments, use monthly_payment + due_date pra derivar cronograma virtual (mensal). " +
+      "USE pra: 'quanto pago de dívida este mês?', 'próximo cheque RWT05 vence quando?', 'cronograma de pagamentos?', 'tem parcela atrasada?', 'qual minha exposição total a dívida?'. " +
+      "Sempre verifique 'installments' antes de inferir vencimentos — é fonte mais precisa que due_date+monthly_payment.",
     input_schema: { type: "object", properties: {} },
   },
   {
@@ -1337,14 +1340,70 @@ async function handleGetDebtsStatus(
   serviceKey: string,
 ): Promise<string> {
   const sb = createClient(supabaseUrl, serviceKey);
-  const { data } = await sb.from("debts").select("name, creditor, total_amount, remaining_amount, monthly_payment, due_date, status").neq("status", "paid").order("remaining_amount", { ascending: false });
+  const { data } = await sb
+    .from("debts")
+    .select("id, name, creditor, total_amount, remaining_amount, monthly_payment, due_date, status")
+    .neq("status", "paid")
+    .order("remaining_amount", { ascending: false });
   const debts = data ?? [];
+
+  // Pega installments existentes (só dívidas que TÊM cronograma cadastrado)
+  const debtIds = debts.map((d: any) => d.id);
+  let installmentsByDebt = new Map<string, any[]>();
+  if (debtIds.length > 0) {
+    const { data: insts } = await sb
+      .from("debt_installments")
+      .select("debt_id, sequence_number, due_date, amount, paid_at, paid_amount, notes")
+      .in("debt_id", debtIds)
+      .order("sequence_number", { ascending: true });
+    for (const i of insts ?? []) {
+      const arr = installmentsByDebt.get((i as any).debt_id) ?? [];
+      arr.push(i);
+      installmentsByDebt.set((i as any).debt_id, arr);
+    }
+  }
 
   const today = new Date();
   const debtsOut = debts.map((d: any) => {
     const due = d.due_date ? new Date(d.due_date) : null;
     const monthsLeft = due ? Math.max(0, Math.round((due.getTime() - today.getTime()) / (86400000 * 30))) : null;
+
+    const insts = installmentsByDebt.get(d.id) ?? [];
+    let installmentsBlock: any = null;
+    let nextDue: any = null;
+    if (insts.length > 0) {
+      const paid = insts.filter((i: any) => i.paid_at);
+      const pending = insts.filter((i: any) => !i.paid_at);
+      const totalPaid = paid.reduce((s: number, i: any) => s + Number(i.paid_amount ?? i.amount ?? 0), 0);
+      const totalPending = pending.reduce((s: number, i: any) => s + Number(i.amount ?? 0), 0);
+      nextDue = pending.length > 0 ? pending[0] : null;
+
+      installmentsBlock = {
+        n_installments: insts.length,
+        n_paid: paid.length,
+        n_pending: pending.length,
+        total_paid_amount: Math.round(totalPaid * 100) / 100,
+        total_pending_amount: Math.round(totalPending * 100) / 100,
+        schedule: insts.map((i: any) => {
+          const dueDate = new Date(i.due_date);
+          const diasParaVencer = Math.ceil((dueDate.getTime() - today.getTime()) / 86400000);
+          const isOverdue = !i.paid_at && dueDate < today;
+          return {
+            sequence: i.sequence_number,
+            due_date: i.due_date,
+            amount: Math.round(Number(i.amount ?? 0) * 100) / 100,
+            paid_at: i.paid_at,
+            paid_amount: i.paid_amount ? Math.round(Number(i.paid_amount) * 100) / 100 : null,
+            status: i.paid_at ? "paga" : isOverdue ? "atrasada" : "pendente",
+            days_until_due: i.paid_at ? null : diasParaVencer,
+            notes: i.notes,
+          };
+        }),
+      };
+    }
+
     return {
+      id: d.id,
       name: d.name,
       creditor: d.creditor,
       total_amount: Math.round(Number(d.total_amount ?? 0) * 100) / 100,
@@ -1353,6 +1412,9 @@ async function handleGetDebtsStatus(
       due_date: d.due_date,
       months_until_due: monthsLeft,
       status: d.status,
+      next_installment_due_date: nextDue?.due_date ?? null,
+      next_installment_amount: nextDue ? Math.round(Number(nextDue.amount ?? 0) * 100) / 100 : null,
+      installments: installmentsBlock,
     };
   });
 
@@ -1364,8 +1426,13 @@ async function handleGetDebtsStatus(
       n_debts_active: debtsOut.length,
       total_remaining: Math.round(totalRemaining * 100) / 100,
       total_monthly_payment: Math.round(totalMonthly * 100) / 100,
+      n_debts_with_schedule: debtsOut.filter((d) => d.installments).length,
     },
     debts: debtsOut,
+    note:
+      "Dívidas com 'installments' têm cronograma detalhado por parcela (ex: RWT05). " +
+      "Sem installments, use monthly_payment + due_date — Naval pode derivar cronograma virtual se a dívida é mensal regular (Rampage, NRSX). " +
+      "next_installment_due_date é a próxima parcela pendente quando há schedule cadastrado.",
   });
 }
 
@@ -3514,7 +3581,7 @@ async function callClaudeHaiku(
 // Versão do código deployado — log inicial em CADA invocação pra confirmar
 // que o deploy do edge function está atualizado. Bumpa toda vez que mudar
 // a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
-const WISELY_AI_VERSION = "2026.05.01-v27-rollback-partner-balance";
+const WISELY_AI_VERSION = "2026.05.01-v28-debt-installments";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
