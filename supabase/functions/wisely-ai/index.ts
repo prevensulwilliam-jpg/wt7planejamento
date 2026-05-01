@@ -56,6 +56,33 @@ Só DEPOIS de identificar isso → chame a tool.
 
 ⚠ **Regra anti-divisão preguiçosa**: NUNCA divida pipeline_total ÷ 12 cegamente. Cada contrato em \`prevensul_billing\` tem \`installment_total\` próprio com prazos diferentes (alguns 12, outros 24, 48). Itere contrato a contrato. Se a tool retornar agregado, calcule por contrato individualmente usando \`installment_total - installment_current = parcelas restantes\`. Cap em 12 quando a janela for 12m.
 
+🚨 **REGRA OBRIGATÓRIA — PERGUNTAS MULTI-MÊS / PROJEÇÃO** 🚨
+
+Se a pergunta envolver fluxo de N meses, projeção, "quanto recebo em X meses", "como estarei em Y", VOCÊ DEVE OBRIGATORIAMENTE:
+
+1. **Chamar `audit_data_sources` PRIMEIRO** — detecta se prevensul_billing está dessincronizado, bancos stale, etc. Se houver issues criticas, AVISE o usuário ANTES de seguir.
+
+2. **Chamar `get_cashflow_forecast(n_months)`** — essa tool já ITERA contrato a contrato em prevensul_billing (não divide por 12). Use como fonte primária de receita futura.
+
+3. **Confirmar comissão = 3% (NUNCA 12%)** — comissão Prevensul = 3% sobre pago pelo cliente. Pra contrato de R$ X em N parcelas: comissão mensal = (X/N) × 0.03. Ex: R$ 4M / 12 = R$ 333k cliente/mês × 3% = R$ 10k comissão. NÃO R$ 40k. NÃO R$ 480k. SEMPRE 3%.
+
+4. **Range / faixa só se baseado em histórico real** — se for dar range "R$ X a R$ Y", PRECISA ter chamado `get_prevensul_history` antes pra ver variabilidade. Cravar range sem fonte é PROIBIDO.
+
+5. **Sempre citar a fonte** — "Pelo CSV portal: R$ X" / "Iterando prevensul_billing por contrato: R$ Y" / "Histórico médio (audit): R$ Z". Nunca devolver número sem dizer DE ONDE veio.
+
+❌ **PROIBIDO** em respostas multi-mês:
+- "R$ 65k–80k pipeline mensal" sem mostrar de onde saiu
+- "R$ 40k contrato 4M" (matemática errada)
+- "Pipeline tem R$ X" sem chamar get_prevensul_pipeline antes
+- Distribuir saldo cliente ÷ N meses sem ver installment_total individual
+
+✅ **OBRIGATÓRIO** em respostas multi-mês:
+- Mostrar de onde cada número veio (tool + linha de raciocínio)
+- Mostrar matemática (R$ 4M / 12 = R$ 333k cliente, × 3% = R$ 10k comissão)
+- Validar: total estimado bate com média histórica recente?
+
+🔴 **Anti-divergência reforçada (regra do 2×)**: se sua projeção mensal divergir do histórico recente em mais de **2× pra cima ou 2× pra baixo**, PARE. Não devolva resposta. Avise o usuário e chame `audit_data_sources`. Antes era 5× — ficou frouxo demais. Agora 2×.
+
 🚀 **MODO PROATIVO — TOOL-FIRST, PERGUNTE DEPOIS** 🚀
 Pra perguntas factuais sobre status atual ("estou no trilho?", "vou cobrir cheques?", "como vão as kitnets?", "saldo?", "comissão de junho?"), você DEVE:
 
@@ -4486,7 +4513,7 @@ async function callClaudeHaiku(
 // Versão do código deployado — log inicial em CADA invocação pra confirmar
 // que o deploy do edge function está atualizado. Bumpa toda vez que mudar
 // a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
-const WISELY_AI_VERSION = "2026.05.01-v31-fontes-da-verdade";
+const WISELY_AI_VERSION = "2026.05.01-v32-multi-month-strict";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
