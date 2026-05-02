@@ -656,23 +656,19 @@ function PrevensulExcelImport({ month, userId }: { month: string; userId: string
 
     try {
       for (const sheet of sheetsToProcess) {
-        if (mode === "all" && existingMonthsSet.has(sheet.refMonth)) {
-          const { error: delErr } = await supabase
-            .from("prevensul_billing")
-            .delete()
-            .eq("reference_month", sheet.refMonth);
-          if (delErr) throw delErr;
-        }
+        // Sempre apaga o reference_month antes de inserir (modo current OU all).
+        // Evita duplicação acumulada de imports anteriores no mesmo mês.
+        const { error: delErr } = await supabase
+          .from("prevensul_billing")
+          .delete()
+          .eq("reference_month", sheet.refMonth);
+        if (delErr) throw delErr;
 
         let sheetImported = 0, sheetPaid = 0, sheetComm = 0;
 
         for (const row of sheet.rows) {
-          if (mode === "current") {
-            const isDuplicate = existing.some(
-              e => e.client_name === row.client_name && e.installment_current === row.installment_current
-            );
-            if (isDuplicate) continue;
-          }
+          // (anti-duplicação interna do CSV — mesma row repetida no mesmo arquivo)
+          // Não precisa mais checar existing — já apagamos o mês acima.
           const { commission_value: _cv, ...rowWithoutCommission } = row;
           await createBilling.mutateAsync({
             ...rowWithoutCommission,
