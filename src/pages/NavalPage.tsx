@@ -741,7 +741,7 @@ export default function NavalPage() {
         <div className="flex items-center gap-3">
           <span className="text-2xl">🤖</span>
           <h1 className="font-display font-bold text-xl text-wt-text-primary">Naval</h1>
-          <WtBadge variant="cyan">powered by Claude Haiku 4.5</WtBadge>
+          <WtBadge variant="cyan">híbrido · Sonnet 4.6 (análise) + Haiku 4.5 (factual)</WtBadge>
         </div>
       </div>
 

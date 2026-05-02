@@ -5451,7 +5451,10 @@ async function callClaudeHaiku(
       })) as Array<{ role: string; content: unknown }>;
 
     // Loop tool-use — máximo 5 iterações pra evitar runaway
-    const MAX_TOOL_ITER = 5;
+    // 12 iterações: análises estratégicas (Sonnet) chamam várias tools de dados
+    // (4-6) + várias chamadas calc() (3-6 operações aritméticas). 5 era apertado
+    // demais e gerava "Loop de tool-use excedeu" em análises completas.
+    const MAX_TOOL_ITER = 12;
     const toolsUsedSet = new Set<string>();
     let lastUsage: ClaudeUsage | undefined;
     for (let iter = 0; iter < MAX_TOOL_ITER; iter++) {
@@ -5597,7 +5600,7 @@ async function callClaudeHaiku(
 // Versão do código deployado — log inicial em CADA invocação pra confirmar
 // que o deploy do edge function está atualizado. Bumpa toda vez que mudar
 // a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
-const WISELY_AI_VERSION = "2026.05.02-v40-naval-jarvis-paranoid";
+const WISELY_AI_VERSION = "2026.05.02-v41-tool-iter-12";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
