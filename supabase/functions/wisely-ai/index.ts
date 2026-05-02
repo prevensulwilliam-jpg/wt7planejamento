@@ -993,6 +993,47 @@ const NAVAL_TOOLS: ClaudeTool[] = [
     input_schema: { type: "object", properties: {} },
   },
   {
+    name: "cleanup_pipeline_old_months",
+    description:
+      "AÇÃO: limpa reference_months antigos da prevensul_billing, mantém apenas os N mais recentes. " +
+      "Útil pra evitar acúmulo de imports históricos (que inflam o saldo total ao somar múltiplos meses do mesmo cliente). " +
+      "Default mantém os 3 últimos meses (suficiente pra histórico). " +
+      "USE quando: audit detectar duplicação OU William pedir 'limpa o pipeline antigo' OU após importar muitos meses.",
+    input_schema: {
+      type: "object",
+      properties: {
+        keep_last_n_months: {
+          type: "number",
+          description: "Quantos reference_months recentes manter. Default 3.",
+        },
+      },
+    },
+  },
+  {
+    name: "upsert_prevensul_billing",
+    description:
+      "AÇÃO: importa array de rows pra prevensul_billing com DELETE+INSERT atômico por reference_month. " +
+      "Usuário envia o conteúdo do CSV/PDF como rows JSON estruturado e Naval faz upsert. " +
+      "Cada row precisa ter: client_name, contract_total, balance_remaining, installment_current, installment_total, amount_paid (opcional), commission_value (opcional). " +
+      "USE quando: William copiar dados de uma planilha pro chat e pedir 'importa isso'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        reference_month: {
+          type: "string",
+          description: "Mês de referência YYYY-MM (ex: '2026-04'). Obrigatório.",
+        },
+        rows: {
+          type: "array",
+          description:
+            "Array de contratos. Cada um: { client_name: string, contract_total: number, balance_remaining: number, installment_current?: number, installment_total?: number, amount_paid?: number, commission_value?: number, contract_nf?: string, closing_date?: string (YYYY-MM-DD), status?: string }",
+          items: { type: "object" },
+        },
+      },
+      required: ["reference_month", "rows"],
+    },
+  },
+  {
     name: "audit_data_sources",
     description:
       "Audita sincronização de dados: detecta dessincronização entre tabelas WT7 e fontes canônicas. " +
@@ -3532,6 +3573,133 @@ async function handleListCategories(
   });
 }
 
+// ─── Handler: cleanup_pipeline_old_months ────────────────────────────
+async function handleCleanupPipelineOldMonths(
+  input: Record<string, unknown>,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<string> {
+  const sb = createClient(supabaseUrl, serviceKey);
+  const keepN = Math.max(1, Math.min(12, Number(input.keep_last_n_months) || 3));
+
+  // Pega meses únicos ordenados
+  const { data: monthsData } = await sb
+    .from("prevensul_billing")
+    .select("reference_month")
+    .order("reference_month", { ascending: false });
+
+  const uniqueMonths = Array.from(
+    new Set((monthsData ?? []).map((m: any) => m.reference_month).filter(Boolean)),
+  );
+
+  if (uniqueMonths.length <= keepN) {
+    return JSON.stringify({
+      ok: true,
+      action: "no-op",
+      message: `Apenas ${uniqueMonths.length} reference_months no banco — não há nada antigo pra limpar.`,
+      months_kept: uniqueMonths,
+    });
+  }
+
+  const monthsToKeep = uniqueMonths.slice(0, keepN);
+  const monthsToDelete = uniqueMonths.slice(keepN);
+
+  // Conta antes
+  const { count: countBefore } = await sb
+    .from("prevensul_billing")
+    .select("*", { count: "exact", head: true });
+
+  // DELETE
+  const { error: delErr } = await sb
+    .from("prevensul_billing")
+    .delete()
+    .in("reference_month", monthsToDelete);
+
+  if (delErr) {
+    return JSON.stringify({ ok: false, error: `DELETE failed: ${delErr.message}` });
+  }
+
+  const { count: countAfter } = await sb
+    .from("prevensul_billing")
+    .select("*", { count: "exact", head: true });
+
+  return JSON.stringify({
+    ok: true,
+    action: "cleanup",
+    months_kept: monthsToKeep,
+    months_deleted: monthsToDelete,
+    rows_before: countBefore,
+    rows_after: countAfter,
+    rows_removed: (countBefore ?? 0) - (countAfter ?? 0),
+  });
+}
+
+// ─── Handler: upsert_prevensul_billing ───────────────────────────────
+async function handleUpsertPrevensulBilling(
+  input: Record<string, unknown>,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<string> {
+  const sb = createClient(supabaseUrl, serviceKey);
+  const reference_month = input.reference_month as string;
+  const rows = input.rows as any[];
+
+  if (!reference_month || !/^\d{4}-\d{2}$/.test(reference_month)) {
+    return JSON.stringify({ ok: false, error: "reference_month obrigatório no formato YYYY-MM" });
+  }
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return JSON.stringify({ ok: false, error: "rows deve ser array não-vazio" });
+  }
+
+  // Normaliza rows
+  const normalized = rows.map((r: any) => ({
+    client_name: String(r.client_name ?? "").trim(),
+    contract_total: Number(r.contract_total ?? 0),
+    balance_remaining: Number(r.balance_remaining ?? 0),
+    contract_nf: r.contract_nf ?? null,
+    installment_current: r.installment_current != null ? Number(r.installment_current) : null,
+    installment_total: r.installment_total != null ? Number(r.installment_total) : null,
+    closing_date: r.closing_date ?? null,
+    amount_paid: Number(r.amount_paid ?? 0),
+    commission_rate: Number(r.commission_rate ?? 0.03),
+    commission_value: Number(r.commission_value ?? Number(r.amount_paid ?? 0) * 0.03),
+    status: r.status ?? "Pendente",
+    reference_month,
+    notes: r.notes ?? null,
+  })).filter((r) => r.client_name);
+
+  if (normalized.length === 0) {
+    return JSON.stringify({ ok: false, error: "Nenhuma row válida (client_name vazio em todas)" });
+  }
+
+  // DELETE atômico do reference_month
+  const { error: delErr } = await sb
+    .from("prevensul_billing")
+    .delete()
+    .eq("reference_month", reference_month);
+  if (delErr) {
+    return JSON.stringify({ ok: false, error: `DELETE failed: ${delErr.message}` });
+  }
+
+  // INSERT em lote
+  const { error: insErr } = await sb.from("prevensul_billing").insert(normalized);
+  if (insErr) {
+    return JSON.stringify({ ok: false, error: `INSERT failed: ${insErr.message}` });
+  }
+
+  const saldoTotal = normalized.reduce((s, r) => s + r.balance_remaining, 0);
+  const comissaoFutura = normalized.reduce((s, r) => s + r.balance_remaining * r.commission_rate, 0);
+
+  return JSON.stringify({
+    ok: true,
+    reference_month,
+    n_imported: normalized.length,
+    saldo_total: Math.round(saldoTotal * 100) / 100,
+    comissao_futura_total: Math.round(comissaoFutura * 100) / 100,
+    message: `Importação atômica: apagou ${reference_month} e inseriu ${normalized.length} contratos.`,
+  });
+}
+
 async function handleAuditDataSources(
   _input: Record<string, unknown>,
   supabaseUrl: string,
@@ -4576,7 +4744,7 @@ async function callClaudeHaiku(
 // Versão do código deployado — log inicial em CADA invocação pra confirmar
 // que o deploy do edge function está atualizado. Bumpa toda vez que mudar
 // a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
-const WISELY_AI_VERSION = "2026.05.02-v34-pipeline-latest-month-only";
+const WISELY_AI_VERSION = "2026.05.02-v35-cleanup-upsert-tools";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -5032,6 +5200,8 @@ Gere a leitura estratégica seguindo o formato obrigatório.`;
             get_strategic_plan: (input) => handleGetStrategicPlan(input, supabaseUrl, serviceKey),
             list_categories: (input) => handleListCategories(input, supabaseUrl, serviceKey),
             audit_data_sources: (input) => handleAuditDataSources(input, supabaseUrl, serviceKey),
+            cleanup_pipeline_old_months: (input) => handleCleanupPipelineOldMonths(input, supabaseUrl, serviceKey),
+            upsert_prevensul_billing: (input) => handleUpsertPrevensulBilling(input, supabaseUrl, serviceKey),
             get_recurring_bills: (input) => handleGetRecurringBills(input, supabaseUrl, serviceKey),
             get_other_commissions_status: (input) => handleGetOtherCommissionsStatus(input, supabaseUrl, serviceKey),
             get_energy_solar_status: (input) => handleGetEnergySolarStatus(input, supabaseUrl, serviceKey),
