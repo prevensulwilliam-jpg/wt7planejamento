@@ -315,3 +315,43 @@ export function useCreateTask() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["daily_stream"] }),
   });
 }
+
+export function useEditTask() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      taskId,
+      updates,
+    }: {
+      taskId: string;
+      updates: Partial<{
+        title: string;
+        due_date: string;
+        due_time: string | null;
+        vector: string | null;
+        notes: string | null;
+      }>;
+    }) => {
+      const { error } = await (supabase as any)
+        .from("daily_tasks")
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq("id", taskId);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["daily_stream"] }),
+  });
+}
+
+export function useDeleteTask() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (taskId: string) => {
+      const { error } = await (supabase as any)
+        .from("daily_tasks")
+        .delete()
+        .eq("id", taskId);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["daily_stream"] }),
+  });
+}

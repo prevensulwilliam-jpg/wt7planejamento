@@ -9,12 +9,16 @@
  * Navegação: ◀ ▶ entre dias/semanas/meses + botão "Hoje".
  */
 import { useState, useMemo } from "react";
-import { useDailyStream, useUpdateTaskStatus, useCreateTask, type StreamItem } from "@/hooks/useDailyStream";
+import { useDailyStream, useUpdateTaskStatus, useCreateTask, useEditTask, useDeleteTask, type StreamItem } from "@/hooks/useDailyStream";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency } from "@/lib/formatters";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Clock, ArrowRight, Sparkles, ChevronLeft, ChevronRight } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Clock, ArrowRight, Sparkles, ChevronLeft, ChevronRight, Pencil, Trash2 } from "lucide-react";
 
 type Mode = "day" | "week" | "month";
 type Filter = "all" | "in" | "out" | "task" | "naval";
@@ -88,15 +92,18 @@ function fmtRange(mode: Mode, start: string, end: string): string {
   return `${fmtBR(start)} → ${fmtBR(end)}`;
 }
 
-function StreamItemRow({ item, onDone, onPostpone, showDate }: {
+function StreamItemRow({ item, onDone, onPostpone, onEdit, onDelete, showDate }: {
   item: StreamItem;
   onDone: () => void;
   onPostpone: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
   showDate: boolean;
 }) {
   const isDone = item.status === "done";
   const isExpected = item.status === "expected";
   const isTask = item.kind === "task";
+  const isManualTask = isTask && item.source_type === "daily_task" && (item.badge === "manual" || item.badge === "naval");
   const isNavalPromoted = item.badge === "naval";
   const amountColor = item.kind === "in" ? "#34D399" : item.kind === "out" ? "#F43F5E" : "#C9A84C";
   const badgeStyle = BADGE_CSS[item.badge];
@@ -158,11 +165,23 @@ function StreamItemRow({ item, onDone, onPostpone, showDate }: {
           : `${item.amount > 0 ? "+" : "−"}${formatCurrency(Math.abs(item.amount)).replace(/^R\$\s*/, "")}`}
       </div>
 
-      {isTask && !isDone ? (
-        <div className="flex gap-1">
-          <button onClick={onPostpone} title="Adiar pra amanhã" style={{ color: "#94A3B8" }}>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </button>
+      {isTask ? (
+        <div className="flex gap-1.5 items-center">
+          {isManualTask && (
+            <>
+              <button onClick={onEdit} title="Editar" className="hover:opacity-100 opacity-60" style={{ color: "#94A3B8" }}>
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+              <button onClick={onDelete} title="Excluir" className="hover:opacity-100 opacity-60" style={{ color: "#F43F5E" }}>
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </>
+          )}
+          {!isDone && (
+            <button onClick={onPostpone} title="Adiar pra amanhã" className="hover:opacity-100 opacity-60" style={{ color: "#94A3B8" }}>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       ) : <div />}
     </div>
@@ -182,6 +201,76 @@ export function DailyStream({ date }: { date?: string }) {
   const { data, isLoading } = useDailyStream(start, end);
   const updateTask = useUpdateTaskStatus();
   const createTask = useCreateTask();
+  const editTask = useEditTask();
+  const deleteTask = useDeleteTask();
+
+  // Edit modal state
+  const [editOpen, setEditOpen] = useState(false);
+  const [editForm, setEditForm] = useState<{
+    id: string;
+    title: string;
+    due_date: string;
+    due_time: string;
+    vector: string;
+    notes: string;
+  } | null>(null);
+
+  const openEdit = async (item: StreamItem) => {
+    // Busca dados completos da task (vector + notes não estão em StreamItem)
+    const { data: t } = await (supabase as any)
+      .from("daily_tasks")
+      .select("id, title, due_date, due_time, vector, notes")
+      .eq("id", item.source_id)
+      .maybeSingle();
+    if (!t) {
+      toast({ title: "Task não encontrada", variant: "destructive" });
+      return;
+    }
+    setEditForm({
+      id: t.id,
+      title: t.title ?? "",
+      due_date: t.due_date ?? "",
+      due_time: t.due_time?.slice(0, 5) ?? "",
+      vector: t.vector ?? "",
+      notes: t.notes ?? "",
+    });
+    setEditOpen(true);
+  };
+
+  const saveEdit = async () => {
+    if (!editForm) return;
+    if (!editForm.title.trim()) {
+      toast({ title: "Título obrigatório", variant: "destructive" });
+      return;
+    }
+    try {
+      await editTask.mutateAsync({
+        taskId: editForm.id,
+        updates: {
+          title: editForm.title.trim(),
+          due_date: editForm.due_date,
+          due_time: editForm.due_time || null,
+          vector: editForm.vector.trim() || null,
+          notes: editForm.notes.trim() || null,
+        },
+      });
+      toast({ title: "Task atualizada" });
+      setEditOpen(false);
+      setEditForm(null);
+    } catch (e: any) {
+      toast({ title: "Erro ao salvar", description: e.message, variant: "destructive" });
+    }
+  };
+
+  const handleDelete = async (item: StreamItem) => {
+    if (!confirm(`Excluir "${item.title}"?`)) return;
+    try {
+      await deleteTask.mutateAsync(item.source_id);
+      toast({ title: "Task excluída" });
+    } catch (e: any) {
+      toast({ title: "Erro ao excluir", description: e.message, variant: "destructive" });
+    }
+  };
 
   const filteredItems = useMemo(() => {
     if (!data) return [];
@@ -445,6 +534,8 @@ export function DailyStream({ date }: { date?: string }) {
                           });
                         }
                       }}
+                      onEdit={() => openEdit(item)}
+                      onDelete={() => handleDelete(item)}
                     />
                   ))}
                 </div>
@@ -489,6 +580,8 @@ export function DailyStream({ date }: { date?: string }) {
                           });
                         }
                       }}
+                      onEdit={() => openEdit(item)}
+                      onDelete={() => handleDelete(item)}
                     />
                   ))}
                 </div>
@@ -497,6 +590,82 @@ export function DailyStream({ date }: { date?: string }) {
           })}
         </div>
       )}
+
+      {/* Modal de edição de task */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-w-md" style={{ background: "#0D1318", border: "1px solid #1A2535" }}>
+          <DialogHeader>
+            <DialogTitle style={{ color: "#F0F4F8" }}>Editar task</DialogTitle>
+          </DialogHeader>
+          {editForm && (
+            <div className="space-y-3">
+              <div>
+                <Label style={{ color: "#94A3B8" }}>Título</Label>
+                <Input
+                  value={editForm.title}
+                  onChange={e => setEditForm(f => f && { ...f, title: e.target.value })}
+                  style={{ background: "#080C10", border: "1px solid #1A2535", color: "#F0F4F8" }}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label style={{ color: "#94A3B8" }}>Data</Label>
+                  <Input
+                    type="date"
+                    value={editForm.due_date}
+                    onChange={e => setEditForm(f => f && { ...f, due_date: e.target.value })}
+                    style={{ background: "#080C10", border: "1px solid #1A2535", color: "#F0F4F8" }}
+                  />
+                </div>
+                <div>
+                  <Label style={{ color: "#94A3B8" }}>Hora (opcional)</Label>
+                  <Input
+                    type="time"
+                    value={editForm.due_time}
+                    onChange={e => setEditForm(f => f && { ...f, due_time: e.target.value })}
+                    style={{ background: "#080C10", border: "1px solid #1A2535", color: "#F0F4F8" }}
+                  />
+                </div>
+              </div>
+              <div>
+                <Label style={{ color: "#94A3B8" }}>Vetor (opcional)</Label>
+                <Input
+                  value={editForm.vector}
+                  onChange={e => setEditForm(f => f && { ...f, vector: e.target.value })}
+                  placeholder="ex: prevensul, rwt05, t7..."
+                  style={{ background: "#080C10", border: "1px solid #1A2535", color: "#F0F4F8" }}
+                />
+              </div>
+              <div>
+                <Label style={{ color: "#94A3B8" }}>Notas (opcional)</Label>
+                <Textarea
+                  value={editForm.notes}
+                  onChange={e => setEditForm(f => f && { ...f, notes: e.target.value })}
+                  rows={2}
+                  style={{ background: "#080C10", border: "1px solid #1A2535", color: "#F0F4F8" }}
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <button
+              onClick={() => { setEditOpen(false); setEditForm(null); }}
+              className="px-4 py-2 rounded-lg text-sm"
+              style={{ border: "1px solid #1A2535", color: "#94A3B8" }}
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={saveEdit}
+              disabled={editTask.isPending}
+              className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+              style={{ background: "linear-gradient(135deg,#C9A84C,#E8C97A)", color: "#0B1220" }}
+            >
+              {editTask.isPending ? "Salvando..." : "Salvar"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -265,15 +265,22 @@ export function useRefreshBriefing() {
         return { ok: true, message: "Nenhuma cascata ativa hoje. Nenhum briefing gerado." };
       }
 
-      // Pede narrativa pro Naval
+      // Pede narrativa pro Naval — tom WhatsApp, sem jargão técnico
       const prompt =
-        `Gere um briefing matinal CURTO (3-4 frases, máx 60 palavras) sobre a situação:\n\n` +
-        `**Cascata ativa #${chosen.id}: ${chosen.title}**\n` +
-        `Severidade: ${chosen.severity}\n` +
-        `Contexto: ${chosen.context}\n\n` +
-        `Tom: direto, executivo, sem floreio. Mostra o problema, impacto em R$ ou %, e próxima ação concreta. ` +
-        `NÃO use markdown estruturado (sem listas, sem títulos). Texto contínuo. ` +
-        `NÃO mencione 'cascata' nem números técnicos. Apresente como insight estratégico.`;
+        `Escreva um BRIEFING DE WHATSAPP pro William (3 a 5 frases curtas, máx 70 palavras) sobre esta situação financeira:\n\n` +
+        `Tema: ${chosen.title}\n` +
+        `Dados brutos: ${chosen.context}\n\n` +
+        `REGRAS RÍGIDAS:\n` +
+        `- Português brasileiro direto, tom de amigo executivo no WhatsApp\n` +
+        `- ZERO markdown (sem **, sem \`backticks\`, sem listas, sem títulos)\n` +
+        `- ZERO jargão técnico de programação (proibido: get_*, query, function, tool, hook, useXxx, código de função)\n` +
+        `- ZERO menções a "cascata", "severidade", nomes técnicos do sistema\n` +
+        `- Use linguagem financeira/executiva: faturamento, margem, sobra, pipeline, fluxo, ciclo, atraso, projeção\n` +
+        `- Mostre: (1) o que está acontecendo agora em R$ ou %, (2) impacto na sobra/meta, (3) próximo passo concreto que ele pode tomar\n` +
+        `- Pode usar 1 emoji NO MÁXIMO se fizer sentido (📉, 🚨, 💰) — não obrigatório\n\n` +
+        `EXEMPLO DO TOM CERTO:\n` +
+        `"Comissão Prevensul travou esse mês — entraram R$ 0 vs média histórica de R$ 28,5k. Vai bater na sobra reinvestida em uns R$ 14k se nada mudar. Vale ligar pra Grand Food essa semana pra entender se é só ciclo de pagamento ou se tem algo travando — e ver se outras obras pequenas podem antecipar pra cobrir o gap."\n\n` +
+        `Agora escreve o briefing real:`;
 
       let narrative: string;
       try {
