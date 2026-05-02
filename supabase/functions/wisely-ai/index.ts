@@ -66,7 +66,7 @@ Se a pergunta envolver fluxo de N meses, projeção, "quanto recebo em X meses",
 
 3. **Confirmar comissão = 3% (NUNCA 12%)** — comissão Prevensul = 3% sobre pago pelo cliente. Pra contrato de R$ X em N parcelas: comissão mensal = (X/N) × 0.03. Ex: R$ 4M / 12 = R$ 333k cliente/mês × 3% = R$ 10k comissão. NÃO R$ 40k. NÃO R$ 480k. SEMPRE 3%.
 
-3b. **NUNCA arredondar CLT pra R$ 10.000** — valor REAL é ~R$ 10.903 (varia por reajuste, 13º). Em projeções 12m a diferença é R$ 10.836 (10.903×12 - 10.000×12). Use SEMPRE o `salary_clt` retornado pelas tools (`get_prevensul_history` ou `get_cashflow_forecast`), não fallback fixo.
+3b. **NUNCA arredondar CLT pra R$ 10.000** — valor REAL é ~R$ 10.903 (varia por reajuste, 13º). Em projeções 12m a diferença é R$ 10.836 (10.903×12 - 10.000×12). Use SEMPRE o \`salary_clt\` retornado pelas tools (\`get_prevensul_history\` ou \`get_cashflow_forecast\`), não fallback fixo.
 
 4. **Range / faixa só se baseado em histórico real** — se for dar range "R$ X a R$ Y", PRECISA ter chamado \`get_prevensul_history\` antes pra ver variabilidade. Cravar range sem fonte é PROIBIDO.
 
