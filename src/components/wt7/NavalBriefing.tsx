@@ -91,7 +91,7 @@ export function NavalBriefing() {
               Briefing do dia
             </strong>
             <p className="text-[13px]" style={{ color: "#F0F4F8" }}>
-              Nenhuma cascata ativa hoje. Tudo no rumo. Use o tempo pra avançar uma decisão estratégica.
+              Nenhum alerta financeiro ativo hoje. Tudo no rumo. Use o tempo pra avançar uma decisão estratégica.
             </p>
           </div>
         </div>
@@ -134,7 +134,7 @@ export function NavalBriefing() {
             Briefing do dia
             {chosen && (
               <span className="ml-2 text-[10px] font-normal" style={{ color: severityColor }}>
-                · cascata #{chosen.id} {chosen.severity}
+                · alerta #{chosen.id} {chosen.severity}
               </span>
             )}
           </strong>
@@ -154,7 +154,7 @@ export function NavalBriefing() {
               className="text-[10px] font-mono mt-2 block"
               style={{ color: "#4A5568", letterSpacing: 1 }}
             >
-              gerado: {generatedDate} · {briefing.active_cascades.length} cascata(s) ativa(s)
+              gerado: {generatedDate} · {briefing.active_cascades.length} alerta(s) ativo(s)
             </span>
           )}
         </div>
@@ -196,7 +196,7 @@ export function NavalBriefing() {
               }}
             >
               {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-              {expanded ? "Ocultar" : `${briefing.active_cascades.length} cascatas`}
+              {expanded ? "Ocultar" : `${briefing.active_cascades.length} alertas`}
             </button>
           )}
         </div>
@@ -206,7 +206,7 @@ export function NavalBriefing() {
       {expanded && briefing.active_cascades.length > 0 && (
         <div className="mt-3 pt-3 border-t space-y-2" style={{ borderColor: "#1A2535" }}>
           <div className="text-[11px] font-mono uppercase tracking-[1.5px] mb-2" style={{ color: "#64748B" }}>
-            🎯 cascatas ativas · ordem hierárquica
+            🚨 alertas financeiros
           </div>
           {briefing.active_cascades.map(c => <CascadePill key={c.id} cascade={c} />)}
         </div>
