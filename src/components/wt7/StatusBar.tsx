@@ -9,11 +9,13 @@ import { useNavigate } from "react-router-dom";
 
 type Props = { month: string };
 
+// Semântica WT7: green=investimento, blue=positivo, red=negativo, gold=warning (amarelo)
+// Status 'gold' historicamente era o key — mantém o nome mas hex agora é amarelo (não dourado)
 const STATUS_COLORS: Record<KpiData["status"], { left: string; value: string; spark: string }> = {
-  green: { left: "#10B981", value: "#34D399", spark: "#10B981" },
-  gold: { left: "#C9A84C", value: "#E8C97A", spark: "#C9A84C" },
-  red: { left: "#F43F5E", value: "#F43F5E", spark: "#F43F5E" },
-  blue: { left: "#3B82F6", value: "#3B82F6", spark: "#3B82F6" },
+  green: { left: "#10B981", value: "#34D399", spark: "#10B981" }, // investimento/meta OK
+  blue:  { left: "#3B82F6", value: "#60A5FA", spark: "#3B82F6" }, // receita/positivo
+  red:   { left: "#F43F5E", value: "#F43F5E", spark: "#F43F5E" }, // negativo/crítico
+  gold:  { left: "#FBBF24", value: "#FCD34D", spark: "#FBBF24" }, // warning (amarelo, não dourado)
 };
 
 function Sparkline({ data, color }: { data: number[]; color: string }) {

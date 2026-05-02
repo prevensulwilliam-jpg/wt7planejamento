@@ -9,9 +9,10 @@ import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { Sparkles, RefreshCw, ChevronDown, ChevronUp, Bot } from "lucide-react";
 
+// Semântica WT7: warning = amarelo (não dourado)
 const SEVERITY_COLORS = {
   critical: "#F43F5E",
-  warning: "#C9A84C",
+  warning: "#FBBF24",
   info: "#3B82F6",
 };
 

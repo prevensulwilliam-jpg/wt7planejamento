@@ -13,10 +13,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertTriangle, ChevronRight, BookmarkPlus } from "lucide-react";
 
+// Semântica WT7: warning = amarelo (não dourado)
 const SEVERITY_CSS: Record<string, { border: string; bg: string; dot: string; glow: string }> = {
   critical: { border: "rgba(244,63,94,.3)", bg: "rgba(244,63,94,.04)", dot: "#F43F5E", glow: "0 0 8px #F43F5E" },
-  warning: { border: "rgba(201,168,76,.3)", bg: "rgba(201,168,76,.04)", dot: "#C9A84C", glow: "0 0 8px #C9A84C" },
-  info: { border: "rgba(59,130,246,.3)", bg: "rgba(59,130,246,.04)", dot: "#3B82F6", glow: "0 0 8px #3B82F6" },
+  warning:  { border: "rgba(251,191,36,.3)", bg: "rgba(251,191,36,.04)", dot: "#FBBF24", glow: "0 0 8px #FBBF24" },
+  info:     { border: "rgba(59,130,246,.3)", bg: "rgba(59,130,246,.04)", dot: "#3B82F6", glow: "0 0 8px #3B82F6" },
 };
 
 export function AlertasPriorizados() {
@@ -50,7 +51,7 @@ export function AlertasPriorizados() {
     <div className="rounded-xl p-4 border" style={{ background: "#0F141B", borderColor: "#1A2535" }}>
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4" style={{ color: "#C9A84C" }} />
+          <AlertTriangle className="w-4 h-4" style={{ color: "#FBBF24" }} />
           <span className="text-[11px] font-mono uppercase tracking-[1.5px]" style={{ color: "#64748B" }}>
             Alertas priorizados · {alerts.length} ativo{alerts.length !== 1 ? "s" : ""}
           </span>

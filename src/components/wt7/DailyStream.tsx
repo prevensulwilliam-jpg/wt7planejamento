@@ -105,7 +105,8 @@ function StreamItemRow({ item, onDone, onPostpone, onEdit, onDelete, showDate }:
   const isTask = item.kind === "task";
   const isManualTask = isTask && item.source_type === "daily_task" && (item.badge === "manual" || item.badge === "naval");
   const isNavalPromoted = item.badge === "naval";
-  const amountColor = item.kind === "in" ? "#34D399" : item.kind === "out" ? "#F43F5E" : "#C9A84C";
+  // Semântica WT7: in (entrada/receita) = azul, out (saída/despesa) = vermelho, task = dourado neutro
+  const amountColor = item.kind === "in" ? "#60A5FA" : item.kind === "out" ? "#F43F5E" : "#C9A84C";
   const badgeStyle = BADGE_CSS[item.badge];
 
   return (
@@ -437,7 +438,7 @@ export function DailyStream({ date }: { date?: string }) {
           {summary.total} {mode === "day" ? "hoje" : "no período"}
         </span>
         <span>
-          <span className="font-mono font-bold" style={{ color: "#34D399" }}>+{formatCurrency(summary.total_in)}</span>
+          <span className="font-mono font-bold" style={{ color: "#60A5FA" }}>+{formatCurrency(summary.total_in)}</span>
           {" · "}
           <span className="font-mono font-bold" style={{ color: "#F43F5E" }}>−{formatCurrency(Math.abs(summary.total_out))}</span>
         </span>

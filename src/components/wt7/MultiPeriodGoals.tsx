@@ -46,10 +46,11 @@ const PERIOD_LABELS: Record<GoalPeriodType, string> = {
   custom: "Custom",
 };
 
+// Semântica WT7: no_caminho = amarelo (não dourado)
 const STATUS_COLORS = {
   atingida: "#10B981",
   perto: "#34D399",
-  no_caminho: "#C9A84C",
+  no_caminho: "#FBBF24",
   atras: "#F43F5E",
 };
 

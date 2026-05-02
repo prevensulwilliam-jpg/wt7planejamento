@@ -114,8 +114,8 @@ export function CashFlowChart() {
           {/* Area gradient */}
           <defs>
             <linearGradient id="cfgrad" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="#10B981" />
-              <stop offset="100%" stopColor="#10B981" stopOpacity="0" />
+              <stop offset="0%" stopColor="#3B82F6" />
+              <stop offset="100%" stopColor="#3B82F6" stopOpacity="0" />
             </linearGradient>
           </defs>
 
@@ -126,13 +126,13 @@ export function CashFlowChart() {
             opacity="0.18"
           />
 
-          {/* Line */}
+          {/* Line — azul = saldo positivo */}
           <polyline
             points={polylinePoints}
             fill="none"
-            stroke="#10B981"
+            stroke="#3B82F6"
             strokeWidth="2.5"
-            style={{ filter: "drop-shadow(0 0 4px #10B981)" }}
+            style={{ filter: "drop-shadow(0 0 4px #3B82F6)" }}
           />
 
           {/* End dot */}
@@ -140,8 +140,8 @@ export function CashFlowChart() {
             cx={W}
             cy={H - 10 - ((lastValue - minValue) / range) * (H - 30)}
             r="5"
-            fill="#10B981"
-            style={{ filter: "drop-shadow(0 0 6px #10B981)" }}
+            fill="#3B82F6"
+            style={{ filter: "drop-shadow(0 0 6px #3B82F6)" }}
           />
         </svg>
       </div>
@@ -157,7 +157,7 @@ export function CashFlowChart() {
       <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t" style={{ borderColor: "#1C2333" }}>
         <div className="px-2.5 py-2 rounded-lg" style={{ background: "#0B1220", border: "1px solid #1C2333" }}>
           <div className="text-[9px] uppercase tracking-wider font-mono" style={{ color: "#4A5568" }}>Entrar</div>
-          <div className="text-sm font-bold font-mono" style={{ color: "#34D399" }}>+{formatCurrency(totalIn)}</div>
+          <div className="text-sm font-bold font-mono" style={{ color: "#60A5FA" }}>+{formatCurrency(totalIn)}</div>
         </div>
         <div className="px-2.5 py-2 rounded-lg" style={{ background: "#0B1220", border: "1px solid #1C2333" }}>
           <div className="text-[9px] uppercase tracking-wider font-mono" style={{ color: "#4A5568" }}>Sair</div>
@@ -165,7 +165,7 @@ export function CashFlowChart() {
         </div>
         <div className="px-2.5 py-2 rounded-lg" style={{ background: "#0B1220", border: "1px solid #1C2333" }}>
           <div className="text-[9px] uppercase tracking-wider font-mono" style={{ color: "#4A5568" }}>Caixa final</div>
-          <div className="text-sm font-bold font-mono" style={{ color: "#E8C97A" }}>{formatCurrency(lastValue)}</div>
+          <div className="text-sm font-bold font-mono" style={{ color: lastValue >= 0 ? "#60A5FA" : "#F43F5E" }}>{formatCurrency(lastValue)}</div>
         </div>
       </div>
     </div>
