@@ -1,48 +1,43 @@
-## Contexto
+## Reorganizar cards de Negócios via drag-and-drop
 
-No `/commissions/portal` (componente `PrevensulHistory` em `src/pages/CommissionsPortalPage.tsx`) existem hoje **dois caminhos** para editar um registro:
+Hoje, em `/businesses`, os cards são exibidos em 3 grupos (Recorrente, Crescimento, Incubado) usando `<div className="grid">` simples — sem possibilidade de reordenar.
 
-1. **Clicar no nome do cliente** (linha 1142) → chama `onLoadRecord(r)` → carrega no formulário **"Registrar Faturamento"** no topo da página (vira "Editar — {cliente}"). Esse fluxo já popula tudo: campos do contrato, parcelas, tipo de pagamento, etc.
-2. **Botão lápis âmbar** (linha 1168, ícone `Pencil` cor `#F59E0B`) → chama `startEdit(r)` → abre **edição inline** dentro da própria linha da tabela, com um conjunto reduzido de campos (sem parcelas, sem cronograma, sem notas).
+O projeto já tem o componente genérico `src/components/wt7/DraggableGrid.tsx`, que:
+- aceita uma lista `items` + função `renderCard`
+- persiste a ordem em `localStorage` via `storageKey`
+- é o mesmo padrão usado em **Bens** (AssetsPage) e **Projetos** (ConstructionsPage)
 
-Você quer que ao clicar em **Editar** (o lápis âmbar) os dados também apareçam no **Registrar Faturamento** — ou seja, unificar os dois fluxos no formulário completo do topo, que é mais rico.
+Vou reutilizar esse componente — sem nova migration, sem mudança de schema, sem backend.
 
-## Mudança
+### Mudanças
 
-**Arquivo:** `src/pages/CommissionsPortalPage.tsx`
+**Arquivo:** `src/pages/BusinessesPage.tsx` (linhas 1038–1054)
 
-### 1. Trocar o `onClick` do botão lápis (linha 1168)
+Substituir o `<div className="grid ...">{list.map(renderCard)}</div>` dentro de cada categoria por:
 
-De:
 ```tsx
-<button onClick={() => startEdit(r)} ...>
-```
-Para:
-```tsx
-<button onClick={() => onLoadRecord(r)} ...>
-```
-
-Assim o botão Editar passa a fazer exatamente o mesmo que clicar no nome do cliente: rola/carrega o formulário "Registrar Faturamento" no topo com todos os dados do cliente prontos para edição (incluindo parcelas via `editRecord` no `useEffect` da linha 209-225).
-
-### 2. Adicionar scroll suave para o topo
-
-Para que ao clicar o usuário veja o formulário sendo preenchido (já que o form fica acima da tabela), envolver a chamada:
-```tsx
-onClick={() => { onLoadRecord(r); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+<DraggableGrid
+  storageKey={`wt7:businesses:order:${cat}`}
+  items={list}
+  renderCard={renderCard}
+  columns="grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
+/>
 ```
 
-Aplicar o mesmo scroll também no botão do nome do cliente (linha 1142) para consistência.
+Adicionar o import no topo:
+```tsx
+import { DraggableGrid } from "@/components/wt7/DraggableGrid";
+```
 
-### 3. Limpeza opcional (recomendada)
+### Comportamento resultante
 
-A edição inline (`startEdit`, `cancelEdit`, `saveEdit`, `editingId`, `editForm`, e o branch `isEditing` que renderiza a linha em modo edição em ~1100-1135) fica **órfã** — nada mais aciona. Removê-la deixa o código mais enxuto e elimina ~80 linhas mortas.
+- Arrastar um card pela área do card → soltar sobre outro → cards trocam de posição.
+- Cada categoria (Recorrente / Crescimento / Incubado) tem sua própria ordem persistida (chaves separadas no localStorage).
+- A ordem permanece após reload do navegador.
+- Drag não interfere com os botões de ação (lupa/editar/lixeira) — eles continuam clicáveis normalmente; o drag inicia a partir de áreas "vazias" do card.
+- Negócios novos (criados depois) aparecem no fim da lista.
 
-Se preferir manter por segurança nesta primeira iteração, deixo apenas as duas trocas de `onClick` acima e sinalizo o código morto para uma limpeza futura.
+### Notas
 
-## Resultado esperado
-
-Tanto clicando no **nome do cliente** quanto no **lápis âmbar** da coluna de ações, os dados do registro carregam no card **"Registrar Faturamento"** no topo (que muda o título para "Editar — {cliente}"), permitindo editar **todos** os campos — inclusive parcelas, cronograma, notas e tipo de pagamento — em vez de apenas os campos básicos da edição inline.
-
-## Pergunta
-
-Quer que eu também **remova a edição inline** (item 3) já nesta mudança, ou prefere manter por enquanto?
+- A ordem é **local ao navegador** (localStorage), igual a Bens/Projetos. Se quiser sincronizar entre dispositivos no futuro, será necessária uma coluna `order_index` no banco — mas isso já existe (`order_index` é passado no `createBiz`), então uma evolução futura pode persistir no servidor. Por ora, mantemos consistência com os outros módulos.
+- Não há mudança visual nos cards — só comportamento.

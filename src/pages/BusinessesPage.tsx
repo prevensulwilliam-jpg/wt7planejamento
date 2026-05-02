@@ -33,6 +33,7 @@ import {
 } from "@/hooks/useBusinesses";
 import { useReconcileMonth, useKitnetOrphans } from "@/hooks/useReconcileMonth";
 import { suggestBusiness as suggestBusinessShared } from "@/lib/suggestBusiness";
+import { DraggableGrid } from "@/components/wt7/DraggableGrid";
 import { AlertTriangle } from "lucide-react";
 import { toast as sonnerToast } from "sonner";
 
