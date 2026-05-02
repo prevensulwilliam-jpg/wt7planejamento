@@ -66,6 +66,8 @@ Se a pergunta envolver fluxo de N meses, projeção, "quanto recebo em X meses",
 
 3. **Confirmar comissão = 3% (NUNCA 12%)** — comissão Prevensul = 3% sobre pago pelo cliente. Pra contrato de R$ X em N parcelas: comissão mensal = (X/N) × 0.03. Ex: R$ 4M / 12 = R$ 333k cliente/mês × 3% = R$ 10k comissão. NÃO R$ 40k. NÃO R$ 480k. SEMPRE 3%.
 
+3b. **NUNCA arredondar CLT pra R$ 10.000** — valor REAL é ~R$ 10.903 (varia por reajuste, 13º). Em projeções 12m a diferença é R$ 10.836 (10.903×12 - 10.000×12). Use SEMPRE o `salary_clt` retornado pelas tools (`get_prevensul_history` ou `get_cashflow_forecast`), não fallback fixo.
+
 4. **Range / faixa só se baseado em histórico real** — se for dar range "R$ X a R$ Y", PRECISA ter chamado \`get_prevensul_history\` antes pra ver variabilidade. Cravar range sem fonte é PROIBIDO.
 
 5. **Sempre citar a fonte** — "Pelo CSV portal: R$ X" / "Iterando prevensul_billing por contrato: R$ Y" / "Histórico médio (audit): R$ Z". Nunca devolver número sem dizer DE ONDE veio.
@@ -813,7 +815,7 @@ const NAVAL_TOOLS: ClaudeTool[] = [
       "Lê revenues com source IN ('salario', 'comissao_prevensul'). " +
       "Retorna por mês: salary_clt, commission, total — SEMPRE apresente AMBOS, não só comissão. " +
       "USE pra: 'renda Prevensul de Q1?', 'quanto vou receber em [mês]?', 'tendência', 'média mensal'. " +
-      "Comissão vem em LUMP SUMS irregulares (CREDIFOZ DEPOSITO BLOQ), CLT é fixo R$ 10k. " +
+      "Comissão vem em LUMP SUMS irregulares (CREDIFOZ DEPOSITO BLOQ), CLT é fixo ~R$ 10.903 (valor real, NÃO arredondar pra R$ 10k — usa o salary_clt da tool sempre). " +
       "NÃO use forecast teórico de get_prevensul_pipeline isoladamente — sempre cruzar com este histórico real. " +
       "QUANDO USUÁRIO PERGUNTAR 'renda Prevensul', responda com TOTAL (CLT+comissão), não só comissão.",
     input_schema: {
@@ -2463,7 +2465,7 @@ async function handleGetPrevensulHistory(
   return JSON.stringify({
     n_months: months.length,
     note:
-      "Renda Prevensul = SALÁRIO CLT (R$ 10k fixo, source=salario) + COMISSÃO (3% sobre pagos, source=comissao_prevensul). " +
+      "Renda Prevensul = SALÁRIO CLT (~R$ 10.903/mês — valor REAL, NÃO arredondar pra R$ 10k; source=salario) + COMISSÃO (3% sobre pagos, source=comissao_prevensul). " +
       "Sempre apresente AMBOS — não confunda renda total com só comissão.",
     by_month: months,
     statistics_total: {
@@ -3820,6 +3822,47 @@ async function handleAuditDataSources(
     item: "saldo_total",
     problem: pipeProblem,
   });
+
+  // 4b. Other commission installments atrasadas (Cláudio juros, R7, Sardagna)
+  const { data: ociAtrasadas } = await sb
+    .from("other_commission_installments")
+    .select("commission_id, installment_number, due_date, amount")
+    .is("paid_at", null)
+    .lt("due_date", todayStr);
+  if ((ociAtrasadas ?? []).length > 0) {
+    const totalAtrasado = (ociAtrasadas ?? []).reduce((s: number, i: any) => s + Number(i.amount ?? 0), 0);
+    // Pega nomes dos contratos
+    const cIds = Array.from(new Set((ociAtrasadas ?? []).map((i: any) => i.commission_id)));
+    const { data: contratos } = await sb
+      .from("other_commissions")
+      .select("id, description")
+      .in("id", cIds);
+    const nomes = (contratos ?? []).map((c: any) => c.description).join(", ").slice(0, 200);
+    issues.push({
+      severity: "warning",
+      source: "other_commission_installments",
+      item: "atrasadas",
+      problem: `⚠ ${(ociAtrasadas ?? []).length} parcela(s) de comissão externa atrasada(s) — total R$ ${totalAtrasado.toFixed(2)}. Contratos: ${nomes}. Verificar /comissoes-externas.`,
+    });
+  }
+
+  // 4c. Other commission installments próximas a vencer (próximos 7 dias)
+  const next7d = new Date(today.getTime() + 7 * 86400000).toISOString().slice(0, 10);
+  const { data: ociProximas } = await sb
+    .from("other_commission_installments")
+    .select("commission_id, installment_number, due_date, amount")
+    .is("paid_at", null)
+    .gte("due_date", todayStr)
+    .lte("due_date", next7d);
+  if ((ociProximas ?? []).length > 0) {
+    const totalProximo = (ociProximas ?? []).reduce((s: number, i: any) => s + Number(i.amount ?? 0), 0);
+    issues.push({
+      severity: "info",
+      source: "other_commission_installments",
+      item: "proximas_7d",
+      problem: `${(ociProximas ?? []).length} parcela(s) de comissão externa vence(m) nos próximos 7 dias — total R$ ${totalProximo.toFixed(2)}.`,
+    });
+  }
 
   // 5. Bank transactions pending no mês corrente
   const { data: pendingTxs } = await sb

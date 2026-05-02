@@ -43,6 +43,7 @@ const CATEGORY_MAP: Record<string, { label: string; color: string }> = {
   recorrente:   { label: "Recorrente",   color: "#10B981" },
   crescimento:  { label: "Crescimento",  color: "#3B82F6" },
   incubado:     { label: "Incubado",     color: "#A78BFA" },
+  outros:       { label: "Outros",       color: "#94A3B8" },
 };
 
 const STATUS_MAP: Record<string, { label: string; color: string }> = {
@@ -59,7 +60,7 @@ type FormData = {
   partner_name: string;
   ownership_pct: number;
   status: "ativo" | "encerrado" | "incubado";
-  category: "crescimento" | "incubado" | "recorrente";
+  category: "crescimento" | "incubado" | "recorrente" | "outros";
   monthly_target: number;
   target_year_end: number;
   target_year_end_date: string;
@@ -613,7 +614,7 @@ export default function BusinessesPage() {
   }, [businesses, revenueByBiz, neutralByBiz, ytdMap, month]);
 
   const grouped = useMemo(() => {
-    const g: Record<string, Business[]> = { recorrente: [], crescimento: [], incubado: [] };
+    const g: Record<string, Business[]> = { recorrente: [], crescimento: [], incubado: [], outros: [] };
     businesses.forEach(b => { (g[b.category] ??= []).push(b); });
     return g;
   }, [businesses]);
@@ -1037,7 +1038,7 @@ export default function BusinessesPage() {
             <p style={{ color: "#94A3B8" }}>Nenhum negócio cadastrado. Clique em "Novo negócio" para começar.</p>
           </PremiumCard>
         ) : (
-          (["recorrente", "crescimento", "incubado"] as const).map(cat => {
+          (["recorrente", "crescimento", "incubado", "outros"] as const).map(cat => {
             const list = grouped[cat] ?? [];
             if (list.length === 0) return null;
             return (

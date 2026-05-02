@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useSobraReinvestida, SOBRA_META_PCT } from "@/hooks/useSobraReinvestida";
+import { useGoals } from "@/hooks/useFinances";
 import { PremiumCard } from "./PremiumCard";
 import { formatCurrency } from "@/lib/formatters";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -11,14 +12,14 @@ type Props = { month: string };
 /**
  * 3 anéis concêntricos — fotografia canônica do mês em 1 olhada.
  *
- * Anel 1 (fora, dourado): Receita Real ÷ meta mensal (hoje hardcoded R$85k —
- *   depois puxar de goals se precisar).
+ * Anel 1 (fora, dourado): Receita Real ÷ meta mensal (vem de /goals,
+ *   busca goal type='monthly_revenue'. Fallback R$ 85k se não houver).
  * Anel 2 (meio, vermelho): Custeio ÷ Receita (alerta se >50%).
  * Anel 3 (dentro, verde): Investimento ÷ Receita (META ≥50%).
  *
  * Se Anel 3 fecha verde → mês está no CAGR 17,3% a.a. pra bater R$70M/2041.
  */
-const RECEITA_META_MENSAL = 85000; // TODO: puxar de /goals quando tiver
+const RECEITA_META_FALLBACK = 85000;
 
 function Ring({ pct, color, radius, stroke, track = "#1A2535" }: {
   pct: number; color: string; radius: number; stroke: number; track?: string;
@@ -42,10 +43,22 @@ function Ring({ pct, color, radius, stroke, track = "#1A2535" }: {
 
 export function ThreeRingsCockpit({ month }: Props) {
   const { data: sobra, isLoading } = useSobraReinvestida(month);
+  const { data: goals } = useGoals();
   const [drillDown, setDrillDown] = useState<"receita" | "custeio" | "investimento" | null>(null);
 
   if (isLoading) return <Skeleton className="h-64 rounded-2xl" />;
   if (!sobra) return null;
+
+  // Meta receita mensal vem de /goals (type='monthly_revenue' ou name match).
+  // Fallback R$ 85k se não houver goal cadastrada — preserva comportamento.
+  const monthlyRevenueGoal = (goals ?? []).find(
+    (g: any) =>
+      g.type === "monthly_revenue" ||
+      g.type === "receita_mensal" ||
+      (g.name ?? "").toLowerCase().includes("receita mensal") ||
+      (g.name ?? "").toLowerCase().includes("renda mensal"),
+  );
+  const RECEITA_META_MENSAL = Number(monthlyRevenueGoal?.target_value) || RECEITA_META_FALLBACK;
 
   const receitaPct = sobra.receita > 0 ? (sobra.receita / RECEITA_META_MENSAL) * 100 : 0;
   const custeioPctReceita = sobra.receita > 0 ? (sobra.custeio_total / sobra.receita) * 100 : 0;
