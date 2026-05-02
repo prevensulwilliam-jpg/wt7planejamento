@@ -1,154 +1,54 @@
-import { useState, useMemo } from "react";
+/**
+ * HojePage — Cockpit estratégico /hoje v4.
+ *
+ * Layout (Sprint 2):
+ *   1. Header (título + MonthPicker)
+ *   2. Alertas Naval (críticos no topo)
+ *   3. StatusBar (5 KPIs com sparklines)
+ *   4. ThreeRingsCockpit (Receita / Custeio / Investimento)
+ *   5. SobraReinvestidaCard (decomposição da sobra por vetor)
+ *   6. CaminhoMeta (YTD vs goal anual)
+ *   7. Split PipelineCompact + AutonomyCompact
+ *   8. AtalhosRapidos (6 botões)
+ *
+ * Sprint 3 adiciona: Naval Briefing + Stream do Dia
+ * Sprint 4 adiciona: Cash Flow Forecast chart + WhatsApp share
+ */
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { MonthPicker } from "@/components/wt7/MonthPicker";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
-import { Skeleton } from "@/components/ui/skeleton";
-import { useAutonomyIndex, useAutonomyHistory } from "@/hooks/useAutonomyIndex";
-import { useKitnetOrphans } from "@/hooks/useReconcileMonth";
-import { useMonthRevenueReconciliation, useBusinesses, useBusinessRealized } from "@/hooks/useBusinesses";
 import { useNavalAlerts } from "@/hooks/useNavalAlerts";
 import { SobraReinvestidaCard } from "@/components/wt7/SobraReinvestidaCard";
 import { ThreeRingsCockpit } from "@/components/wt7/ThreeRingsCockpit";
-import { useSobraReinvestida } from "@/hooks/useSobraReinvestida";
-import { formatCurrency, getCurrentMonth, formatMonth } from "@/lib/formatters";
-import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
-import { Compass, TrendingUp, AlertTriangle, Target, Rocket, Home, Flame, ChevronRight, Bot, Loader2 } from "lucide-react";
+import { StatusBar } from "@/components/wt7/StatusBar";
+import { CaminhoMeta } from "@/components/wt7/CaminhoMeta";
+import { PipelineCompact } from "@/components/wt7/PipelineCompact";
+import { AutonomyCompact } from "@/components/wt7/AutonomyCompact";
+import { AtalhosRapidos } from "@/components/wt7/AtalhosRapidos";
+import { getCurrentMonth, formatMonth } from "@/lib/formatters";
+import { Compass, AlertTriangle, ChevronRight } from "lucide-react";
 
 export default function HojePage() {
   const [month, setMonth] = useState(getCurrentMonth());
   const navigate = useNavigate();
-
-  const { data: snap, isLoading } = useAutonomyIndex(month);
-  const { data: history = [], isLoading: histLoading } = useAutonomyHistory(12, month);
-  const { data: kitnetOrphans } = useKitnetOrphans(month);
-  const { data: reconc } = useMonthRevenueReconciliation(month);
-  const { data: businesses = [] } = useBusinesses();
-  const { data: realizedMap } = useBusinessRealized(month);
-  const { data: sobra } = useSobraReinvestida(month);
   const { data: alerts = [] } = useNavalAlerts();
   const criticalAlerts = alerts.filter(a => a.severity === "critical");
   const warningAlerts = alerts.filter(a => a.severity === "warning");
 
-  const [analysis, setAnalysis] = useState<string | null>(null);
-  const [analyzing, setAnalyzing] = useState(false);
-  const { toast } = useToast();
-
-  const runNavalAnalysis = async () => {
-    if (!snap) return;
-    setAnalyzing(true);
-    setAnalysis(null);
-    try {
-      const bizPayload = (businesses as any[]).map((b: any) => ({
-        code: b.code,
-        name: b.name,
-        category: b.category,
-        monthly_target: Number(b.monthly_target ?? 0),
-        realized: Number(realizedMap?.get(b.id)?.amount ?? 0),
-      }));
-
-      const { data, error } = await supabase.functions.invoke("wisely-ai", {
-        body: {
-          action: "analyze-autonomy",
-          snapshot: snap,
-          history,
-          businesses: bizPayload,
-        },
-      });
-      if (error) throw error;
-      if (!data?.ok) throw new Error(data?.error ?? "Naval não retornou análise");
-      setAnalysis(data.analysis);
-    } catch (e: any) {
-      toast({ title: "Erro ao consultar Naval", description: e.message, variant: "destructive" });
-    } finally {
-      setAnalyzing(false);
-    }
-  };
-
-  // Meta de autonomia do William: 50% até 2028
-  const TARGET_AUTONOMY = 50;
-
-  const excedente = useMemo(() => {
-    if (!snap) return 0;
-    return snap.total - snap.target;
-  }, [snap]);
-
-  const alertas = useMemo(() => {
-    const list: Array<{ id: string; level: "warn" | "info" | "good"; msg: string; href?: string }> = [];
-    if (kitnetOrphans && kitnetOrphans.count > 0) {
-      list.push({
-        id: "kit-orphans",
-        level: "warn",
-        msg: `${kitnetOrphans.count} receita${kitnetOrphans.count > 1 ? "s" : ""} marcada${kitnetOrphans.count > 1 ? "s" : ""} como aluguel sem fechamento correspondente em /kitnets — ${formatCurrency(kitnetOrphans.total)}. Pode ser duplicata ou classificação errada.`,
-        href: `/reconciliation?tab=review&month=${month}`,
-      });
-    }
-    if (reconc && reconc.unlinkedCount > 0) {
-      list.push({
-        id: "unlinked",
-        level: "warn",
-        msg: `${reconc.unlinkedCount} receita${reconc.unlinkedCount > 1 ? "s" : ""} sem negócio vinculado — ${formatCurrency(reconc.unlinked)}`,
-        href: `/businesses`,
-      });
-    }
-    if (snap && snap.autonomyPct >= TARGET_AUTONOMY) {
-      list.push({
-        id: "autonomy-good",
-        level: "good",
-        msg: `🎉 Meta de autonomia 50% batida este mês (${snap.autonomyPct.toFixed(0)}%)`,
-      });
-    }
-    if (snap && snap.target > 0 && snap.total >= snap.target) {
-      list.push({
-        id: "target-hit",
-        level: "good",
-        msg: `✓ Meta consolidada batida: +${formatCurrency(snap.total - snap.target)} acima do alvo`,
-      });
-    }
-    // ═══ Sobra Reinvestida — alerta estratégico ═══
-    if (sobra && sobra.receita > 0) {
-      if (sobra.sobra_pct < 40) {
-        list.push({
-          id: "sobra-red",
-          level: "warn",
-          msg: `🚨 Sobra Reinvestida em ${sobra.sobra_pct.toFixed(0)}% — sinal vermelho. Custeio ${formatCurrency(sobra.custeio_total)} alto demais. Revisar cartões.`,
-          href: "/cards",
-        });
-      } else if (sobra.sobra_pct >= 60) {
-        list.push({
-          id: "sobra-gold",
-          level: "good",
-          msg: `💎 Sobra Reinvestida em ${sobra.sobra_pct.toFixed(0)}% — fase de aceleração. ${formatCurrency(sobra.sobra_bruta - sobra.investimento_total)} livre pra aportar em obra.`,
-          href: "/cards",
-        });
-      } else if (sobra.sobra_pct < 50) {
-        list.push({
-          id: "sobra-warn",
-          level: "warn",
-          msg: `⚠️ Sobra Reinvestida em ${sobra.sobra_pct.toFixed(0)}% — abaixo do piso 50%. Congelar custeio este mês.`,
-          href: "/cards",
-        });
-      }
-    }
-    return list;
-  }, [kitnetOrphans, reconc, snap, sobra, month]);
-
-  // Para o gráfico: escala de autonomia (0-100%)
-  const chartMax = 100;
-  const chartHeight = 120;
-
   return (
     <div className="min-h-screen p-4 md:p-6" style={{ background: "#080C10" }}>
       <div className="max-w-7xl mx-auto space-y-4">
-        {/* Header */}
-        <div className="flex items-center justify-between flex-wrap gap-3">
+
+        {/* ═══ HEADER ═══════════════════════════════════════════════ */}
+        <div className="flex items-center justify-between flex-wrap gap-3 pb-2 border-b" style={{ borderColor: "#1A2535" }}>
           <div>
-            <h1 className="text-2xl font-bold" style={{ color: "#F0F4F8" }}>
-              <Compass className="inline w-6 h-6 mr-2" style={{ color: "#C9A84C" }} />
-              Hoje — Cockpit Estratégico
+            <h1 className="text-2xl font-bold flex items-center gap-2.5" style={{ color: "#F0F4F8" }}>
+              <Compass className="w-6 h-6" style={{ color: "#C9A84C" }} />
+              Hoje · William
             </h1>
-            <p className="text-sm mt-0.5" style={{ color: "#94A3B8" }}>
-              Seu norte diário · Índice de Autonomia · Meta: 50% até 2028
+            <p className="text-xs mt-0.5" style={{ color: "#94A3B8" }}>
+              Cockpit estratégico · {formatMonth(month)} · meta R$70M / 2041
             </p>
           </div>
           <MonthPicker value={month} onChange={setMonth} className="w-44" />
@@ -159,11 +59,17 @@ export default function HojePage() {
           <PremiumCard className="p-4" glowColor={criticalAlerts.length > 0 ? "#F43F5E" : "#F59E0B"}>
             <div className="space-y-2">
               <div className="flex items-center gap-2 mb-2">
-                <AlertTriangle className="w-4 h-4" style={{ color: criticalAlerts.length > 0 ? "#F43F5E" : "#F59E0B" }} />
+                <AlertTriangle
+                  className="w-4 h-4"
+                  style={{ color: criticalAlerts.length > 0 ? "#F43F5E" : "#F59E0B" }}
+                />
                 <span className="text-sm font-semibold" style={{ color: "#F0F4F8" }}>
                   Naval detectou {alerts.length} alerta{alerts.length !== 1 ? "s" : ""}
                   {criticalAlerts.length > 0 && (
-                    <span className="ml-1.5 px-2 py-0.5 rounded text-[10px]" style={{ background: "rgba(244,63,94,0.15)", color: "#F87171" }}>
+                    <span
+                      className="ml-1.5 px-2 py-0.5 rounded text-[10px]"
+                      style={{ background: "rgba(244,63,94,0.15)", color: "#F87171" }}
+                    >
                       {criticalAlerts.length} crítico{criticalAlerts.length !== 1 ? "s" : ""}
                     </span>
                   )}
@@ -196,330 +102,32 @@ export default function HojePage() {
           </PremiumCard>
         )}
 
-        {isLoading || !snap ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Skeleton className="h-64" /><Skeleton className="h-64" />
+        {/* ═══ BLOCO 1 · STATUS BAR (5 KPIs) ═══════════════════════ */}
+        <StatusBar month={month} />
+
+        {/* ═══ BLOCO 2 · COCKPIT 3 ANÉIS ═══════════════════════════ */}
+        <ThreeRingsCockpit month={month} />
+
+        {/* ═══ BLOCO 3 · SOBRA REINVESTIDA (decomposição) ═════════ */}
+        <SobraReinvestidaCard month={month} />
+
+        {/* ═══ BLOCO 4 · CAMINHO DA META (YTD) ═════════════════════ */}
+        <CaminhoMeta month={month} />
+
+        {/* ═══ BLOCO 5 · SPLIT (Pipeline + Autonomia) ══════════════ */}
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+          <div className="lg:col-span-3">
+            <PipelineCompact />
           </div>
-        ) : (
-          <>
-            {/* ═══ BLOCO 0: Cockpit 3 Anéis (fotografia canônica da meta R$70M) ═══ */}
-            <ThreeRingsCockpit month={month} />
+          <div className="lg:col-span-2">
+            <AutonomyCompact month={month} />
+          </div>
+        </div>
 
-            {/* ═══ BLOCO 1: Índice de Autonomia (destaque) ═══ */}
-            <PremiumCard className="p-6" glowColor={snap.autonomyPct >= TARGET_AUTONOMY ? "#10B981" : "#C9A84C"}>
-              <div className="flex items-start justify-between flex-wrap gap-4 mb-4">
-                <div>
-                  <p className="text-xs uppercase tracking-widest font-mono" style={{ color: "#4A5568" }}>
-                    Índice de Autonomia {formatMonth(month)}
-                  </p>
-                  <div className="flex items-baseline gap-2 mt-1">
-                    <span
-                      className="text-6xl font-bold font-mono"
-                      style={{
-                        backgroundImage: "linear-gradient(135deg, #10B981 0%, #34D399 35%, #E8C97A 75%, #C9A84C 100%)",
-                        WebkitBackgroundClip: "text",
-                        backgroundClip: "text",
-                        WebkitTextFillColor: "transparent",
-                        color: "transparent",
-                      }}
-                    >
-                      {snap.autonomyPct.toFixed(0)}
-                    </span>
-                    <span className="text-2xl" style={{ color: "#64748B" }}>%</span>
-                  </div>
-                  <p className="text-xs mt-1" style={{ color: "#64748B" }}>
-                    (passiva + eventual) ÷ total · alvo 50%
-                  </p>
-                </div>
+        {/* ═══ BLOCO 6 · ATALHOS RÁPIDOS ═══════════════════════════ */}
+        <AtalhosRapidos />
 
-                <div className="flex-1 min-w-[300px]">
-                  {/* Barra tripla: passiva (verde) | eventual (dourada) | ativa Prevensul (vermelha) */}
-                  <div className="flex justify-between text-xs mb-1.5" style={{ color: "#94A3B8" }}>
-                    <span>
-                      <span style={{ color: "#10B981" }}>{formatCurrency(snap.passive + snap.eventual)}</span> autônoma
-                    </span>
-                    <span className="font-mono">{formatCurrency(snap.total)} total</span>
-                  </div>
-                  {(() => {
-                    const pctP = snap.total > 0 ? (snap.passive / snap.total) * 100 : 0;
-                    const pctE = snap.total > 0 ? (snap.eventual / snap.total) * 100 : 0;
-                    const pctA = snap.total > 0 ? (snap.active / snap.total) * 100 : 0;
-                    return (
-                      <div style={{ position: "relative", height: 22, background: "#0B1220", borderRadius: 99, overflow: "hidden", border: "1px solid #1A2535" }}>
-                        {/* Passiva */}
-                        <div style={{
-                          position: "absolute", top: 0, left: 0, height: "100%", width: `${pctP}%`,
-                          background: "linear-gradient(90deg, #059669, #10B981)",
-                        }} title={`Passiva ${pctP.toFixed(0)}%`} />
-                        {/* Eventual */}
-                        <div style={{
-                          position: "absolute", top: 0, left: `${pctP}%`, height: "100%", width: `${pctE}%`,
-                          background: "linear-gradient(90deg, #C9A84C, #E8C97A)",
-                        }} title={`Eventual ${pctE.toFixed(0)}%`} />
-                        {/* Ativa (Prevensul) */}
-                        <div style={{
-                          position: "absolute", top: 0, left: `${pctP + pctE}%`, height: "100%", width: `${pctA}%`,
-                          background: "linear-gradient(90deg, #E11D48, #F43F5E)",
-                        }} title={`Ativa Prevensul ${pctA.toFixed(0)}%`} />
-                        {/* Marcador 50% */}
-                        <div style={{
-                          position: "absolute", top: -2, left: "50%", height: "calc(100% + 4px)", width: 2,
-                          background: "#FDE68A", opacity: 0.9, boxShadow: "0 0 6px rgba(253,230,138,0.6)",
-                        }} title="Meta 50% autonomia" />
-                      </div>
-                    );
-                  })()}
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] mt-2 font-mono">
-                    <span style={{ color: "#10B981" }}>● Passiva {formatCurrency(snap.passive)}</span>
-                    <span style={{ color: "#E8C97A" }}>● Eventual {formatCurrency(snap.eventual)}</span>
-                    <span style={{ color: "#F43F5E" }}>● Ativa (Prevensul) {formatCurrency(snap.active)}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Legenda explicativa */}
-              <div className="mt-4 pt-3 border-t border-white/5 grid grid-cols-1 md:grid-cols-3 gap-3 text-[11px]">
-                <div>
-                  <p className="font-mono font-semibold mb-0.5" style={{ color: "#10B981" }}>● Passiva — autonomia pura</p>
-                  <p style={{ color: "#94A3B8" }}>
-                    Renda que entra sem você trabalhar: aluguéis kitnets, JW7, RWT05, JW7 Itaipava. É o núcleo da independência financeira.
-                  </p>
-                </div>
-                <div>
-                  <p className="font-mono font-semibold mb-0.5" style={{ color: "#E8C97A" }}>● Eventual — recorrente mas ativa</p>
-                  <p style={{ color: "#94A3B8" }}>
-                    Entra com regularidade mas depende de você estar na ponta: T7/TDI, CW7, comissões externas. Conta como autônoma hoje, mas exige operação.
-                  </p>
-                </div>
-                <div>
-                  <p className="font-mono font-semibold mb-0.5" style={{ color: "#F43F5E" }}>● Ativa (Prevensul) — risco de ponto único</p>
-                  <p style={{ color: "#94A3B8" }}>
-                    Vínculo CLT + comissões Prevensul. Para se você parar. Meta estratégica: reduzir essa fatia até sair em 2029.
-                  </p>
-                </div>
-              </div>
-            </PremiumCard>
-
-            {/* ═══ BLOCO 2: Excedente + Meta ═══ */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <PremiumCard className="p-4">
-                <div className="flex items-center gap-2 mb-1">
-                  <Target className="w-4 h-4" style={{ color: "#C9A84C" }} />
-                  <p className="text-xs uppercase tracking-wider font-mono" style={{ color: "#4A5568" }}>Meta do mês</p>
-                </div>
-                <p className="text-2xl font-mono font-bold" style={{ color: "#C9A84C" }}>{formatCurrency(snap.target)}</p>
-                <p className="text-[11px] mt-1" style={{ color: "#64748B" }}>soma dos alvos mensais</p>
-              </PremiumCard>
-
-              <PremiumCard className="p-4">
-                <div className="flex items-center gap-2 mb-1">
-                  <TrendingUp className="w-4 h-4" style={{ color: excedente >= 0 ? "#10B981" : "#F43F5E" }} />
-                  <p className="text-xs uppercase tracking-wider font-mono" style={{ color: "#4A5568" }}>
-                    {excedente >= 0 ? "Excedente" : "Gap"}
-                  </p>
-                </div>
-                <p className="text-2xl font-mono font-bold" style={{ color: excedente >= 0 ? "#10B981" : "#F43F5E" }}>
-                  {excedente >= 0 ? "+" : ""}{formatCurrency(excedente)}
-                </p>
-                <p className="text-[11px] mt-1" style={{ color: "#64748B" }}>
-                  {excedente >= 0 ? "disponível pra reinvestir" : "faltando pra bater meta"}
-                </p>
-              </PremiumCard>
-
-              <PremiumCard className="p-4">
-                <div className="flex items-center gap-2 mb-1">
-                  <Rocket className="w-4 h-4" style={{ color: "#A78BFA" }} />
-                  <p className="text-xs uppercase tracking-wider font-mono" style={{ color: "#4A5568" }}>Dependência Prevensul</p>
-                </div>
-                <p className="text-2xl font-mono font-bold" style={{ color: snap.total > 0 && (snap.active / snap.total) < 0.5 ? "#10B981" : "#F43F5E" }}>
-                  {snap.total > 0 ? ((snap.active / snap.total) * 100).toFixed(0) : 0}%
-                </p>
-                <p className="text-[11px] mt-1" style={{ color: "#64748B" }}>
-                  quanto menor, mais livre
-                </p>
-              </PremiumCard>
-            </div>
-
-            {/* ═══ BLOCO 2.5: Sobra Reinvestida (cartões + expenses) ═══ */}
-            <SobraReinvestidaCard month={month} />
-
-            {/* ═══ BLOCO 3: Alertas & Ações ═══ */}
-            {alertas.length > 0 && (
-              <PremiumCard className="p-4">
-                <p className="text-xs uppercase tracking-widest font-mono mb-3" style={{ color: "#4A5568" }}>
-                  <AlertTriangle className="inline w-3.5 h-3.5 mr-1" />
-                  Próximas ações
-                </p>
-                <div className="space-y-2">
-                  {alertas.map(a => {
-                    const bg = a.level === "warn" ? "rgba(59,130,246,0.08)"
-                             : a.level === "good" ? "rgba(16,185,129,0.08)"
-                             : "rgba(148,163,184,0.08)";
-                    const border = a.level === "warn" ? "rgba(59,130,246,0.3)"
-                                 : a.level === "good" ? "rgba(16,185,129,0.3)"
-                                 : "rgba(148,163,184,0.3)";
-                    const color = a.level === "warn" ? "#3B82F6"
-                                : a.level === "good" ? "#10B981"
-                                : "#94A3B8";
-                    return (
-                      <button
-                        key={a.id}
-                        onClick={() => a.href && navigate(a.href)}
-                        disabled={!a.href}
-                        className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-left transition-colors hover:opacity-80"
-                        style={{ background: bg, border: `1px solid ${border}`, cursor: a.href ? "pointer" : "default" }}
-                      >
-                        <span className="text-sm" style={{ color }}>{a.msg}</span>
-                        {a.href && <ChevronRight className="w-4 h-4 flex-shrink-0" style={{ color }} />}
-                      </button>
-                    );
-                  })}
-                </div>
-              </PremiumCard>
-            )}
-
-            {/* ═══ BLOCO 3.5: Leitura Estratégica do Naval ═══ */}
-            <PremiumCard className="p-4" glowColor={analysis ? "#A78BFA" : undefined}>
-              <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
-                <p className="text-xs uppercase tracking-widest font-mono" style={{ color: "#4A5568" }}>
-                  <Bot className="inline w-3.5 h-3.5 mr-1" style={{ color: "#A78BFA" }} />
-                  Leitura estratégica do Naval
-                </p>
-                <button
-                  onClick={runNavalAnalysis}
-                  disabled={analyzing || !snap}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
-                  style={{
-                    background: "rgba(167,139,250,0.15)",
-                    color: "#A78BFA",
-                    border: "1px solid rgba(167,139,250,0.4)",
-                  }}
-                >
-                  {analyzing ? (
-                    <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Naval pensando...</>
-                  ) : analysis ? (
-                    <><Bot className="w-3.5 h-3.5" /> Regenerar análise</>
-                  ) : (
-                    <><Bot className="w-3.5 h-3.5" /> Pedir análise deste mês</>
-                  )}
-                </button>
-              </div>
-              {analysis ? (
-                <div
-                  className="text-sm leading-relaxed mt-3 p-3 rounded-lg"
-                  style={{
-                    color: "#E8EEF5",
-                    background: "rgba(167,139,250,0.05)",
-                    border: "1px solid rgba(167,139,250,0.2)",
-                    whiteSpace: "pre-wrap",
-                  }}
-                  dangerouslySetInnerHTML={{
-                    __html: analysis
-                      .replace(/\*\*(.+?)\*\*/g, '<strong style="color:#E8C97A">$1</strong>')
-                      .replace(/\n/g, "<br>"),
-                  }}
-                />
-              ) : (
-                <p className="text-xs mt-2" style={{ color: "#64748B" }}>
-                  Clique pra receber diagnóstico cirúrgico do mês com base nos seus negócios cadastrados, tendência 12m e excedente disponível pra reinvestir.
-                </p>
-              )}
-            </PremiumCard>
-
-            {/* ═══ BLOCO 4: Evolução 12m ═══ */}
-            <PremiumCard className="p-4">
-              <div className="flex justify-between items-baseline mb-3">
-                <p className="text-xs uppercase tracking-widest font-mono" style={{ color: "#4A5568" }}>
-                  Evolução do Índice de Autonomia · últimos 12 meses
-                </p>
-                <span className="text-[10px]" style={{ color: "#64748B" }}>alvo 50%</span>
-              </div>
-
-              {histLoading ? (
-                <Skeleton className="h-32" />
-              ) : (
-                <div style={{ position: "relative", height: chartHeight + 30 }}>
-                  {/* Linha 50% target */}
-                  <div style={{
-                    position: "absolute",
-                    top: chartHeight - (chartHeight * TARGET_AUTONOMY / chartMax),
-                    left: 0, right: 0, height: 1,
-                    borderTop: "1px dashed #C9A84C", opacity: 0.4,
-                  }} />
-
-                  {/* Barras */}
-                  <div className="flex items-end justify-between gap-1" style={{ height: chartHeight }}>
-                    {history.map((s, i) => {
-                      const pct = Math.min(s.autonomyPct, chartMax);
-                      const barH = (pct / chartMax) * chartHeight;
-                      const isCurrentMonth = s.month === month;
-                      const color = s.autonomyPct >= TARGET_AUTONOMY ? "#10B981"
-                                  : s.autonomyPct >= 30 ? "#C9A84C" : "#F43F5E";
-                      return (
-                        <div key={s.month} className="flex-1 flex flex-col items-center gap-1 group relative">
-                          <div
-                            style={{
-                              width: "100%",
-                              height: barH,
-                              background: color,
-                              opacity: isCurrentMonth ? 1 : 0.5,
-                              borderRadius: "4px 4px 0 0",
-                              transition: "opacity 0.2s",
-                              border: isCurrentMonth ? `1px solid ${color}` : "none",
-                              boxShadow: isCurrentMonth ? `0 0 8px ${color}88` : "none",
-                            }}
-                            title={`${s.month}: ${s.autonomyPct.toFixed(0)}%`}
-                          />
-                          {/* Tooltip on hover */}
-                          <div className="absolute bottom-full mb-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10"
-                               style={{ background: "#0D1117", border: "1px solid #1C2333", padding: "4px 8px", borderRadius: 4, fontSize: 10, whiteSpace: "nowrap" }}>
-                            <div style={{ color: "#F0F4F8" }}>{s.month}</div>
-                            <div style={{ color }}>{s.autonomyPct.toFixed(1)}%</div>
-                            <div style={{ color: "#64748B" }}>{formatCurrency(s.total)}</div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Labels mês */}
-                  <div className="flex justify-between gap-1 mt-1">
-                    {history.map(s => (
-                      <div key={s.month} className="flex-1 text-center text-[9px] font-mono" style={{ color: "#4A5568" }}>
-                        {s.month.slice(5)}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </PremiumCard>
-
-            {/* Atalhos rápidos */}
-            <div className="grid grid-cols-3 gap-2">
-              <button onClick={() => navigate("/businesses")} className="p-3 rounded-lg text-left transition-colors"
-                style={{ background: "#0F141B", border: "1px solid #1A2535", color: "#C9A84C" }}>
-                <div className="flex items-center gap-2 text-xs font-mono uppercase">
-                  <Flame className="w-3.5 h-3.5" />Negócios
-                </div>
-                <p className="text-[11px] mt-1" style={{ color: "#64748B" }}>meta vs realizado</p>
-              </button>
-              <button onClick={() => navigate("/kitnets")} className="p-3 rounded-lg text-left transition-colors"
-                style={{ background: "#0F141B", border: "1px solid #1A2535", color: "#10B981" }}>
-                <div className="flex items-center gap-2 text-xs font-mono uppercase">
-                  <Home className="w-3.5 h-3.5" />Kitnets
-                </div>
-                <p className="text-[11px] mt-1" style={{ color: "#64748B" }}>renda passiva</p>
-              </button>
-              <button onClick={() => navigate("/reconciliation")} className="p-3 rounded-lg text-left transition-colors"
-                style={{ background: "#0F141B", border: "1px solid #1A2535", color: "#3B82F6" }}>
-                <div className="flex items-center gap-2 text-xs font-mono uppercase">
-                  <TrendingUp className="w-3.5 h-3.5" />Reconciliar
-                </div>
-                <p className="text-[11px] mt-1" style={{ color: "#64748B" }}>extrato ↔ receitas</p>
-              </button>
-            </div>
-          </>
-        )}
+        {/* TODO Sprint 3: Naval Briefing + Stream do Dia + Cash Flow chart */}
       </div>
     </div>
   );

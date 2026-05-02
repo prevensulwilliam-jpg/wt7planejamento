@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useSobraReinvestida, SOBRA_META_PCT } from "@/hooks/useSobraReinvestida";
-import { useGoals } from "@/hooks/useFinances";
+import { useMonthlyRevenueGoal } from "@/hooks/useGoalsActive";
 import { PremiumCard } from "./PremiumCard";
 import { formatCurrency } from "@/lib/formatters";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -43,22 +43,14 @@ function Ring({ pct, color, radius, stroke, track = "#1A2535" }: {
 
 export function ThreeRingsCockpit({ month }: Props) {
   const { data: sobra, isLoading } = useSobraReinvestida(month);
-  const { data: goals } = useGoals();
+  const { data: goalData } = useMonthlyRevenueGoal(month);
   const [drillDown, setDrillDown] = useState<"receita" | "custeio" | "investimento" | null>(null);
 
   if (isLoading) return <Skeleton className="h-64 rounded-2xl" />;
   if (!sobra) return null;
 
-  // Meta receita mensal vem de /goals (type='monthly_revenue' ou name match).
-  // Fallback R$ 85k se não houver goal cadastrada — preserva comportamento.
-  const monthlyRevenueGoal = (goals ?? []).find(
-    (g: any) =>
-      g.type === "monthly_revenue" ||
-      g.type === "receita_mensal" ||
-      (g.name ?? "").toLowerCase().includes("receita mensal") ||
-      (g.name ?? "").toLowerCase().includes("renda mensal"),
-  );
-  const RECEITA_META_MENSAL = Number(monthlyRevenueGoal?.target_value) || RECEITA_META_FALLBACK;
+  // Meta receita mensal: prioriza goal mensal ativa > goal anual / 12 > fallback R$ 85k
+  const RECEITA_META_MENSAL = goalData?.target || RECEITA_META_FALLBACK;
 
   const receitaPct = sobra.receita > 0 ? (sobra.receita / RECEITA_META_MENSAL) * 100 : 0;
   const custeioPctReceita = sobra.receita > 0 ? (sobra.custeio_total / sobra.receita) * 100 : 0;
