@@ -178,16 +178,26 @@ export function DailyStream({ date }: Props) {
 
       // Fallback: input direto sem NLP (cria pra hoje)
       const taskInput = parsed?.parsed ?? parsed ?? {};
+      const finalDate = taskInput.due_date || targetDate;
+      const finalTime = taskInput.due_time || null;
+      const finalTitle = taskInput.title || inputText;
       await createTask.mutateAsync({
-        title: taskInput.title || inputText,
-        due_date: taskInput.due_date || targetDate,
-        due_time: taskInput.due_time || null,
+        title: finalTitle,
+        due_date: finalDate,
+        due_time: finalTime,
         vector: taskInput.vector || null,
         source: "manual",
         notes: null,
       });
 
-      toast({ title: "Task criada", description: taskInput.title || inputText });
+      // Mostra data interpretada (transparência)
+      const dateLabel = finalDate === targetDate
+        ? "hoje"
+        : new Date(finalDate + "T00:00:00").toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" });
+      toast({
+        title: `Task criada → ${dateLabel}${finalTime ? ` ${finalTime}` : ""}`,
+        description: finalTitle,
+      });
       setInputText("");
     } catch (e: any) {
       // Se Naval falhar, cria task simples mesmo
@@ -200,7 +210,7 @@ export function DailyStream({ date }: Props) {
           source: "manual",
           notes: null,
         });
-        toast({ title: "Task criada (sem NLP)", description: inputText });
+        toast({ title: "Task criada (sem NLP) → hoje", description: inputText });
         setInputText("");
       } catch (e2: any) {
         toast({ title: "Erro", description: e2.message, variant: "destructive" });

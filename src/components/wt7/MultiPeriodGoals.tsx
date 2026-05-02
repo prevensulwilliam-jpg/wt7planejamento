@@ -167,7 +167,11 @@ export function MultiPeriodGoals() {
         await (supabase as any).from("goals").insert(payload);
       }
       toast({ title: form.id ? "Meta atualizada" : "Meta criada" });
+      // Invalida TODAS as queries que dependem de goals
       qc.invalidateQueries({ queryKey: ["goals_active"] });
+      qc.invalidateQueries({ queryKey: ["goals"] });
+      qc.invalidateQueries({ queryKey: ["monthly_revenue_goal"] });
+      await qc.refetchQueries({ queryKey: ["goals_active"] });
       setOpen(false);
     } catch (e: any) {
       toast({ title: "Erro", description: e.message, variant: "destructive" });
@@ -179,6 +183,8 @@ export function MultiPeriodGoals() {
     try {
       await (supabase as any).from("goals").delete().eq("id", id);
       qc.invalidateQueries({ queryKey: ["goals_active"] });
+      qc.invalidateQueries({ queryKey: ["goals"] });
+      qc.invalidateQueries({ queryKey: ["monthly_revenue_goal"] });
       toast({ title: "Meta apagada" });
     } catch (e: any) {
       toast({ title: "Erro", description: e.message, variant: "destructive" });

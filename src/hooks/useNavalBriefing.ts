@@ -275,17 +275,28 @@ export function useRefreshBriefing() {
         `NÃO use markdown estruturado (sem listas, sem títulos). Texto contínuo. ` +
         `NÃO mencione 'cascata' nem números técnicos. Apresente como insight estratégico.`;
 
-      const text = await callNaval([{ role: "user", content: prompt }]);
-      const narrative = text || "Briefing indisponível agora.";
+      let narrative: string;
+      try {
+        const text = await callNaval([{ role: "user", content: prompt }]);
+        narrative = text?.trim() || "Naval retornou vazio. Tente novamente em alguns segundos (rate limit).";
+      } catch (err: any) {
+        narrative = `Erro ao chamar Naval: ${err?.message ?? "desconhecido"}. Tente refresh em 30s.`;
+      }
 
       // Salva em naval_chats com question=__briefing__
-      await (supabase as any).from("naval_chats").insert({
-        question: "__briefing__",
-        answer: narrative,
-        tools_used: ["briefing_cascades"],
-      });
+      try {
+        await (supabase as any).from("naval_chats").insert({
+          question: "__briefing__",
+          answer: narrative,
+          tools_used: ["briefing_cascades"],
+        });
+      } catch (insErr) {
+        console.warn("[briefing] save chat failed:", insErr);
+      }
 
-      qc.invalidateQueries({ queryKey: ["naval_briefing"] });
+      // Force refetch (não só invalidate)
+      await qc.invalidateQueries({ queryKey: ["naval_briefing"] });
+      await qc.refetchQueries({ queryKey: ["naval_briefing"] });
       return { ok: true, narrative };
     },
   });
