@@ -9,7 +9,7 @@ export type Business = {
   partner_name: string | null;
   ownership_pct: number;
   status: "ativo" | "incubado" | "encerrado";
-  category: "recorrente" | "crescimento" | "incubado";
+  category: "recorrente" | "crescimento" | "incubado" | "outros";
   monthly_target: number;
   target_year_end: number;
   target_year_end_date: string | null;
