@@ -3580,14 +3580,60 @@ async function handleAuditDataSources(
     });
   }
 
-  // 4. Prevensul billing: total saldo agregado
-  const { data: pipe } = await sb.from("prevensul_billing").select("balance_remaining").gt("balance_remaining", 0);
+  // 4. Prevensul billing: total saldo agregado + check anti-inflação
+  const { data: pipe } = await sb
+    .from("prevensul_billing")
+    .select("balance_remaining, client_name, reference_month")
+    .gt("balance_remaining", 0);
   const totalPipe = (pipe ?? []).reduce((s: number, p: any) => s + Number(p.balance_remaining ?? 0), 0);
+  const nContratosPipe = (pipe ?? []).length;
+
+  // Detecta duplicação: mesmo client_name aparecendo em vários reference_month
+  const clienteCount: Record<string, number> = {};
+  for (const p of pipe ?? []) {
+    const c = (p as any).client_name ?? "?";
+    clienteCount[c] = (clienteCount[c] ?? 0) + 1;
+  }
+  const clientesDuplicados = Object.entries(clienteCount)
+    .filter(([, n]) => n > 1)
+    .map(([c, n]) => `${c} (${n}x)`);
+
+  // Cruza com histórico de comissão recebida pra ver se está coerente
+  const { data: histRev } = await sb
+    .from("revenues")
+    .select("amount, reference_month")
+    .eq("source", "comissao_prevensul")
+    .order("reference_month", { ascending: false })
+    .limit(50);
+  const monthsHist: Record<string, number> = {};
+  for (const r of histRev ?? []) {
+    const m = (r as any).reference_month;
+    monthsHist[m] = (monthsHist[m] ?? 0) + Number((r as any).amount);
+  }
+  const last3 = Object.values(monthsHist).slice(0, 3);
+  const avgComissaoMensalReal = last3.length > 0 ? last3.reduce((s, v) => s + v, 0) / last3.length : 0;
+  const comissaoFuturaTotal = totalPipe * 0.03;
+  // Se pipeline projeta >12× a comissão mensal real recente, está provavelmente inflado
+  const meses_implicitos = avgComissaoMensalReal > 0 ? comissaoFuturaTotal / avgComissaoMensalReal : 0;
+
+  let pipeSeverity: "info" | "warning" | "critical" = "info";
+  let pipeProblem = `Saldo total clientes: R$ ${totalPipe.toFixed(2)} em ${nContratosPipe} contratos. Comissão futura ~R$ ${comissaoFuturaTotal.toFixed(0)} (3%).`;
+
+  if (clientesDuplicados.length > 0) {
+    pipeSeverity = "critical";
+    pipeProblem = `🚨 DUPLICAÇÃO DETECTADA em prevensul_billing: ${clientesDuplicados.length} clientes em múltiplos reference_month: ${clientesDuplicados.slice(0, 10).join(", ")}${clientesDuplicados.length > 10 ? "..." : ""}. Total inflado: R$ ${totalPipe.toFixed(2)} / ${nContratosPipe} contratos. Solução: TRUNCATE TABLE prevensul_billing CASCADE; depois re-importar CSV mais recente.`;
+  } else if (avgComissaoMensalReal > 0 && meses_implicitos > 60) {
+    pipeSeverity = "warning";
+    pipeProblem = `⚠ Pipeline parece INFLADO: comissão futura R$ ${comissaoFuturaTotal.toFixed(0)} ÷ comissão mensal histórica média R$ ${avgComissaoMensalReal.toFixed(0)} = ${meses_implicitos.toFixed(0)} meses implícitos. Razoável: 12-36 meses. Possível dessincronização vs CSV portal — verificar.`;
+  } else if (avgComissaoMensalReal > 0) {
+    pipeProblem += ` Cruzando com histórico real (R$ ${avgComissaoMensalReal.toFixed(0)}/mês média 3m): ${meses_implicitos.toFixed(0)} meses implícitos de pipeline. ${meses_implicitos < 6 ? "⚠ Pode estar zerando." : meses_implicitos > 36 ? "⚠ Parece longo, verificar." : "✓ Razoável."}`;
+  }
+
   issues.push({
-    severity: "info",
+    severity: pipeSeverity,
     source: "prevensul_billing",
     item: "saldo_total",
-    problem: `Saldo total clientes: R$ ${totalPipe.toFixed(2)}. Compare com CSV do portal /commissions/portal — se divergir, importe novo CSV.`,
+    problem: pipeProblem,
   });
 
   // 5. Bank transactions pending no mês corrente
@@ -4513,7 +4559,7 @@ async function callClaudeHaiku(
 // Versão do código deployado — log inicial em CADA invocação pra confirmar
 // que o deploy do edge function está atualizado. Bumpa toda vez que mudar
 // a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
-const WISELY_AI_VERSION = "2026.05.01-v32-multi-month-strict";
+const WISELY_AI_VERSION = "2026.05.01-v33-audit-pipeline-inflation";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
