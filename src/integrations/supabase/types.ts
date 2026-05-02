@@ -2560,6 +2560,66 @@ export type Database = {
         }
         Relationships: []
       }
+      prevensul_billing_backup: {
+        Row: {
+          amount_paid: number | null
+          balance_remaining: number | null
+          client_name: string | null
+          closing_date: string | null
+          commission_rate: number | null
+          commission_value: number | null
+          contract_nf: string | null
+          contract_total: number | null
+          created_at: string | null
+          created_by: string | null
+          id: string | null
+          installment_current: number | null
+          installment_total: number | null
+          notes: string | null
+          payment_type: string | null
+          reference_month: string | null
+          status: string | null
+        }
+        Insert: {
+          amount_paid?: number | null
+          balance_remaining?: number | null
+          client_name?: string | null
+          closing_date?: string | null
+          commission_rate?: number | null
+          commission_value?: number | null
+          contract_nf?: string | null
+          contract_total?: number | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string | null
+          installment_current?: number | null
+          installment_total?: number | null
+          notes?: string | null
+          payment_type?: string | null
+          reference_month?: string | null
+          status?: string | null
+        }
+        Update: {
+          amount_paid?: number | null
+          balance_remaining?: number | null
+          client_name?: string | null
+          closing_date?: string | null
+          commission_rate?: number | null
+          commission_value?: number | null
+          contract_nf?: string | null
+          contract_total?: number | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string | null
+          installment_current?: number | null
+          installment_total?: number | null
+          notes?: string | null
+          payment_type?: string | null
+          reference_month?: string | null
+          status?: string | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string | null
