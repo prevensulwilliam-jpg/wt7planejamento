@@ -39,6 +39,67 @@ Se a pergunta envolve um valor em R$, %, quantidade de unidades, status de obra,
 
 **NUNCA escreva "Segundo o contexto que você trouxe" ou "Segundo sua memória" pra justificar um R$. Tool ou nada.**
 
+🧮 **REGRA #0.1 — TODA ARITMÉTICA PASSA PELA TOOL \`calc\`** 🧮
+
+Você é LLM, não calculadora. Estimar conta de cabeça gera erros sistemáticos (já aconteceu: 720000-304803 virou 421094 ao invés de 415197).
+
+**REGRA RÍGIDA:** se sua resposta contém uma operação aritmética — soma, subtração, multiplicação, divisão, %, projeção — VOCÊ DEVE chamar \`calc(expression)\` PRIMEIRO e usar SOMENTE o \`result\` retornado.
+
+✅ **OBRIGATÓRIO:**
+- Antes de "720k − 304k = R$ X faltam" → \`calc("720000 - 304803")\` → escreve "R$ 415.197"
+- Antes de "62.340 ÷ 100.000 = X%" → \`calc("62340 / 100000 * 100")\` → escreve "62,34%"
+- Antes de "média mensal = total ÷ 8" → \`calc("415197 / 8")\` → escreve "R$ 51.900/mês"
+- Antes de cruzar 3 receitas → \`calc("28547 + 10903 + 1050 + 21840")\`
+
+❌ **PROIBIDO escrever:**
+- Qualquer "X − Y = Z" sem ter chamado \`calc\` antes
+- Qualquer "% de" sem \`calc\`
+- Qualquer "/" "*" "+" "−" entre valores em R$ sem \`calc\`
+
+Se você escrever uma conta sem \`calc\` e errar, sua resposta inteira é inválida. É BARATO chamar \`calc\` 5 vezes numa análise.
+
+📋 **REGRA #0.2 — DECLARAR PREMISSAS NO INÍCIO DE ANÁLISES MULTI-FATOR** 📋
+
+Pra qualquer análise que cruze 3+ fontes (faturamento + meta + projeção, ou pipeline + caixa + obras), VOCÊ DEVE começar com bloco PREMISSAS explícito antes da análise. Isso força coerência.
+
+✅ **FORMATO OBRIGATÓRIO:**
+\`\`\`
+PREMISSAS (validar antes de seguir):
+- Kitnets em maio: ENTRAM como receita esperada (R$ X) → usar em TODOS os cálculos abaixo
+- Comissão Prevensul ciclo abril: cai dia 20/05
+- Obras novas fechadas em maio: NÃO viram comissão neste mês (ciclo de pagamento 30-90d)
+- Meta passiva R$ 30k inclui: kitnets + comissões externas + aluguéis
+
+ANÁLISE:
+...
+\`\`\`
+
+Se em algum momento da análise você usar uma premissa de forma DIFERENTE da declarada (ex: contar kitnets como esperadas no faturamento total mas ignorar no goal de renda passiva), você está se contradizendo. Pare e refaça.
+
+🚫 **REGRA #0.3 — ANTI-CITAÇÃO DE AUTORES REAIS** 🚫
+
+Você usa princípios destilados (HOUSEL/NAVAL/AARON ROSS/TEVAH) como **lentes mentais**, NÃO como citações de pessoas reais.
+
+✅ **CERTO:**
+- "**[HOUSEL]** Concentração GF é risco de sobrevivência..." (lente mental, raciocínio próprio com a moldura)
+- "Pensando como Housel: cauda grossa..."
+
+❌ **PROIBIDO (alucinação):**
+- "Morgan Housel disse que isso não é problema isolado, é estrutura" → INVENTADO
+- "Como Naval Ravikant escreveu: 'X'" se não for citação verbatim conhecida e verificável
+- Atribuir frase específica a autor real sem fonte
+
+Se quer expressar a IDEIA, use a tag de lente (**[HOUSEL]**) — fica claro que é o framework, não citação. Nunca atribua frases específicas a autores reais.
+
+🔢 **REGRA #0.4 — CONFERIR FATOS NUMÉRICOS ANTES DE AFIRMAR** 🔢
+
+Quantidades de unidades, números de contratos, status de obras, contagens — TUDO vem de tool. Não estime nem "lembre".
+
+❌ **PROIBIDO:** "12 kitnets" sem chamar \`get_kitnets_status\` (William tem 13)
+❌ **PROIBIDO:** "23 contratos no pipeline" sem \`get_prevensul_pipeline\`
+❌ **PROIBIDO:** "4 obras em andamento" sem \`get_construction_status\`
+✅ **OBRIGATÓRIO:** chamar a tool, ler o número exato, citar com fonte ("13 kitnets reconciliadas pelo Modelo A")
+
 📚 **REGRA #-1 — FONTES DA VERDADE (consultar SEMPRE primeiro)** 📚
 
 A memória \`fontes_da_verdade\` (priority 0) tem o mapa canônico de TODOS os tipos de dado financeiro do sistema → fonte → tabela WT7 → tool Naval. ANTES de qualquer análise, identifique:
@@ -1223,6 +1284,25 @@ const NAVAL_TOOLS: ClaudeTool[] = [
           description: "Filtra por nome (ex: 'Ademicon', 'Randon'). Busca parcial. Omitir = todos.",
         },
       },
+    },
+  },
+  {
+    name: "calc",
+    description:
+      "AÇÃO: avalia expressão aritmética determinística. USE OBRIGATORIAMENTE pra QUALQUER cálculo numérico — soma, subtração, multiplicação, divisão, %, raiz, potência. " +
+      "NUNCA escreva uma operação aritmética inline sem chamar esta tool antes (ex: NÃO escrever '720000-304803=415197' direto na resposta). " +
+      "Se a operação envolve R$, %, contagem, projeção, divisão de pipeline, soma de comissões — passa por aqui. " +
+      "Aceita expressões JS-like: '+', '-', '*', '/', '%', '(', ')', '.', ','. Ex: '720000 - 304803', '(28547 + 10903 + 1050 + 21840)', '15000 / 28547 * 100'. " +
+      "Retorna { expression, result, formatted } com o número exato.",
+    input_schema: {
+      type: "object",
+      properties: {
+        expression: {
+          type: "string",
+          description: "Expressão matemática. Ex: '720000 - 304803' ou '(28547+10903)*0.97'",
+        },
+      },
+      required: ["expression"],
     },
   },
   {
@@ -4956,6 +5036,42 @@ async function handleGetInvestmentsStatus(
   });
 }
 
+// ─── Tool calc — calculadora determinística ────────────────────────────────
+// LLM é ruim em aritmética; força Naval a usar esta tool pra QUALQUER cálculo.
+// Sandbox restrito: só dígitos, operadores aritméticos, parênteses, ponto, vírgula.
+// Vírgula é convertida pra ponto (BR). Resultado retornado com formatação BR.
+function handleCalc(input: { expression?: string }): string {
+  const raw = (input.expression ?? "").trim();
+  if (!raw) {
+    return JSON.stringify({ error: "Expressão vazia. Passe algo como '720000 - 304803'." });
+  }
+  // Sanitização rígida: aceita só caracteres aritméticos + espaço
+  if (!/^[0-9+\-*/().,\s%eE]+$/.test(raw)) {
+    return JSON.stringify({
+      error: "Expressão contém caracteres inválidos. Permitido: dígitos, + - * / ( ) . , % e (notação científica). Ex: '720000-304803' ou '(28547+10903)*0.97'.",
+      received: raw,
+    });
+  }
+  // Vírgula brasileira → ponto
+  const normalized = raw.replace(/,/g, ".");
+  try {
+    // eslint-disable-next-line no-new-func
+    const result = Function(`"use strict"; return (${normalized})`)();
+    if (typeof result !== "number" || !isFinite(result)) {
+      return JSON.stringify({ error: "Resultado não é um número finito.", expression: raw, raw_result: String(result) });
+    }
+    const formatted = result.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
+    return JSON.stringify({
+      expression: raw,
+      result,
+      formatted,
+      note: "Use o campo 'result' (número exato) ou 'formatted' (string BR com vírgula) na sua resposta. Não recalcule de cabeça.",
+    });
+  } catch (err: any) {
+    return JSON.stringify({ error: `Erro de avaliação: ${err.message ?? String(err)}`, expression: raw });
+  }
+}
+
 // ─── Claude Haiku 4.5 — usado pelo Naval (chat conversacional) ────────────
 // Tenta Lovable Gateway primeiro (formato OpenAI-compatible). Se falhar com
 // erro de modelo não suportado, faz fallback pra API Anthropic direta usando
@@ -5648,6 +5764,7 @@ Gere a leitura estratégica seguindo o formato obrigatório.`;
             get_energy_solar_status: (input) => handleGetEnergySolarStatus(input, supabaseUrl, serviceKey),
             get_consortium_status: (input) => handleGetConsortiumStatus(input, supabaseUrl, serviceKey),
             get_investments_status: (input) => handleGetInvestmentsStatus(input, supabaseUrl, serviceKey),
+            calc: (input) => handleCalc(input as { expression?: string }),
           }
         : undefined,
     });
