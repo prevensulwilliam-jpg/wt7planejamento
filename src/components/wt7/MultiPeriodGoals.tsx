@@ -148,10 +148,21 @@ export function MultiPeriodGoals() {
       toast({ title: "Nome e valor alvo são obrigatórios", variant: "destructive" });
       return;
     }
+    // type legado tem CHECK (renda/patrimonio/imoveis/reserva/projeto/saude/outros).
+    // metric novo tem (revenue/patrimony/savings/profit/renda_passiva/custom).
+    // Mapeia metric → type pra não violar o constraint antigo.
+    const metricToLegacyType: Record<GoalMetric, string> = {
+      revenue: "renda",
+      patrimony: "patrimonio",
+      savings: "reserva",
+      profit: "renda",
+      renda_passiva: "renda",
+      custom: "outros",
+    };
     try {
       const payload: any = {
         name: form.name,
-        type: form.metric, // legado
+        type: metricToLegacyType[form.metric],
         metric: form.metric,
         period_type: form.period_type,
         period_start: form.period_start,
@@ -161,10 +172,17 @@ export function MultiPeriodGoals() {
         notes: form.notes || null,
         auto_calculated: true,
       };
+      let error: any = null;
       if (form.id) {
-        await (supabase as any).from("goals").update(payload).eq("id", form.id);
+        const r = await (supabase as any).from("goals").update(payload).eq("id", form.id).select();
+        error = r.error;
       } else {
-        await (supabase as any).from("goals").insert(payload);
+        const r = await (supabase as any).from("goals").insert(payload).select();
+        error = r.error;
+      }
+      if (error) {
+        console.error("[goals save] error:", error);
+        throw error;
       }
       toast({ title: form.id ? "Meta atualizada" : "Meta criada" });
       // Invalida TODAS as queries que dependem de goals
@@ -181,13 +199,14 @@ export function MultiPeriodGoals() {
   const handleDelete = async (id: string) => {
     if (!confirm("Apagar essa meta?")) return;
     try {
-      await (supabase as any).from("goals").delete().eq("id", id);
+      const { error } = await (supabase as any).from("goals").delete().eq("id", id);
+      if (error) throw error;
       qc.invalidateQueries({ queryKey: ["goals_active"] });
       qc.invalidateQueries({ queryKey: ["goals"] });
       qc.invalidateQueries({ queryKey: ["monthly_revenue_goal"] });
       toast({ title: "Meta apagada" });
     } catch (e: any) {
-      toast({ title: "Erro", description: e.message, variant: "destructive" });
+      toast({ title: "Erro ao apagar", description: e.message, variant: "destructive" });
     }
   };
 

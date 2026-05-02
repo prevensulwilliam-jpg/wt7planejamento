@@ -1,15 +1,15 @@
 /**
- * useDailyStream — agrega TODAS as fontes do Stream do Dia.
+ * useDailyStream — agrega TODAS as fontes do Stream.
+ *
+ * Aceita 1 dia (default) ou range (start..end) pra visões semana/mês.
  *
  * Fontes:
- *   1. AUTO: vencimentos do dia (debt_installments, recurring_bills, wedding,
- *      other_commission_installments, kitnet_entries esperados)
- *   2. MANUAL/NAVAL: daily_tasks com due_date=today
- *   3. RECEBIMENTOS: bank_transactions já confirmados do dia
- *
- * Retorna lista cronológica + summary (entradas/saídas/tasks).
+ *   1. AUTO: vencimentos (debt_installments, recurring_bills, wedding,
+ *      other_commission_installments)
+ *   2. MANUAL/NAVAL: daily_tasks
+ *   3. RECEBIMENTOS: bank_transactions já confirmados
  */
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
 export type StreamItemKind = "in" | "out" | "task" | "expected";
@@ -19,15 +19,16 @@ export interface StreamItem {
   id: string;
   kind: StreamItemKind;
   badge: StreamItemBadge;
+  date: string;             // YYYY-MM-DD
   time: string;             // HH:MM
   period: "morning" | "afternoon" | "night";
   title: string;
   subtitle: string;
-  amount: number | null;    // null pra task
+  amount: number | null;
   status: "pending" | "done" | "expected" | "confirmed" | "cancelled";
-  source_type: string;      // 'debt_installment', 'recurring_bill', 'daily_task', etc
+  source_type: string;
   source_id: string;
-  is_now?: boolean;         // marker dourado pra item "agora"
+  is_now?: boolean;
 }
 
 function timeToPeriod(time: string): "morning" | "afternoon" | "night" {
@@ -42,8 +43,21 @@ function nowTime(): string {
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
-export function useDailyStream(date?: string) {
-  const targetDate = date || new Date().toISOString().slice(0, 10);
+function enumerateDays(start: string, end: string): string[] {
+  const out: string[] = [];
+  const s = new Date(start + "T00:00:00");
+  const e = new Date(end + "T00:00:00");
+  const cur = new Date(s);
+  while (cur <= e) {
+    out.push(cur.toISOString().slice(0, 10));
+    cur.setDate(cur.getDate() + 1);
+  }
+  return out;
+}
+
+export function useDailyStream(startDate?: string, endDate?: string) {
+  const start = startDate || new Date().toISOString().slice(0, 10);
+  const end = endDate || start;
 
   return useQuery<{
     items: StreamItem[];
@@ -56,55 +70,59 @@ export function useDailyStream(date?: string) {
       total_out: number;
     };
   }>({
-    queryKey: ["daily_stream", targetDate],
+    queryKey: ["daily_stream", start, end],
     queryFn: async () => {
       const items: StreamItem[] = [];
-      const monthStart = targetDate.slice(0, 7) + "-01";
-      const [yy, mm] = targetDate.split("-").slice(0, 2).map(Number);
-      const dayNum = parseInt(targetDate.slice(8, 10));
+      const days = enumerateDays(start, end);
 
-      // ─── 1. DAILY TASKS (manual + naval_promoted + recurrence) ─────────
+      // ─── 1. DAILY TASKS no range ──────────────────────────────────────
       const { data: tasks } = await (supabase as any)
         .from("daily_tasks")
-        .select("id, title, due_time, status, vector, source, related_alert_id, notes")
-        .eq("due_date", targetDate)
+        .select("id, title, due_date, due_time, status, vector, source, related_alert_id, notes")
+        .gte("due_date", start)
+        .lte("due_date", end)
         .neq("status", "cancelled")
+        .order("due_date", { ascending: true })
         .order("due_time", { ascending: true, nullsFirst: false });
+
+      const badgeMap: Record<string, StreamItemBadge> = {
+        manual: "manual",
+        naval_promoted: "naval",
+        recurrence: "recur",
+        crm_agendor: "manual",
+      };
 
       for (const t of tasks ?? []) {
         const time = t.due_time?.slice(0, 5) || "12:00";
-        const badgeMap: Record<string, StreamItemBadge> = {
-          manual: "manual",
-          naval_promoted: "naval",
-          recurrence: "recur",
-          crm_agendor: "manual",
-        };
         items.push({
           id: `task_${t.id}`,
           kind: "task",
           badge: badgeMap[t.source] ?? "manual",
+          date: t.due_date,
           time,
           period: timeToPeriod(time),
           title: t.title,
           subtitle: t.vector ? `${t.vector}${t.notes ? ` · ${t.notes}` : ""}` : t.notes ?? "",
           amount: null,
-          status: t.status === "done" ? "done" : t.status === "in_progress" ? "pending" : "pending",
+          status: t.status === "done" ? "done" : "pending",
           source_type: "daily_task",
           source_id: t.id,
         });
       }
 
-      // ─── 2. DEBT INSTALLMENTS vencendo hoje ──────────────────────────────
+      // ─── 2. DEBT INSTALLMENTS no range ────────────────────────────────
       const { data: debtInsts } = await (supabase as any)
         .from("debt_installments")
         .select("id, amount, due_date, paid_at, sequence_number, debt:debts(name, creditor)")
-        .eq("due_date", targetDate)
+        .gte("due_date", start)
+        .lte("due_date", end)
         .is("paid_at", null);
       for (const d of debtInsts ?? []) {
         items.push({
           id: `debt_${d.id}`,
           kind: "out",
           badge: "auto",
+          date: d.due_date,
           time: "12:00",
           period: "afternoon",
           title: d.debt?.name || "Parcela de dívida",
@@ -116,17 +134,19 @@ export function useDailyStream(date?: string) {
         });
       }
 
-      // ─── 3. WEDDING INSTALLMENTS vencendo hoje ───────────────────────────
+      // ─── 3. WEDDING INSTALLMENTS no range ─────────────────────────────
       const { data: weddInsts } = await (supabase as any)
         .from("wedding_installments")
         .select("id, amount, due_date, paid_at, supplier, description")
-        .eq("due_date", targetDate)
+        .gte("due_date", start)
+        .lte("due_date", end)
         .is("paid_at", null);
       for (const w of weddInsts ?? []) {
         items.push({
           id: `wedd_${w.id}`,
           kind: "out",
           badge: "auto",
+          date: w.due_date,
           time: "12:00",
           period: "afternoon",
           title: w.description || "Casamento",
@@ -138,17 +158,19 @@ export function useDailyStream(date?: string) {
         });
       }
 
-      // ─── 4. OTHER COMMISSION INSTALLMENTS esperados hoje ─────────────────
+      // ─── 4. OTHER COMMISSION INSTALLMENTS no range ────────────────────
       const { data: ociToday } = await (supabase as any)
         .from("other_commission_installments")
         .select("id, amount, due_date, paid_at, installment_number, commission:other_commissions(description)")
-        .eq("due_date", targetDate)
+        .gte("due_date", start)
+        .lte("due_date", end)
         .is("paid_at", null);
       for (const o of ociToday ?? []) {
         items.push({
           id: `oci_${o.id}`,
           kind: "in",
           badge: "auto",
+          date: o.due_date,
           time: "12:00",
           period: "afternoon",
           title: o.commission?.description || "Comissão externa",
@@ -160,33 +182,38 @@ export function useDailyStream(date?: string) {
         });
       }
 
-      // ─── 5. RECURRING BILLS vencendo hoje (due_day match) ────────────────
+      // ─── 5. RECURRING BILLS — gerar 1 item por dia que bate com due_day ─
       const { data: recurrings } = await (supabase as any)
         .from("recurring_bills")
         .select("id, name, amount, due_day, category, alias")
-        .eq("active", true)
-        .eq("due_day", dayNum);
-      for (const r of recurrings ?? []) {
-        items.push({
-          id: `recur_${r.id}`,
-          kind: "out",
-          badge: "auto",
-          time: r.due_day < 15 ? "12:00" : "18:00",
-          period: r.due_day < 15 ? "afternoon" : "night",
-          title: r.alias || r.name,
-          subtitle: r.category ?? "recurring",
-          amount: -Number(r.amount ?? 0),
-          status: "pending",
-          source_type: "recurring_bill",
-          source_id: r.id,
-        });
+        .eq("active", true);
+      for (const day of days) {
+        const dayNum = parseInt(day.slice(8, 10));
+        for (const r of recurrings ?? []) {
+          if (r.due_day !== dayNum) continue;
+          items.push({
+            id: `recur_${r.id}_${day}`,
+            kind: "out",
+            badge: "auto",
+            date: day,
+            time: r.due_day < 15 ? "12:00" : "18:00",
+            period: r.due_day < 15 ? "afternoon" : "night",
+            title: r.alias || r.name,
+            subtitle: r.category ?? "recurring",
+            amount: -Number(r.amount ?? 0),
+            status: "pending",
+            source_type: "recurring_bill",
+            source_id: r.id,
+          });
+        }
       }
 
-      // ─── 6. BANK TRANSACTIONS já confirmadas hoje ────────────────────────
+      // ─── 6. BANK TRANSACTIONS já confirmadas no range ─────────────────
       const { data: bankTxs } = await (supabase as any)
         .from("bank_transactions")
         .select("id, amount, type, description, date")
-        .eq("date", targetDate);
+        .gte("date", start)
+        .lte("date", end);
       for (const tx of bankTxs ?? []) {
         const amt = Number(tx.amount ?? 0);
         const isCredit = tx.type === "credit";
@@ -194,6 +221,7 @@ export function useDailyStream(date?: string) {
           id: `tx_${tx.id}`,
           kind: isCredit ? "in" : "out",
           badge: "auto",
+          date: tx.date,
           time: "08:30",
           period: "morning",
           title: tx.description?.slice(0, 60) || "Transação",
@@ -205,16 +233,16 @@ export function useDailyStream(date?: string) {
         });
       }
 
-      // Marca item "now" — primeiro pendente cujo time ≥ now
-      const isToday = targetDate === new Date().toISOString().slice(0, 10);
-      if (isToday) {
+      // Marca item "now" — primeiro pendente cujo time ≥ now (só se range incluir hoje)
+      const today = new Date().toISOString().slice(0, 10);
+      if (today >= start && today <= end) {
         const now = nowTime();
-        const idx = items.findIndex(it => it.status === "pending" && it.time >= now);
+        const idx = items.findIndex(it => it.date === today && it.status === "pending" && it.time >= now);
         if (idx >= 0) items[idx].is_now = true;
       }
 
-      // Ordenação cronológica
-      items.sort((a, b) => a.time.localeCompare(b.time));
+      // Ordenação cronológica (data, depois hora)
+      items.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
 
       // Summary
       const summary = {
@@ -228,15 +256,9 @@ export function useDailyStream(date?: string) {
 
       return { items, summary };
     },
-    staleTime: 60_000, // 1 min
+    staleTime: 60_000,
   });
 }
-
-/**
- * useUpdateTaskStatus — marca task como done/pending/postponed.
- * Atualiza optimistic na cache do useDailyStream.
- */
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 export function useUpdateTaskStatus() {
   const qc = useQueryClient();

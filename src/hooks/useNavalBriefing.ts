@@ -208,15 +208,15 @@ export function useNavalBriefing() {
       todayStart.setHours(0, 0, 0, 0);
       const { data: cached } = await (supabase as any)
         .from("naval_chats")
-        .select("answer, created_at")
+        .select("answer, asked_at")
         .eq("question", "__briefing__")
-        .gte("created_at", todayStart.toISOString())
-        .order("created_at", { ascending: false })
+        .gte("asked_at", todayStart.toISOString())
+        .order("asked_at", { ascending: false })
         .limit(1)
         .maybeSingle();
 
       if (cached) {
-        const generatedAt = cached.created_at;
+        const generatedAt = cached.asked_at;
         const expiresAt = new Date(new Date(generatedAt).getTime() + CACHE_TTL_HOURS * 3600 * 1000).toISOString();
         const isStale = new Date(expiresAt) < new Date();
         return {
@@ -284,14 +284,18 @@ export function useRefreshBriefing() {
       }
 
       // Salva em naval_chats com question=__briefing__
-      try {
-        await (supabase as any).from("naval_chats").insert({
-          question: "__briefing__",
-          answer: narrative,
-          tools_used: ["briefing_cascades"],
-        });
-      } catch (insErr) {
-        console.warn("[briefing] save chat failed:", insErr);
+      // IMPORTANTE: naval_chats exige user_id NOT NULL + RLS user_id = auth.uid()
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Usuário não autenticado");
+      const { error: insErr } = await (supabase as any).from("naval_chats").insert({
+        user_id: user.id,
+        question: "__briefing__",
+        answer: narrative,
+        tools_used: ["briefing_cascades"],
+      });
+      if (insErr) {
+        console.error("[briefing] save chat failed:", insErr);
+        throw new Error(`Falha ao salvar briefing: ${insErr.message ?? "RLS ou coluna missing"}`);
       }
 
       // Force refetch (não só invalidate)
