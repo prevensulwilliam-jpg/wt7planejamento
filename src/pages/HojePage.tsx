@@ -70,12 +70,13 @@ export default function HojePage() {
         <CaminhoMeta month={month} />
 
         {/* ═══ BLOCO 6 · CASH FLOW + STREAM (split) ═════════════════ */}
-        {/* Altura fixa pros 2 cards do split — Stream rola internamente se crescer */}
+        {/* items-stretch faz os 2 cards terem a MESMA altura (a do maior conteúdo).
+            Stream rola internamente se passar — sem min-h forçada que cria espaço morto. */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 lg:items-stretch">
-          <div className="lg:col-span-3 min-h-[480px] lg:max-h-[640px] flex flex-col">
+          <div className="lg:col-span-3 lg:max-h-[640px] flex flex-col">
             <CashFlowChart />
           </div>
-          <div className="lg:col-span-2 min-h-[480px] lg:max-h-[640px] flex flex-col overflow-hidden">
+          <div className="lg:col-span-2 lg:max-h-[640px] flex flex-col overflow-hidden">
             <DailyStream />
           </div>
         </div>
