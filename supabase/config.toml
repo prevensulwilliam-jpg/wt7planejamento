@@ -28,3 +28,6 @@ verify_jwt = true
 
 [functions.send-whatsapp]
 verify_jwt = true
+
+[functions.generate-recurrence-tasks]
+verify_jwt = false

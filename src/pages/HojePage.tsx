@@ -26,6 +26,8 @@ import { CaminhoMeta } from "@/components/wt7/CaminhoMeta";
 import { PipelineCompact } from "@/components/wt7/PipelineCompact";
 import { AutonomyCompact } from "@/components/wt7/AutonomyCompact";
 import { AtalhosRapidos } from "@/components/wt7/AtalhosRapidos";
+import { NavalBriefing } from "@/components/wt7/NavalBriefing";
+import { DailyStream } from "@/components/wt7/DailyStream";
 import { getCurrentMonth, formatMonth } from "@/lib/formatters";
 import { Compass, AlertTriangle, ChevronRight } from "lucide-react";
 
@@ -105,7 +107,10 @@ export default function HojePage() {
         {/* ═══ BLOCO 1 · STATUS BAR (5 KPIs) ═══════════════════════ */}
         <StatusBar month={month} />
 
-        {/* ═══ BLOCO 2 · COCKPIT 3 ANÉIS ═══════════════════════════ */}
+        {/* ═══ BLOCO 2 · NAVAL BRIEFING (cascatas + narrativa) ═════ */}
+        <NavalBriefing />
+
+        {/* ═══ BLOCO 3 · COCKPIT 3 ANÉIS ═══════════════════════════ */}
         <ThreeRingsCockpit month={month} />
 
         {/* ═══ BLOCO 3 · SOBRA REINVESTIDA (decomposição) ═════════ */}
@@ -114,7 +119,10 @@ export default function HojePage() {
         {/* ═══ BLOCO 4 · CAMINHO DA META (YTD) ═════════════════════ */}
         <CaminhoMeta month={month} />
 
-        {/* ═══ BLOCO 5 · SPLIT (Pipeline + Autonomia) ══════════════ */}
+        {/* ═══ BLOCO 6 · STREAM DO DIA ═════════════════════════════ */}
+        <DailyStream />
+
+        {/* ═══ BLOCO 7 · SPLIT (Pipeline + Autonomia) ══════════════ */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
           <div className="lg:col-span-3">
             <PipelineCompact />
@@ -124,10 +132,10 @@ export default function HojePage() {
           </div>
         </div>
 
-        {/* ═══ BLOCO 6 · ATALHOS RÁPIDOS ═══════════════════════════ */}
+        {/* ═══ BLOCO 8 · ATALHOS RÁPIDOS ═══════════════════════════ */}
         <AtalhosRapidos />
 
-        {/* TODO Sprint 3: Naval Briefing + Stream do Dia + Cash Flow chart */}
+        {/* TODO Sprint 4: AlertasPriorizados + CashFlow chart + WhatsAppShare */}
       </div>
     </div>
   );
