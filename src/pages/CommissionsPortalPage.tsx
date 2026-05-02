@@ -896,8 +896,10 @@ function PrevensulHistory({ month, userId, onLoadRecord }: { month: string; user
         }
         let va: number, vb: number;
         if (sortField === 'saldo') {
-          va = Math.max(0, (a.balance_remaining ?? 0) - (a.amount_paid ?? 0));
-          vb = Math.max(0, (b.balance_remaining ?? 0) - (b.amount_paid ?? 0));
+          // balance_remaining JÁ é o saldo correto vindo do CSV.
+          // NÃO subtrair amount_paid (que é o pago do mês atual) pra não duplicar desconto.
+          va = a.balance_remaining ?? 0;
+          vb = b.balance_remaining ?? 0;
         } else if (sortField === 'closing_date') {
           va = a.closing_date ? new Date(a.closing_date).getTime() : 0;
           vb = b.closing_date ? new Date(b.closing_date).getTime() : 0;
@@ -915,7 +917,8 @@ function PrevensulHistory({ month, userId, onLoadRecord }: { month: string; user
   const totalComissao = useMemo(() => displayData.reduce((s, r) => s + (r.commission_value ?? 0), 0), [displayData]);
   const totalValor = useMemo(() => displayData.reduce((s, r) => s + (r.contract_total ?? 0), 0), [displayData]);
   const totalSaldo = useMemo(
-    () => displayData.reduce((s, r) => s + Math.max(0, (r.balance_remaining ?? 0) - (r.amount_paid ?? 0)), 0),
+    // balance_remaining JÁ é o saldo correto. NÃO subtrair amount_paid (duplicaria desconto).
+    () => displayData.reduce((s, r) => s + Math.max(0, r.balance_remaining ?? 0), 0),
     [displayData]
   );
 
@@ -1105,7 +1108,7 @@ function PrevensulHistory({ month, userId, onLoadRecord }: { month: string; user
                   <TableRow key={r.id} style={{ borderColor: '#1A2535', background: 'rgba(245,158,11,0.04)' }}>
                     <TableCell><input value={editForm.client_name} onChange={e => setEditForm(p => ({ ...p, client_name: e.target.value }))} style={{ ...inputStyle, width: '100%' }} /></TableCell>
                     <TableCell><input type="number" value={editForm.contract_total} onChange={e => setEditForm(p => ({ ...p, contract_total: e.target.value }))} style={{ ...inputStyle, width: '100%' }} /></TableCell>
-                    <TableCell className="font-mono text-xs" style={{ color: '#F43F5E', fontWeight: 600 }}>{formatCurrency(Math.max(0, (parseFloat(String(editForm.balance_remaining)) || 0) - (parseFloat(String(editForm.amount_paid)) || 0)))}</TableCell>
+                    <TableCell className="font-mono text-xs" style={{ color: '#F43F5E', fontWeight: 600 }}>{formatCurrency(Math.max(0, parseFloat(String(editForm.balance_remaining)) || 0))}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
                         <input type="number" value={editForm.installment_current} onChange={e => setEditForm(p => ({ ...p, installment_current: e.target.value }))} style={{ ...inputStyle, width: 36, textAlign: 'center', padding: '4px 2px' }} />
@@ -1157,7 +1160,7 @@ function PrevensulHistory({ month, userId, onLoadRecord }: { month: string; user
                     </Tooltip>
                   </TableCell>
                   <TableCell className="font-mono text-xs whitespace-nowrap" style={{ color: '#94A3B8' }}>{formatCurrency(r.contract_total ?? 0)}</TableCell>
-                  <TableCell className="font-mono text-xs whitespace-nowrap" style={{ color: '#F43F5E' }}>{formatCurrency(Math.max(0, (r.balance_remaining ?? 0) - (r.amount_paid ?? 0)))}</TableCell>
+                  <TableCell className="font-mono text-xs whitespace-nowrap" style={{ color: '#F43F5E' }}>{formatCurrency(Math.max(0, r.balance_remaining ?? 0))}</TableCell>
                   <TableCell className="font-mono text-xs whitespace-nowrap" style={{ color: '#94A3B8' }}>{r.installment_current ?? "—"}/{r.installment_total ?? "—"}</TableCell>
                   <TableCell className="font-mono text-xs whitespace-nowrap" style={{ color: '#94A3B8' }}>{r.closing_date ? formatDate(r.closing_date) : "—"}</TableCell>
                   <TableCell className="font-mono text-xs whitespace-nowrap" style={{ color: '#10B981' }}>{formatCurrency(r.amount_paid ?? 0)}</TableCell>
