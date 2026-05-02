@@ -1374,6 +1374,75 @@ export type Database = {
         }
         Relationships: []
       }
+      daily_tasks: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          due_date: string
+          due_time: string | null
+          id: string
+          notes: string | null
+          recurrence_rule_id: string | null
+          related_alert_id: string | null
+          related_entity_id: string | null
+          related_entity_type: string | null
+          source: string
+          status: string
+          title: string
+          updated_at: string
+          vector: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          due_date: string
+          due_time?: string | null
+          id?: string
+          notes?: string | null
+          recurrence_rule_id?: string | null
+          related_alert_id?: string | null
+          related_entity_id?: string | null
+          related_entity_type?: string | null
+          source?: string
+          status?: string
+          title: string
+          updated_at?: string
+          vector?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          due_date?: string
+          due_time?: string | null
+          id?: string
+          notes?: string | null
+          recurrence_rule_id?: string | null
+          related_alert_id?: string | null
+          related_entity_id?: string | null
+          related_entity_type?: string | null
+          source?: string
+          status?: string
+          title?: string
+          updated_at?: string
+          vector?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_alert"
+            columns: ["related_alert_id"]
+            isOneToOne: false
+            referencedRelation: "naval_alerts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_recurrence"
+            columns: ["recurrence_rule_id"]
+            isOneToOne: false
+            referencedRelation: "task_recurrence_rules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       debt_installments: {
         Row: {
           amount: number
@@ -1595,31 +1664,46 @@ export type Database = {
       }
       goals: {
         Row: {
+          auto_calculated: boolean
           current_value: number | null
           deadline: string | null
           id: string
+          metric: string | null
           name: string | null
           notes: string | null
+          period_end: string | null
+          period_start: string | null
+          period_type: string | null
           target_value: number | null
           type: string | null
           updated_at: string | null
         }
         Insert: {
+          auto_calculated?: boolean
           current_value?: number | null
           deadline?: string | null
           id?: string
+          metric?: string | null
           name?: string | null
           notes?: string | null
+          period_end?: string | null
+          period_start?: string | null
+          period_type?: string | null
           target_value?: number | null
           type?: string | null
           updated_at?: string | null
         }
         Update: {
+          auto_calculated?: boolean
           current_value?: number | null
           deadline?: string | null
           id?: string
+          metric?: string | null
           name?: string | null
           notes?: string | null
+          period_end?: string | null
+          period_start?: string | null
+          period_type?: string | null
           target_value?: number | null
           type?: string | null
           updated_at?: string | null
@@ -2517,6 +2601,7 @@ export type Database = {
           installment_total: number | null
           notes: string | null
           payment_type: string | null
+          pipeline_stage: string | null
           reference_month: string | null
           status: string | null
         }
@@ -2536,6 +2621,7 @@ export type Database = {
           installment_total?: number | null
           notes?: string | null
           payment_type?: string | null
+          pipeline_stage?: string | null
           reference_month?: string | null
           status?: string | null
         }
@@ -2555,6 +2641,7 @@ export type Database = {
           installment_total?: number | null
           notes?: string | null
           payment_type?: string | null
+          pipeline_stage?: string | null
           reference_month?: string | null
           status?: string | null
         }
@@ -2873,6 +2960,60 @@ export type Database = {
           },
         ]
       }
+      task_recurrence_rules: {
+        Row: {
+          active: boolean
+          created_at: string
+          cron_expression: string | null
+          due_time: string | null
+          end_date: string | null
+          frequency: string
+          id: string
+          last_generated_until: string | null
+          monthly_day: number | null
+          notes: string | null
+          start_date: string
+          title: string
+          updated_at: string
+          vector: string | null
+          weekday: number | null
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          cron_expression?: string | null
+          due_time?: string | null
+          end_date?: string | null
+          frequency: string
+          id?: string
+          last_generated_until?: string | null
+          monthly_day?: number | null
+          notes?: string | null
+          start_date?: string
+          title: string
+          updated_at?: string
+          vector?: string | null
+          weekday?: number | null
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          cron_expression?: string | null
+          due_time?: string | null
+          end_date?: string | null
+          frequency?: string
+          id?: string
+          last_generated_until?: string | null
+          monthly_day?: number | null
+          notes?: string | null
+          start_date?: string
+          title?: string
+          updated_at?: string
+          vector?: string | null
+          weekday?: number | null
+        }
+        Relationships: []
+      }
       taxes: {
         Row: {
           amount: number | null
@@ -3145,6 +3286,99 @@ export type Database = {
           status?: string | null
           updated_at?: string | null
           vendor_name?: string | null
+        }
+        Relationships: []
+      }
+      whatsapp_config: {
+        Row: {
+          active: boolean
+          briefing_send_hour: number
+          created_at: string
+          evolution_api_url: string | null
+          evolution_instance: string | null
+          id: string
+          notify_alerts_critical: boolean
+          notify_briefing_daily: boolean
+          notify_weekly_summary: boolean
+          primary_phone: string
+          updated_at: string
+          user_id: string | null
+          weekly_summary_weekday: number
+        }
+        Insert: {
+          active?: boolean
+          briefing_send_hour?: number
+          created_at?: string
+          evolution_api_url?: string | null
+          evolution_instance?: string | null
+          id?: string
+          notify_alerts_critical?: boolean
+          notify_briefing_daily?: boolean
+          notify_weekly_summary?: boolean
+          primary_phone: string
+          updated_at?: string
+          user_id?: string | null
+          weekly_summary_weekday?: number
+        }
+        Update: {
+          active?: boolean
+          briefing_send_hour?: number
+          created_at?: string
+          evolution_api_url?: string | null
+          evolution_instance?: string | null
+          id?: string
+          notify_alerts_critical?: boolean
+          notify_briefing_daily?: boolean
+          notify_weekly_summary?: boolean
+          primary_phone?: string
+          updated_at?: string
+          user_id?: string | null
+          weekly_summary_weekday?: number
+        }
+        Relationships: []
+      }
+      whatsapp_notifications_queue: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          evolution_message_id: string | null
+          id: string
+          message: string
+          metadata: Json | null
+          retries: number
+          scheduled_for: string
+          sent_at: string | null
+          status: string
+          template: string
+          to_phone: string
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          evolution_message_id?: string | null
+          id?: string
+          message: string
+          metadata?: Json | null
+          retries?: number
+          scheduled_for?: string
+          sent_at?: string | null
+          status?: string
+          template: string
+          to_phone: string
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          evolution_message_id?: string | null
+          id?: string
+          message?: string
+          metadata?: Json | null
+          retries?: number
+          scheduled_for?: string
+          sent_at?: string | null
+          status?: string
+          template?: string
+          to_phone?: string
         }
         Relationships: []
       }
