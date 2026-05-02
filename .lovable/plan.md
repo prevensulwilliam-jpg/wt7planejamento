@@ -1,43 +1,76 @@
-## Reorganizar cards de Negócios via drag-and-drop
+## Estado verificado
 
-Hoje, em `/businesses`, os cards são exibidos em 3 grupos (Recorrente, Crescimento, Incubado) usando `<div className="grid">` simples — sem possibilidade de reordenar.
+Já confirmado no banco e repo:
+- **4 migrations já aplicadas** (schema consolidado em `20260502151012_*.sql` na sessão anterior):
+  - `daily_tasks`, `task_recurrence_rules` ✓
+  - `prevensul_billing.pipeline_stage` ✓
+  - `goals` com `period_type`, `period_start`, `period_end`, `metric`, `auto_calculated` ✓
+  - `whatsapp_notifications_queue`, `whatsapp_config` ✓
+- **Edge functions existentes:** `wisely-ai` (v37), `send-whatsapp` (v1-stub) já no repo.
+- **Falta:** `generate-recurrence-tasks` (não existe).
 
-O projeto já tem o componente genérico `src/components/wt7/DraggableGrid.tsx`, que:
-- aceita uma lista `items` + função `renderCard`
-- persiste a ordem em `localStorage` via `storageKey`
-- é o mesmo padrão usado em **Bens** (AssetsPage) e **Projetos** (ConstructionsPage)
+## Ações
 
-Vou reutilizar esse componente — sem nova migration, sem mudança de schema, sem backend.
+### 1. Reaplicar as 4 migrations originais (idempotente)
+Como já tem `IF NOT EXISTS` em tudo, vou rodar as 4 migrations via tool de migração mesmo assim, pra deixar o histórico oficial registrado (a sessão anterior consolidou num único arquivo). Sem efeito destrutivo — `CREATE TABLE IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`.
 
-### Mudanças
+> Alternativa: pular essa etapa já que o schema está aplicado. Recomendo pular pra evitar reabrir o histórico — confirmar com você.
 
-**Arquivo:** `src/pages/BusinessesPage.tsx` (linhas 1038–1054)
+### 2. Atualizar versão do `wisely-ai`
+- Trocar constante `WISELY_AI_VERSION` de `2026.05.02-v37-sprint1-fundacao-hoje-v4` → `2026.05.02-v38-hoje-v4-completo`
+- Redeploy via `supabase--deploy_edge_functions(["wisely-ai"])`
 
-Substituir o `<div className="grid ...">{list.map(renderCard)}</div>` dentro de cada categoria por:
+### 3. Criar nova edge function `generate-recurrence-tasks`
+Arquivo: `supabase/functions/generate-recurrence-tasks/index.ts`
 
-```tsx
-<DraggableGrid
-  storageKey={`wt7:businesses:order:${cat}`}
-  items={list}
-  renderCard={renderCard}
-  columns="grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
-/>
+Lógica:
+- Lê `task_recurrence_rules` ativas
+- Calcula janela: `max(today, start_date, last_generated_until + 1)` até `today + days_ahead` (default 7, capped 90)
+- Para cada dia na janela, decide via `frequency`:
+  - `daily` → todo dia
+  - `weekdays` → seg-sex
+  - `weekly` → dia da semana = `weekday`
+  - `monthly` → dia do mês = `monthly_day`
+  - `yearly` → mesmo mês/dia do `start_date`
+  - `custom_cron` → ignorado nesta versão
+- Anti-duplicação: SELECT `(recurrence_rule_id, due_date)` antes de inserir
+- Atualiza `last_generated_until` da regra
+- Retorna JSON com `total_tasks_inserted` + breakdown por regra
+- Usa `SUPABASE_SERVICE_ROLE_KEY`
+- CORS padrão WT7
+
+Configuração em `supabase/config.toml`:
+```toml
+[functions.generate-recurrence-tasks]
+verify_jwt = false
 ```
+(`send-whatsapp` já está com `verify_jwt = true` — mantém)
 
-Adicionar o import no topo:
-```tsx
-import { DraggableGrid } from "@/components/wt7/DraggableGrid";
+Deploy via `supabase--deploy_edge_functions(["generate-recurrence-tasks", "send-whatsapp"])`
+
+### 4. pg_cron — diário 7h Brasília (10h UTC)
+Rodar via tool insert (não migration, contém `service_role_key`):
+```sql
+SELECT cron.schedule(
+  'generate-recurrence-tasks-daily',
+  '0 10 * * *',
+  $$ SELECT net.http_post(
+    url := 'https://hbyzmuxkgsogbxhykhhu.supabase.co/functions/v1/generate-recurrence-tasks',
+    headers := jsonb_build_object('Authorization', 'Bearer ' || current_setting('app.settings.service_role_key', true)),
+    body := jsonb_build_object('days_ahead', 7)
+  ) $$
+);
 ```
+> Pré-requisito: extensions `pg_cron` + `pg_net` habilitadas. Verifico antes; se faltar habilito.
+> Como `verify_jwt = false`, o Authorization é opcional, mas mantém compatibilidade.
 
-### Comportamento resultante
+## Arquivos não tocados
+- `src/pages/CommissionsPortalPage.tsx`
+- `src/pages/KitnetsPage.tsx`
+- Nenhuma alteração frontend nesta entrega.
 
-- Arrastar um card pela área do card → soltar sobre outro → cards trocam de posição.
-- Cada categoria (Recorrente / Crescimento / Incubado) tem sua própria ordem persistida (chaves separadas no localStorage).
-- A ordem permanece após reload do navegador.
-- Drag não interfere com os botões de ação (lupa/editar/lixeira) — eles continuam clicáveis normalmente; o drag inicia a partir de áreas "vazias" do card.
-- Negócios novos (criados depois) aparecem no fim da lista.
-
-### Notas
-
-- A ordem é **local ao navegador** (localStorage), igual a Bens/Projetos. Se quiser sincronizar entre dispositivos no futuro, será necessária uma coluna `order_index` no banco — mas isso já existe (`order_index` é passado no `createBiz`), então uma evolução futura pode persistir no servidor. Por ora, mantemos consistência com os outros módulos.
-- Não há mudança visual nos cards — só comportamento.
+## Resultado esperado
+- `wisely-ai` retornando `version: "2026.05.02-v38-hoje-v4-completo"`
+- `send-whatsapp` deployada (já estava)
+- `generate-recurrence-tasks` deployada e respondendo `{ ok: true, ... }` no curl de teste
+- Cron job `generate-recurrence-tasks-daily` listado em `cron.job`
