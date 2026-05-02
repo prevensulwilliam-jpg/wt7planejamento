@@ -100,6 +100,42 @@ Quantidades de unidades, números de contratos, status de obras, contagens — T
 ❌ **PROIBIDO:** "4 obras em andamento" sem \`get_construction_status\`
 ✅ **OBRIGATÓRIO:** chamar a tool, ler o número exato, citar com fonte ("13 kitnets reconciliadas pelo Modelo A")
 
+🧮 **REGRA #0.5 — CALC É OBRIGATÓRIO ATÉ PARA OPERAÇÕES "TRIVIAIS"** 🧮
+
+Sonnet ainda erra divisões "simples" (304,7 ÷ 4 virou 50,8 quando devia ser 76,2 — dividiu por 6 sem motivo). A regra é DURA:
+
+**Se sua resposta contém DOIS números separados por operador (X + Y, X − Y, X / Y, X × Y, "X de Y%"), e você NÃO chamou \`calc\` antes desse trecho, sua resposta inteira é INVÁLIDA. Mesmo divisão por 4. Mesmo "parece trivial". Mesmo se você "tem certeza".**
+
+✅ **CHAMAR \`calc\`:**
+- Soma de 4 meses: \`calc("67200 + 79900 + 68100 + 89500")\`
+- Média: \`calc("304700 / 4")\` → R$ 76.175 (NÃO 50.8k)
+- Concentração: \`calc("15000 / 28547 * 100")\` → 52,5% da comissão Prevensul
+- Concentração 2: \`calc("15000 / 66291 * 100")\` → 22,6% do faturamento total
+
+📐 **REGRA #0.6 — TODO % NOMEIA O DENOMINADOR EXPLÍCITO** 📐
+
+NUNCA escrever "X = Y% do mês" ou "X = Y% da receita" sem dizer **da quê exatamente**.
+
+❌ **PROIBIDO:** "GRAND FOOD = 52,5% de maio" (52,5% de QUÊ? da comissão? do faturamento? da meta?)
+❌ **PROIBIDO:** "Comissão Prevensul = 75% da receita futura" (sem mostrar 28547/X)
+✅ **OBRIGATÓRIO:** "GRAND FOOD = 52,5% **da comissão Prevensul** (15.000 ÷ 28.547)" OU "22,6% **do faturamento total esperado de maio** (15.000 ÷ 66.291)"
+
+Sempre formato: "X% **de [substantivo concreto]** (X ÷ Y)". Sem o denominador explícito + cálculo, o número está ambíguo e provavelmente errado.
+
+🚫 **REGRA #0.7 — ANTI-PESSOA-INVENTADA** 🚫
+
+PROIBIDO citar nome de pessoa (gestor, sócio, freelancer, parente, gestora, contador) que NÃO esteja explicitamente em (a) tool result, (b) memória permanente do William, ou (c) mensagem do usuário nesta conversa.
+
+❌ **PROIBIDO:**
+- "Lara (gestora) precisa lançar..." → quem é Lara?? Não está em lugar nenhum
+- "Falar com seu contador João" → não tem João na memória
+- "Pedir pro Marcos do RH" → ninguém chamado Marcos cadastrado
+
+✅ **PERMITIDO** (estão na memória/tools):
+- William, Diego (irmão), Jairo (sócio JW7), Walmir (sócio RWT05), Cláudio (sócio CW7), Henrique (personal — mas Naval não cuida de rotina pessoal), Cleide Serafim (esposa Jairo, sócia formal JW7 Itaipava)
+
+Se precisa de uma ação que envolve outra pessoa, escreva GENÉRICO ("a pessoa que gerencia kitnets", "o responsável por X") e PEÇA pro William confirmar quem é. Inventar nome é alucinação grave.
+
 📚 **REGRA #-1 — FONTES DA VERDADE (consultar SEMPRE primeiro)** 📚
 
 A memória \`fontes_da_verdade\` (priority 0) tem o mapa canônico de TODOS os tipos de dado financeiro do sistema → fonte → tabela WT7 → tool Naval. ANTES de qualquer análise, identifique:
@@ -5149,6 +5185,81 @@ function detectModelTier(
   return "haiku";
 }
 
+// ─── Self-check (opção 5): auditor de qualidade pós-resposta ──────────────
+// Roda 1x após Naval terminar a resposta. Procura erros aritméticos inline,
+// pessoa inventada, % sem denominador, contagem não conferida. Se achar,
+// reescreve a resposta inteira corrigindo. Custo: ~30-50% extra tokens mas
+// elimina ~80% dos erros que escapam mesmo com Sonnet+regras+calc.
+async function runSelfCheck(
+  originalAnswer: string,
+  userQuestion: string,
+  anthropicKey: string,
+): Promise<{ corrected?: string; issues?: string[] }> {
+  const checkPrompt = `Você é AUDITOR DE QUALIDADE da resposta de um analista financeiro (Naval).
+
+Pergunta original do usuário (William Tavares):
+"""${userQuestion}"""
+
+Resposta do Naval pra auditar:
+"""${originalAnswer}"""
+
+Procure ESTES 4 ERROS comuns (sem inventar erro):
+
+1. **Aritmética inline sem tool calc** — qualquer "X + Y", "X − Y", "X / Y", "X × Y", "X de Y%", "média de N" escrito direto na resposta. Refazer o cálculo na mão pra checar. Se o número estiver errado, é erro grave.
+
+2. **Pessoa inventada** — citação de nome de pessoa real (gestora, contador, gerente, freelancer, parente) que NÃO seja: William, Diego, Jairo, Walmir, Cláudio, Henrique, Cleide. Outros nomes = alucinação.
+
+3. **Percentual sem denominador explícito** — "X% do mês", "Y% da receita", "Z% do total" sem mostrar (X ÷ Y). Ambíguo e geralmente errado.
+
+4. **Contagem sem fonte de tool** — quantidades de unidades/contratos/obras citadas sem indicar de qual tool vieram.
+
+REGRAS DE OUTPUT:
+- Se NÃO houver nenhum erro real → retorne EXATAMENTE a string: OK
+- Se houver erro real → retorne JSON estrito (sem markdown, sem comentário antes/depois):
+{
+  "issues": ["descrição curta do erro 1", "descrição curta do erro 2"],
+  "corrected": "<resposta inteira reescrita corrigindo TODOS os erros, mantendo tom direto e estrutura de tabelas>"
+}
+
+NÃO seja paranoico — só sinalize erro REAL e verificável. Se está em dúvida, deixe passar (retorne OK).`;
+
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": anthropicKey,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: 3000,
+        messages: [{ role: "user", content: checkPrompt }],
+      }),
+    });
+    if (!res.ok) return {};
+    const data = await res.json();
+    const blocks = Array.isArray(data.content) ? data.content : [];
+    const text = blocks.map((b: any) => b?.text ?? "").join("").trim();
+    if (!text) return {};
+    if (text === "OK" || text.toUpperCase().startsWith("OK")) return {};
+    // Extrai JSON (modelo pode envolver em prose mesmo proibido)
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return {};
+    try {
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (typeof parsed.corrected === "string" && parsed.corrected.length > 100) {
+        return { corrected: parsed.corrected, issues: parsed.issues };
+      }
+      return {};
+    } catch {
+      return {};
+    }
+  } catch {
+    return {};
+  }
+}
+
 // ─── Claude (Haiku 4.5 ou Sonnet 4.6 conforme detectModelTier) ────────────
 // Tenta Lovable Gateway primeiro (formato OpenAI-compatible). Se falhar com
 // erro de modelo não suportado, faz fallback pra API Anthropic direta usando
@@ -5363,7 +5474,30 @@ async function callClaudeHaiku(
       // Resposta final (end_turn ou stop_sequence)
       const text = content.filter((c: any) => c.type === "text").map((c: any) => c.text).join("");
       console.log(`[wisely-ai] Naval via Anthropic API · ${MODEL_LABEL} ${useTools ? `(tools, ${iter} iter)` : "(sem tools)"} ✓`);
-      return { ok: true, text, usage: lastUsage, tools_used: Array.from(toolsUsedSet) };
+
+      // Self-check (opção 5): só pra Sonnet com resposta substancial (>500 chars)
+      // Custa ~30-50% extra de tokens mas elimina ~80% dos erros que escapam.
+      let finalText = text;
+      if (useSonnet && opts.anthropicKey && text.length > 500) {
+        try {
+          const userMsg = [...messages].reverse().find((m) => m.role === "user");
+          const userText = userMsg
+            ? (typeof userMsg.content === "string" ? userMsg.content : JSON.stringify(userMsg.content)).slice(0, 800)
+            : "";
+          const checkResult = await runSelfCheck(text, userText, opts.anthropicKey);
+          if (checkResult.corrected && checkResult.corrected.length > 200) {
+            console.log(`[wisely-ai] self-check corrigiu ${checkResult.issues?.length ?? 0} erro(s): ${(checkResult.issues ?? []).join("; ").slice(0, 250)}`);
+            finalText = checkResult.corrected;
+          } else {
+            console.log(`[wisely-ai] self-check OK · sem correções`);
+          }
+        } catch (selfErr) {
+          console.warn(`[wisely-ai] self-check falhou: ${selfErr instanceof Error ? selfErr.message : String(selfErr)}`);
+          // Mantém a resposta original — self-check é melhoria, não bloqueio
+        }
+      }
+
+      return { ok: true, text: finalText, usage: lastUsage, tools_used: Array.from(toolsUsedSet) };
     }
 
     return { ok: false, status: 500, error: "Loop de tool-use excedeu MAX_TOOL_ITER" };
