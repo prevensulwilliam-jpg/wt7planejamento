@@ -2463,9 +2463,20 @@ async function handleGetPrevensulPipeline(
     ? input.forecast_month
     : null;
 
+  // CRÍTICO: pega APENAS o reference_month mais recente. Senão soma
+  // imports históricos do mesmo cliente em meses diferentes = pipeline
+  // inflado. Cada CSV mensal é a foto atual do pipeline.
+  const { data: latestMonthRow } = await sb
+    .from("prevensul_billing")
+    .select("reference_month")
+    .order("reference_month", { ascending: false })
+    .limit(1);
+  const latestMonth = (latestMonthRow ?? [])[0]?.reference_month;
+
   let query = sb.from("prevensul_billing")
     .select("client_name, contract_total, balance_remaining, commission_rate, commission_value, status, reference_month, installment_current, installment_total, closing_date");
 
+  if (latestMonth) query = query.eq("reference_month", latestMonth);
   if (!includePaid) query = query.gt("balance_remaining", 0);
 
   const { data, error } = await query;
@@ -3463,11 +3474,17 @@ async function handleGetStrategicPlan(
   const [{ data: goals }, { data: cons }, { data: pipe }] = await Promise.all([
     sb.from("goals").select("*"),
     sb.from("constructions").select("name, status, estimated_completion, estimated_value_ready, total_units_planned, ownership_pct").neq("status", "concluida"),
-    sb.from("prevensul_billing").select("client_name, balance_remaining, commission_rate").gt("balance_remaining", 0),
+    sb.from("prevensul_billing").select("client_name, balance_remaining, commission_rate, reference_month").gt("balance_remaining", 0),
   ]);
 
-  const totalPipelineSaldo = (pipe ?? []).reduce((s: number, p: any) => s + Number(p.balance_remaining ?? 0), 0);
-  const totalComissaoFutura = (pipe ?? []).reduce((s: number, p: any) => s + Number(p.balance_remaining ?? 0) * Number(p.commission_rate ?? 0.03), 0);
+  // Filtra reference_month mais recente pra evitar somar imports históricos
+  const latestMonthPipe = (pipe ?? []).reduce((m: string, p: any) => {
+    const r = (p as any).reference_month ?? "";
+    return r > m ? r : m;
+  }, "");
+  const pipeLatest = (pipe ?? []).filter((p: any) => p.reference_month === latestMonthPipe);
+  const totalPipelineSaldo = pipeLatest.reduce((s: number, p: any) => s + Number(p.balance_remaining ?? 0), 0);
+  const totalComissaoFutura = pipeLatest.reduce((s: number, p: any) => s + Number(p.balance_remaining ?? 0) * Number(p.commission_rate ?? 0.03), 0);
 
   return JSON.stringify({
     fonte: "memoria/metas.md (R$70M/2041) + goals table + constructions ativas + prevensul_billing pipeline",
@@ -4559,7 +4576,7 @@ async function callClaudeHaiku(
 // Versão do código deployado — log inicial em CADA invocação pra confirmar
 // que o deploy do edge function está atualizado. Bumpa toda vez que mudar
 // a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
-const WISELY_AI_VERSION = "2026.05.01-v33-audit-pipeline-inflation";
+const WISELY_AI_VERSION = "2026.05.02-v34-pipeline-latest-month-only";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
