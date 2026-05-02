@@ -659,41 +659,76 @@ export function useKitnetAlertsForMonth(month: string) {
 
 // ─── Status por Mês por Kitnet ───────────────────────────────────────────────
 
-/** Retorna mapa kitnet_id → status para um mês específico */
+/**
+ * Retorna mapa kitnet_id → status efetivo para um mês específico.
+ *
+ * Regra de fallback (Opção B — propaga via leitura):
+ *   1. Se houver override em kitnet_month_status para EXATAMENTE este mês → usa
+ *   2. Senão, busca o ÚLTIMO override de meses anteriores → usa esse status
+ *   3. Senão (sem nenhum histórico), cai pro k.status default no consumer
+ *
+ * Exemplo: kitnet com overrides fev=vacant, mar=occupied, abr=occupied.
+ *   - Consultar mai/2026 → não tem override → usa abril (occupied) ✓
+ *   - Consultar jul/2026 → não tem override → usa abril (occupied) ✓
+ *   - Consultar jan/2026 → sem histórico anterior → cai pro k.status default
+ */
 export function useKitnetMonthStatuses(month: string) {
   return useQuery({
     queryKey: ["kitnet_month_status", month],
     queryFn: async () => {
+      // Pega TODOS os overrides até este mês (inclusive)
       const { data, error } = await (supabase as any)
         .from("kitnet_month_status")
-        .select("kitnet_id, status")
-        .eq("reference_month", month);
-      // Graceful: se a tabela não existir ainda, retorna mapa vazio em vez de explodir
+        .select("kitnet_id, status, reference_month")
+        .lte("reference_month", month)
+        .order("reference_month", { ascending: false });
       if (error) {
         console.warn("[useKitnetMonthStatuses] query error:", error.message);
         return {} as Record<string, string>;
       }
+      // Como veio ordenado DESC, o primeiro de cada kitnet_id é o mais recente ≤ month
       const map: Record<string, string> = {};
-      (data ?? []).forEach((r: any) => { map[r.kitnet_id] = r.status; });
+      (data ?? []).forEach((r: any) => {
+        if (!(r.kitnet_id in map)) map[r.kitnet_id] = r.status;
+      });
       return map;
     },
     enabled: !!month,
   });
 }
 
-/** Retorna o status de uma kitnet para um mês específico (ou null se não há override) */
+/**
+ * Retorna o status efetivo de UMA kitnet para um mês específico.
+ * Mesma regra de fallback de useKitnetMonthStatuses.
+ * Retorna { status, source: 'override' | 'inherited' | null } pra UI distinguir.
+ */
 export function useKitnetMonthStatus(kitnetId: string | null, month: string) {
   return useQuery({
     queryKey: ["kitnet_month_status_single", kitnetId, month],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      // 1. Tenta override exato deste mês
+      const { data: exact, error: e1 } = await (supabase as any)
         .from("kitnet_month_status")
-        .select("status")
+        .select("status, reference_month")
         .eq("kitnet_id", kitnetId)
         .eq("reference_month", month)
         .maybeSingle();
-      if (error) throw error;
-      return (data as { status: string } | null);
+      if (e1) throw e1;
+      if (exact) return { status: exact.status as string, source: "override" as const, inherited_from: month };
+
+      // 2. Fallback: último override anterior
+      const { data: prev, error: e2 } = await (supabase as any)
+        .from("kitnet_month_status")
+        .select("status, reference_month")
+        .eq("kitnet_id", kitnetId)
+        .lt("reference_month", month)
+        .order("reference_month", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (e2) throw e2;
+      if (prev) return { status: prev.status as string, source: "inherited" as const, inherited_from: prev.reference_month as string };
+
+      return null;
     },
     enabled: !!kitnetId && !!month,
   });
