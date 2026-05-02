@@ -5101,7 +5101,55 @@ function handleCalc(input: { expression?: string }): string {
   }
 }
 
-// ─── Claude Haiku 4.5 — usado pelo Naval (chat conversacional) ────────────
+// ─── Detecção heurística: Sonnet vs Haiku ─────────────────────────────────
+// Estratégia híbrida: análise complexa (premissa multi-fator, projeção, decisão
+// estratégica) → Sonnet 4.6 (premium, ~3x custo). Pergunta factual rápida
+// (saldo, status, qual tool, "está locada?") → Haiku 4.5 (rápido/barato).
+//
+// Heurística determinística (sem LLM extra). Decisão local em ~1ms.
+function detectModelTier(
+  messages: Array<{ role: string; content: unknown }>,
+): "haiku" | "sonnet" {
+  // Pega última msg do user (a pergunta atual)
+  const lastUser = [...messages].reverse().find((m) => m.role === "user");
+  if (!lastUser) return "haiku";
+  const text = (typeof lastUser.content === "string"
+    ? lastUser.content
+    : JSON.stringify(lastUser.content)
+  ).toLowerCase();
+
+  // Sinais de pergunta estratégica (qualquer 1 já promove pra Sonnet)
+  const STRATEGIC_KEYWORDS = [
+    // Análise/projeção
+    "ideal", "deveria", "estratég", "análise", "analise", "diagnóst", "diagnost",
+    "projeç", "projet", "cenário", "cenario", "simul",
+    // Comparação/recomendação
+    "compar", "recomen", "sugir", "qual o melhor", "qual seria",
+    "como faço pra", "como devo", "como posso",
+    // Quantificação ampla
+    "quanto preciso", "quanto deveria", "quanto faltam", "quanto tenho que",
+    "vou bater", "vou conseguir", "vou atingir",
+    // Plano/objetivo
+    "plano", "planej", "objetivo", "atingir", "alcançar",
+    // Explicação profunda
+    "explica por que", "explique por que", "porquê", "por que", "qual a lógica",
+    "qual a logica", "qual o motivo",
+  ];
+  const hasStrategicKeyword = STRATEGIC_KEYWORDS.some((kw) => text.includes(kw));
+
+  // Mensagens longas com múltiplas frases costumam ser análises
+  const sentences = text.split(/[.!?]\s+/).filter((s) => s.length > 10);
+  const isLongMultiSentence = text.length > 150 && sentences.length >= 2;
+
+  // Pergunta factual curta (ex: "saldo BB?", "kitnet RWT03-04 está locada?") → Haiku
+  if (text.length < 60 && !hasStrategicKeyword) return "haiku";
+
+  if (hasStrategicKeyword || isLongMultiSentence) return "sonnet";
+
+  return "haiku";
+}
+
+// ─── Claude (Haiku 4.5 ou Sonnet 4.6 conforme detectModelTier) ────────────
 // Tenta Lovable Gateway primeiro (formato OpenAI-compatible). Se falhar com
 // erro de modelo não suportado, faz fallback pra API Anthropic direta usando
 // ANTHROPIC_API_KEY (configurada como secret do projeto).
@@ -5135,6 +5183,8 @@ async function callClaudeHaiku(
     anthropicKey?: string;
     tools?: ClaudeTool[];
     toolHandlers?: Record<string, ClaudeToolHandler>;
+    /** "haiku" (default, rápido/barato) ou "sonnet" (raciocínio premium pra análises). */
+    model?: "haiku" | "sonnet";
   },
 ): Promise<ClaudeResult> {
   // Normaliza pra ter sempre {fixed, variable}. String simples vai toda em "fixed".
@@ -5143,8 +5193,11 @@ async function callClaudeHaiku(
     : systemPrompt;
   const fullSystemForGateway = sys.fixed + sys.variable;
   const maxTokens = opts.maxTokens ?? 1500;
-  const MODEL_GW = "anthropic/claude-haiku-4-5";
-  const MODEL_NATIVE = "claude-haiku-4-5";
+  // Híbrido: Sonnet 4.6 pra análise estratégica, Haiku 4.5 pra factual rápido.
+  const useSonnet = opts.model === "sonnet";
+  const MODEL_GW = useSonnet ? "anthropic/claude-sonnet-4-6" : "anthropic/claude-haiku-4-5";
+  const MODEL_NATIVE = useSonnet ? "claude-sonnet-4-6" : "claude-haiku-4-5";
+  const MODEL_LABEL = useSonnet ? "Sonnet 4.6" : "Haiku 4.5";
   const useTools = (opts.tools?.length ?? 0) > 0;
 
   // 1) Lovable Gateway — só funciona SEM tools (formato OpenAI não bate com loop Anthropic)
@@ -5166,7 +5219,7 @@ async function callClaudeHaiku(
         const data = await res.json();
         const text = data.choices?.[0]?.message?.content ?? "";
         if (text) {
-          console.log("[wisely-ai] Naval via Lovable Gateway · Claude Haiku 4.5 (sem tools) ✓");
+          console.log(`[wisely-ai] Naval via Lovable Gateway · ${MODEL_LABEL} (sem tools) ✓`);
           return { ok: true, text };
         }
       } else {
@@ -5309,7 +5362,7 @@ async function callClaudeHaiku(
 
       // Resposta final (end_turn ou stop_sequence)
       const text = content.filter((c: any) => c.type === "text").map((c: any) => c.text).join("");
-      console.log(`[wisely-ai] Naval via Anthropic API · Haiku 4.5 ${useTools ? `(tools, ${iter} iter)` : "(sem tools)"} ✓`);
+      console.log(`[wisely-ai] Naval via Anthropic API · ${MODEL_LABEL} ${useTools ? `(tools, ${iter} iter)` : "(sem tools)"} ✓`);
       return { ok: true, text, usage: lastUsage, tools_used: Array.from(toolsUsedSet) };
     }
 
@@ -5750,10 +5803,14 @@ Gere a leitura estratégica seguindo o formato obrigatório.`;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
     const useTools = !!ANTHROPIC_API_KEY && !!supabaseUrl && !!serviceKey;
+    // Híbrido: detecta se a pergunta é estratégica (Sonnet) ou factual (Haiku)
+    const modelTier = detectModelTier(messages);
+    console.log(`[wisely-ai] modelTier=${modelTier} · useTools=${useTools}`);
     const result = await callClaudeHaiku(systemPrompt, messages, {
-      maxTokens: 2000,
+      maxTokens: modelTier === "sonnet" ? 3000 : 2000,
       lovableKey: LOVABLE_API_KEY,
       anthropicKey: ANTHROPIC_API_KEY,
+      model: modelTier,
       tools: useTools ? NAVAL_TOOLS : undefined,
       toolHandlers: useTools
         ? {
