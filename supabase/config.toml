@@ -22,3 +22,6 @@ verify_jwt = true
 
 [functions.naval-daily-check]
 verify_jwt = false
+
+[functions.sync-prevensul-csv]
+verify_jwt = true
