@@ -25,3 +25,6 @@ verify_jwt = false
 
 [functions.sync-prevensul-csv]
 verify_jwt = true
+
+[functions.send-whatsapp]
+verify_jwt = true

@@ -1036,6 +1036,82 @@ const NAVAL_TOOLS: ClaudeTool[] = [
     },
   },
   {
+    name: "get_active_goals",
+    description:
+      "Lista todas as metas ativas (multi-período: mensal/semestral/anual/3y/5y/10y/custom). " +
+      "Pra cada meta, calcula current_value automaticamente baseado em (metric, period_start, period_end): " +
+      "metric='revenue' soma revenues+kitnet_entries no período; metric='patrimony' usa get_net_worth_snapshot; " +
+      "metric='savings' agrega sobra reinvestida. Retorna progresso %. " +
+      "USE pra: 'estou no caminho da meta?', 'quanto falta pra X?', 'metas ativas?'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        metric_filter: {
+          type: "string",
+          description: "Filtra por métrica (revenue/patrimony/savings/profit/renda_passiva). Omitir = todas.",
+        },
+        period_filter: {
+          type: "string",
+          description: "Filtra por period_type (monthly/yearly/3y/etc). Omitir = todas.",
+        },
+      },
+    },
+  },
+  {
+    name: "parse_task_nlp",
+    description:
+      "AÇÃO: parse linguagem natural → daily_task estruturada. " +
+      "Recebe texto livre tipo 'amanhã 14h ligar Premoldi' ou 'toda segunda 8h audit Naval' e retorna { title, due_date, due_time, vector, recurrence }. " +
+      "Se houver palavra de recorrência ('toda', 'todo dia', 'sempre'), retorna recurrence_rule. " +
+      "USE quando William digitar input no Stream do Dia. " +
+      "NÃO insere no banco — só parse. Frontend faz INSERT depois de confirmar.",
+    input_schema: {
+      type: "object",
+      properties: {
+        text: { type: "string", description: "Texto livre do usuário (obrigatório)." },
+        reference_date: { type: "string", description: "Data de referência YYYY-MM-DD pra resolver 'amanhã'/'sex'/etc. Default = hoje." },
+      },
+      required: ["text"],
+    },
+  },
+  {
+    name: "promote_alert_to_task",
+    description:
+      "AÇÃO: promove naval_alert (severity critical/warning) em daily_task pendente. " +
+      "Cria row em daily_tasks com source='naval_promoted' + related_alert_id. " +
+      "Stream do Dia mostra essas tasks com badge especial. " +
+      "USE quando audit_data_sources retornar issues critical e William pedir 'transforma em tasks' OU automaticamente via cron diário. " +
+      "Idempotente: se task já existe pra esse alert_id, retorna a existente.",
+    input_schema: {
+      type: "object",
+      properties: {
+        alert_id: { type: "string", description: "UUID do naval_alert (obrigatório)." },
+        due_date: { type: "string", description: "Data alvo YYYY-MM-DD. Default = hoje." },
+        due_time: { type: "string", description: "Horário HH:MM (opcional)." },
+      },
+      required: ["alert_id"],
+    },
+  },
+  {
+    name: "update_pipeline_stage",
+    description:
+      "AÇÃO: atualiza pipeline_stage de um contrato em prevensul_billing. " +
+      "Stages válidos: quente, proposta, fechando, ganho, perdido. " +
+      "USE quando William disser 'marca Premoldi como fechando' ou similar.",
+    input_schema: {
+      type: "object",
+      properties: {
+        client_name: { type: "string", description: "Nome do cliente (busca parcial case-insensitive)." },
+        stage: {
+          type: "string",
+          description: "Novo stage (quente/proposta/fechando/ganho/perdido).",
+          enum: ["quente", "proposta", "fechando", "ganho", "perdido"],
+        },
+      },
+      required: ["client_name", "stage"],
+    },
+  },
+  {
     name: "audit_data_sources",
     description:
       "Audita sincronização de dados: detecta dessincronização entre tabelas WT7 e fontes canônicas. " +
@@ -3702,6 +3778,324 @@ async function handleUpsertPrevensulBilling(
   });
 }
 
+// ─── Handler: get_active_goals ───────────────────────────────────────
+async function handleGetActiveGoals(
+  input: Record<string, unknown>,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<string> {
+  const sb = createClient(supabaseUrl, serviceKey);
+  const metricFilter = (input.metric_filter as string) || null;
+  const periodFilter = (input.period_filter as string) || null;
+
+  let q = sb.from("goals").select("*");
+  if (metricFilter) q = q.eq("metric", metricFilter);
+  if (periodFilter) q = q.eq("period_type", periodFilter);
+  const { data: goalsData, error } = await q;
+  if (error) return JSON.stringify({ error: `goals query failed: ${error.message}` });
+
+  const goals = goalsData ?? [];
+  if (goals.length === 0) {
+    return JSON.stringify({ ok: true, goals: [], note: "Nenhuma meta cadastrada com esses filtros." });
+  }
+
+  // Pra cada goal, calcula current_value se auto_calculated=true
+  const out = await Promise.all(
+    goals.map(async (g: any) => {
+      let currentValue = Number(g.current_value ?? 0);
+      const metric = g.metric || g.type;
+      const periodStart = g.period_start;
+      const periodEnd = g.period_end;
+
+      if (g.auto_calculated !== false && metric && periodStart && periodEnd) {
+        if (metric === "revenue") {
+          // revenues no período + kitnet_entries reconciled
+          const [{ data: revs }, { data: kits }] = await Promise.all([
+            sb.from("revenues")
+              .select("amount")
+              .eq("counts_as_income", true)
+              .neq("source", "aluguel_kitnets")
+              .gte("received_at", periodStart)
+              .lte("received_at", periodEnd),
+            sb.from("kitnet_entries")
+              .select("total_liquid")
+              .eq("reconciled", true)
+              .gte("period_end", periodStart)
+              .lte("period_end", periodEnd),
+          ]);
+          const totalRev = (revs ?? []).reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0);
+          const totalKit = (kits ?? []).reduce((s: number, k: any) => s + Number(k.total_liquid ?? 0), 0);
+          currentValue = totalRev + totalKit;
+        } else if (metric === "renda_passiva") {
+          const { data: kits } = await sb.from("kitnet_entries")
+            .select("total_liquid")
+            .eq("reconciled", true)
+            .gte("period_end", periodStart)
+            .lte("period_end", periodEnd);
+          currentValue = (kits ?? []).reduce((s: number, k: any) => s + Number(k.total_liquid ?? 0), 0);
+        } else if (metric === "savings" || metric === "profit") {
+          // sobra = receita - custeio (no período)
+          const [{ data: revs }, { data: kits }, { data: exps }] = await Promise.all([
+            sb.from("revenues")
+              .select("amount").eq("counts_as_income", true).neq("source", "aluguel_kitnets")
+              .gte("received_at", periodStart).lte("received_at", periodEnd),
+            sb.from("kitnet_entries")
+              .select("total_liquid").eq("reconciled", true)
+              .gte("period_end", periodStart).lte("period_end", periodEnd),
+            sb.from("expenses")
+              .select("amount, is_card_payment, counts_as_investment, nature")
+              .gte("paid_at", periodStart).lte("paid_at", periodEnd),
+          ]);
+          const totalRev = (revs ?? []).reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0)
+            + (kits ?? []).reduce((s: number, k: any) => s + Number(k.total_liquid ?? 0), 0);
+          const totalCust = (exps ?? [])
+            .filter((e: any) => !e.is_card_payment && !e.counts_as_investment && e.nature !== "transfer")
+            .reduce((s: number, e: any) => s + Number(e.amount ?? 0), 0);
+          currentValue = totalRev - totalCust;
+        }
+        // patrimony: usa snapshot (cálculo separado, fora deste handler por ora)
+      }
+
+      const target = Number(g.target_value ?? 0);
+      const pct = target > 0 ? (currentValue / target) * 100 : 0;
+      const remaining = target - currentValue;
+
+      return {
+        id: g.id,
+        name: g.name,
+        period_type: g.period_type,
+        period_start: g.period_start,
+        period_end: g.period_end,
+        metric,
+        target_value: Math.round(target * 100) / 100,
+        current_value: Math.round(currentValue * 100) / 100,
+        progress_pct: Math.round(pct * 10) / 10,
+        remaining: Math.round(remaining * 100) / 100,
+        status: pct >= 100 ? "atingida" : pct >= 75 ? "perto" : pct >= 50 ? "no_caminho" : "atras",
+        notes: g.notes,
+      };
+    }),
+  );
+
+  return JSON.stringify({
+    ok: true,
+    n_goals: out.length,
+    goals: out,
+    note: "current_value calculado em runtime quando auto_calculated=true. metric='patrimony' ainda usa snapshot manual (Sprint futura).",
+  });
+}
+
+// ─── Handler: parse_task_nlp ──────────────────────────────────────────
+async function handleParseTaskNlp(
+  input: Record<string, unknown>,
+  _supabaseUrl: string,
+  _serviceKey: string,
+): Promise<string> {
+  const text = (input.text as string ?? "").trim();
+  const refDateStr = (input.reference_date as string) || new Date().toISOString().slice(0, 10);
+  if (!text) return JSON.stringify({ ok: false, error: "text obrigatório" });
+
+  const lower = text.toLowerCase();
+  const refDate = new Date(refDateStr);
+
+  // Detecta data
+  let dueDate = refDateStr;
+  if (/\bhoje\b/.test(lower)) {
+    dueDate = refDateStr;
+  } else if (/\bamanh[aã]\b/.test(lower)) {
+    const d = new Date(refDate); d.setDate(d.getDate() + 1);
+    dueDate = d.toISOString().slice(0, 10);
+  } else if (/\bdepois de amanh[aã]\b/.test(lower)) {
+    const d = new Date(refDate); d.setDate(d.getDate() + 2);
+    dueDate = d.toISOString().slice(0, 10);
+  } else {
+    // Dias da semana (próxima ocorrência)
+    const weekdays: Record<string, number> = {
+      domingo: 0, segunda: 1, terça: 2, terca: 2, quarta: 3, quinta: 4, sexta: 5, sábado: 6, sabado: 6,
+      seg: 1, ter: 2, qua: 3, qui: 4, sex: 5, sab: 6, dom: 0,
+    };
+    for (const [name, dayNum] of Object.entries(weekdays)) {
+      if (new RegExp(`\\b${name}\\b`).test(lower)) {
+        const d = new Date(refDate);
+        const diff = (dayNum - d.getDay() + 7) % 7 || 7;
+        d.setDate(d.getDate() + diff);
+        dueDate = d.toISOString().slice(0, 10);
+        break;
+      }
+    }
+    // Data explícita: 15/05 ou 15/05/2026
+    const dm = lower.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?\b/);
+    if (dm) {
+      const day = dm[1].padStart(2, "0");
+      const month = dm[2].padStart(2, "0");
+      const year = dm[3] || refDate.getFullYear().toString();
+      dueDate = `${year}-${month}-${day}`;
+    }
+  }
+
+  // Detecta hora
+  let dueTime: string | null = null;
+  const hm = lower.match(/\b(\d{1,2})(?:h|:(\d{2}))\b/);
+  if (hm) {
+    const h = hm[1].padStart(2, "0");
+    const m = (hm[2] || "00").padStart(2, "0");
+    dueTime = `${h}:${m}`;
+  }
+
+  // Detecta recorrência
+  let recurrence: any = null;
+  if (/\btoda? dia\b|\bdiariamente\b|\btodos os dias\b/.test(lower)) {
+    recurrence = { frequency: "daily" };
+  } else if (/\btoda? semana\b/.test(lower)) {
+    recurrence = { frequency: "weekly" };
+  } else if (/\btoda?s? (segunda|terça|terca|quarta|quinta|sexta|sábado|sabado|domingo)/.test(lower)) {
+    recurrence = { frequency: "weekly" };
+    const wd = lower.match(/\btoda?s? (segunda|terça|terca|quarta|quinta|sexta|sábado|sabado|domingo)/);
+    if (wd) {
+      const wdMap: Record<string, number> = {
+        domingo: 0, segunda: 1, terça: 2, terca: 2, quarta: 3, quinta: 4, sexta: 5, sábado: 6, sabado: 6,
+      };
+      recurrence.weekday = wdMap[wd[1]];
+    }
+  } else if (/\btodo m[eê]s\b|\bmensal/.test(lower)) {
+    recurrence = { frequency: "monthly" };
+  }
+
+  // Detecta vetor (heurística simples)
+  let vector: string | null = null;
+  if (/prevensul|premoldi|verde vale|sardagna|r7|jabpp|trade park|grand food|cliente/.test(lower)) vector = "prevensul";
+  else if (/kitnet|aluguel|lara|inquilino/.test(lower)) vector = "kitnets";
+  else if (/obra|rwt05|jw7|terreno|construção|construc[aã]o|matheus|mauro|cimento|laje|alvenaria/.test(lower)) vector = "obras";
+  else if (/naval|audit/.test(lower)) vector = "naval";
+  else if (/treino|henrique|m[eé]dico|psiquiatra/.test(lower)) vector = "pessoal";
+  else if (/diego|t7|tdi/.test(lower)) vector = "t7";
+
+  // Limpa título (remove markers temporais e recurrence)
+  const cleanTitle = text
+    .replace(/\b(hoje|amanh[aã]|depois de amanh[aã])\b/gi, "")
+    .replace(/\b(toda?|todos|todas|sempre)\b\s*(dia|semana|m[eê]s|segunda|terça|terca|quarta|quinta|sexta|sábado|sabado|domingo)?/gi, "")
+    .replace(/\b\d{1,2}(h|:\d{2})\b/gi, "")
+    .replace(/\b\d{1,2}\/\d{1,2}(\/\d{4})?\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return JSON.stringify({
+    ok: true,
+    parsed: {
+      title: cleanTitle || text,
+      due_date: dueDate,
+      due_time: dueTime,
+      vector,
+      recurrence,
+    },
+    raw_text: text,
+    note: "Parse heurístico. Frontend deve mostrar preview antes de inserir.",
+  });
+}
+
+// ─── Handler: promote_alert_to_task ──────────────────────────────────
+async function handlePromoteAlertToTask(
+  input: Record<string, unknown>,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<string> {
+  const sb = createClient(supabaseUrl, serviceKey);
+  const alertId = input.alert_id as string;
+  const dueDate = (input.due_date as string) || new Date().toISOString().slice(0, 10);
+  const dueTime = (input.due_time as string) || null;
+
+  if (!alertId) return JSON.stringify({ ok: false, error: "alert_id obrigatório" });
+
+  // Idempotência: já existe task pra esse alert?
+  const { data: existing } = await sb
+    .from("daily_tasks")
+    .select("id, title, status, due_date")
+    .eq("related_alert_id", alertId)
+    .maybeSingle();
+  if (existing) {
+    return JSON.stringify({
+      ok: true,
+      action: "already_exists",
+      task: existing,
+    });
+  }
+
+  // Busca alert
+  const { data: alert, error: aErr } = await sb
+    .from("naval_alerts")
+    .select("title, message, severity, detector")
+    .eq("id", alertId)
+    .single();
+  if (aErr || !alert) return JSON.stringify({ ok: false, error: "alert_id não encontrado" });
+
+  // Cria task
+  const { data: task, error: tErr } = await sb
+    .from("daily_tasks")
+    .insert({
+      title: (alert as any).title,
+      due_date: dueDate,
+      due_time: dueTime,
+      status: "pending",
+      vector: "naval",
+      source: "naval_promoted",
+      related_alert_id: alertId,
+      notes: (alert as any).message,
+    })
+    .select("id, title, due_date, due_time, status")
+    .single();
+
+  if (tErr) return JSON.stringify({ ok: false, error: `INSERT failed: ${tErr.message}` });
+
+  return JSON.stringify({
+    ok: true,
+    action: "created",
+    task,
+    alert: { severity: (alert as any).severity, detector: (alert as any).detector },
+  });
+}
+
+// ─── Handler: update_pipeline_stage ──────────────────────────────────
+async function handleUpdatePipelineStage(
+  input: Record<string, unknown>,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<string> {
+  const sb = createClient(supabaseUrl, serviceKey);
+  const clientName = input.client_name as string;
+  const stage = input.stage as string;
+  const validStages = ["quente", "proposta", "fechando", "ganho", "perdido"];
+
+  if (!clientName) return JSON.stringify({ ok: false, error: "client_name obrigatório" });
+  if (!validStages.includes(stage)) {
+    return JSON.stringify({ ok: false, error: `stage inválido. Use: ${validStages.join(", ")}` });
+  }
+
+  // Busca contratos do cliente (todos os reference_months)
+  const { data: matches } = await sb
+    .from("prevensul_billing")
+    .select("id, client_name, reference_month")
+    .ilike("client_name", `%${clientName}%`);
+  if (!matches || matches.length === 0) {
+    return JSON.stringify({ ok: false, error: `Nenhum contrato encontrado pra '${clientName}'` });
+  }
+
+  // Atualiza todos os matches
+  const ids = matches.map((m: any) => m.id);
+  const { error: updErr } = await sb
+    .from("prevensul_billing")
+    .update({ pipeline_stage: stage })
+    .in("id", ids);
+  if (updErr) return JSON.stringify({ ok: false, error: `UPDATE failed: ${updErr.message}` });
+
+  return JSON.stringify({
+    ok: true,
+    action: "updated",
+    n_rows_updated: ids.length,
+    client_name: matches[0].client_name,
+    new_stage: stage,
+  });
+}
+
 async function handleAuditDataSources(
   _input: Record<string, unknown>,
   supabaseUrl: string,
@@ -4787,7 +5181,7 @@ async function callClaudeHaiku(
 // Versão do código deployado — log inicial em CADA invocação pra confirmar
 // que o deploy do edge function está atualizado. Bumpa toda vez que mudar
 // a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
-const WISELY_AI_VERSION = "2026.05.02-v36-audit-other-commissions-clt";
+const WISELY_AI_VERSION = "2026.05.02-v37-sprint1-fundacao-hoje-v4";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -5245,6 +5639,10 @@ Gere a leitura estratégica seguindo o formato obrigatório.`;
             audit_data_sources: (input) => handleAuditDataSources(input, supabaseUrl, serviceKey),
             cleanup_pipeline_old_months: (input) => handleCleanupPipelineOldMonths(input, supabaseUrl, serviceKey),
             upsert_prevensul_billing: (input) => handleUpsertPrevensulBilling(input, supabaseUrl, serviceKey),
+            get_active_goals: (input) => handleGetActiveGoals(input, supabaseUrl, serviceKey),
+            parse_task_nlp: (input) => handleParseTaskNlp(input, supabaseUrl, serviceKey),
+            promote_alert_to_task: (input) => handlePromoteAlertToTask(input, supabaseUrl, serviceKey),
+            update_pipeline_stage: (input) => handleUpdatePipelineStage(input, supabaseUrl, serviceKey),
             get_recurring_bills: (input) => handleGetRecurringBills(input, supabaseUrl, serviceKey),
             get_other_commissions_status: (input) => handleGetOtherCommissionsStatus(input, supabaseUrl, serviceKey),
             get_energy_solar_status: (input) => handleGetEnergySolarStatus(input, supabaseUrl, serviceKey),
