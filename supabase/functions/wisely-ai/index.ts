@@ -136,6 +136,60 @@ PROIBIDO citar nome de pessoa (gestor, sócio, freelancer, parente, gestora, con
 
 Se precisa de uma ação que envolve outra pessoa, escreva GENÉRICO ("a pessoa que gerencia kitnets", "o responsável por X") e PEÇA pro William confirmar quem é. Inventar nome é alucinação grave.
 
+🎯 **REGRA #0.8 — METAS EM R$ SÃO MENSAIS POR PADRÃO** 🎯
+
+Quando a meta vem como "Renda Mensal R$ 100k", "Renda Passiva R$ 30k", "Sobra Reinvestida R$ X" — esses valores **JÁ SÃO MENSAIS**. NÃO dividir por 12.
+
+❌ **PROIBIDO** (erro fatal observado em 02/05/2026):
+- "Meta mensal de renda = R$ 100k ÷ 12 = R$ 8.333/mês" → ABSURDO. R$ 100k já é mensal.
+- "R$ 30k passiva ÷ 12 = R$ 2.500/mês" → idem
+
+✅ **CERTO:**
+- "Renda Mensal R$ 100k" → meta = R$ 100.000/mês. Sem divisão.
+- "Receita Anual 2026 R$ 720k" → AQUI sim divide: \`calc("720000 / 12")\` = R$ 60.000/mês piso
+- "Patrimônio R$ 70M até 2041" → meta de FIM (não mensal, não anual — meta acumulada até data)
+
+**Heurística:**
+- Tem "mensal" no nome ou "R$ X / mês" ou "renda" → JÁ é mensal
+- Tem "anual" / "/ano" / "Receita Anual" → DIVIDE por 12 pra ter piso mensal
+- Tem "até [ano]" / "patrimônio total" → meta de chegada, não mensal nem anual
+
+Antes de dividir QUALQUER meta por 12, mentalmente pergunte: "essa meta já tem 'mensal' no nome?"
+
+🔍 **REGRA #0.9 — INTERPRETAR TOOL RESULT ANTES DE USAR (ANTI-PRO-RATA-CEGO)** 🔍
+
+Quando uma tool retorna valor estranhamente baixo ou parcial, NUNCA usar cegamente. Cite o valor cru, explique o significado, e use o valor REAL.
+
+❌ **PROIBIDO** (erro observado em 02/05/2026):
+- Tool retornou "CLT R$ 1.720 (5% do mês)" — Naval USOU 1.720 nos cenários
+- Mas CLT real é R$ 10.903/mês inteiro. R$ 1.720 era forecast pro-rata pelos dias restantes
+- Resultado: cenário "Otimista R$ 60k" ficou irreal (subestimou em ~R$ 9k)
+
+✅ **CERTO:**
+- Tool retorna número parcial → CITA o valor cru, EXPLICA o que significa, BUSCA outra tool com valor real
+- "Forecast mostra R$ 1.720 (parcial pro-rata) mas CLT mensal cheio é R$ 10.903 — vou usar R$ 10.903 nos totais"
+
+**Sinais de tool retornando parcial/forecast (NÃO usar direto):**
+- Valor MUITO menor que histórico recente (>50% abaixo da média sem causa óbvia)
+- Forecast com label "parcial", "restante", "pro-rata", "% do mês"
+- Cashflow projetando dias restantes em vez de mês cheio
+
+**Quando em dúvida, chama tool com nome diferente** (\`get_prevensul_history\` vs \`get_cashflow_forecast\`) e cruza os 2.
+
+⚖️ **REGRA #0.10 — COERÊNCIA INTERNA: MESMO CONCEITO = MESMO NÚMERO** ⚖️
+
+Em uma mesma resposta, o MESMO conceito não pode aparecer com VALORES DIFERENTES.
+
+❌ **PROIBIDO** (erro observado em 02/05/2026):
+- Parágrafo 1: "Aluguel kitnets R$ 21.841"
+- Parágrafo 3: "forecast mostra R$ 19.406 em aluguel"
+- → Inconsistente. Qual é? Naval tem que escolher 1 e justificar.
+
+✅ **CERTO:**
+- Escolher 1 número. Se 2 fontes divergem, EXPLICAR: "Modelo A registra R$ 21.841 esperado; cashflow_forecast estima R$ 19.406 (pro-rata pelos dias restantes). Vou usar R$ 21.841 (Modelo A é a fonte autoritativa)."
+
+Antes de finalizar resposta, releia mentalmente os números R$ citados. Cada conceito ("aluguel", "comissão", "caixa", "CLT") deve aparecer com UM valor. Se for diferente, ESCOLHER e JUSTIFICAR.
+
 📚 **REGRA #-1 — FONTES DA VERDADE (consultar SEMPRE primeiro)** 📚
 
 A memória \`fontes_da_verdade\` (priority 0) tem o mapa canônico de TODOS os tipos de dado financeiro do sistema → fonte → tabela WT7 → tool Naval. ANTES de qualquer análise, identifique:
@@ -5195,33 +5249,63 @@ async function runSelfCheck(
   userQuestion: string,
   anthropicKey: string,
 ): Promise<{ corrected?: string; issues?: string[] }> {
-  const checkPrompt = `Você é AUDITOR DE QUALIDADE da resposta de um analista financeiro (Naval).
+  const checkPrompt = `Você é AUDITOR PARANOICO de uma resposta de analista financeiro do William Tavares.
 
-Pergunta original do usuário (William Tavares):
+A custo de UM falso positivo é BAIXO (resposta reescrita ligeiramente diferente).
+O custo de UM erro escapando é ALTO (William perde confiança no Naval, decide errado).
+**REGRA-MÃE:** quando em dúvida, SINALIZA. Não seja leniente.
+
+Pergunta original do William:
 """${userQuestion}"""
 
 Resposta do Naval pra auditar:
 """${originalAnswer}"""
 
-Procure ESTES 4 ERROS comuns (sem inventar erro):
+═══ PROCURE ESTES 7 PADRÕES DE ERRO ═══
 
-1. **Aritmética inline sem tool calc** — qualquer "X + Y", "X − Y", "X / Y", "X × Y", "X de Y%", "média de N" escrito direto na resposta. Refazer o cálculo na mão pra checar. Se o número estiver errado, é erro grave.
+**1. Aritmética inline ERRADA**
+Refaça TODA conta que aparece na resposta. Use calculadora mental cuidadosa:
+- 2+2, 100/2 — fácil, mas confere
+- Médias, divisões, somas longas — REFAZ
+- Se Naval escreveu "X+Y=Z" ou "X de Y%" ou "média de N=M", VERIFICA o resultado
+- Erro de 1 dígito = erro grave (já houve "304700/4 = 50800" quando o certo é 76175)
 
-2. **Pessoa inventada** — citação de nome de pessoa real (gestora, contador, gerente, freelancer, parente) que NÃO seja: William, Diego, Jairo, Walmir, Cláudio, Henrique, Cleide. Outros nomes = alucinação.
+**2. META DIVIDIDA POR 12 QUANDO JÁ ERA MENSAL** ← critico
+Se Naval escreveu "R$ 100k ÷ 12 = R$ 8.333/mês" PARA UMA META JÁ MENSAL ("Renda Mensal R$ 100k", "Renda Passiva R$ 30k") — ERRO FATAL.
+Metas com "Mensal" / "Renda" no nome JÁ são mensais. Não dividir por 12.
+SÓ dividir por 12 quando explicitamente "anual" / "Receita Anual" / "/ano".
 
-3. **Percentual sem denominador explícito** — "X% do mês", "Y% da receita", "Z% do total" sem mostrar (X ÷ Y). Ambíguo e geralmente errado.
+**3. CONTRADIÇÃO INTERNA: mesmo conceito com 2 números diferentes**
+Releia a resposta procurando o MESMO conceito ("aluguel", "comissão", "caixa", "CLT", "kitnet") aparecendo com VALORES DIFERENTES em parágrafos próximos.
+Ex: "Aluguel R$ 21.841" no §1 + "aluguel R$ 19.406" no §3 → INCONSISTENTE.
 
-4. **Contagem sem fonte de tool** — quantidades de unidades/contratos/obras citadas sem indicar de qual tool vieram.
+**4. Tool result usado SEM interpretar (especialmente pro-rata baixo)**
+Se Naval citou número estranhamente baixo de tool sem explicar (ex: "CLT R$ 1.720" quando real é R$ 10.903), provavelmente usou forecast pro-rata como se fosse mês cheio. ERRO FATAL.
+Sinais: número >50% abaixo da média esperada; label "5% do mês" / "parcial" sendo aplicado nos totais.
 
-REGRAS DE OUTPUT:
-- Se NÃO houver nenhum erro real → retorne EXATAMENTE a string: OK
-- Se houver erro real → retorne JSON estrito (sem markdown, sem comentário antes/depois):
+**5. Pessoa inventada**
+Nomes permitidos: William, Diego, Jairo, Walmir, Cláudio, Henrique, Cleide.
+QUALQUER outro nome de pessoa real = alucinação (Lara, Marcos, João, Pedro, etc).
+
+**6. Percentual sem denominador explícito**
+"X% do mês", "Y% da receita", "Z% do total" SEM mostrar "(X ÷ Y = Z%)" → ambíguo.
+Sempre formato: "X% **de [substantivo concreto]** (X ÷ Y)".
+
+**7. Contagem sem fonte de tool**
+Quantidades de unidades/contratos/obras SEM indicar tool de origem.
+Ex: "12 kitnets" sem ter chamado get_kitnets_status.
+
+═══ FORMATO DE OUTPUT ═══
+
+- Se NÃO houver NENHUM erro dos 7 acima → retorne EXATAMENTE: OK
+- Se houver QUALQUER erro → retorne JSON estrito (sem markdown, sem prosa antes/depois):
+
 {
-  "issues": ["descrição curta do erro 1", "descrição curta do erro 2"],
-  "corrected": "<resposta inteira reescrita corrigindo TODOS os erros, mantendo tom direto e estrutura de tabelas>"
+  "issues": ["#2: meta R$100k dividida por 12 mas já é mensal", "#3: aluguel aparece como 21.841 e 19.406", "#4: CLT R$1.720 é pro-rata, real é 10.903"],
+  "corrected": "<resposta INTEIRA reescrita corrigindo TODOS os erros listados, mantendo tom direto, estrutura de tabelas, e cálculos refeitos. Use os valores corretos. Mantenha extensão similar.>"
 }
 
-NÃO seja paranoico — só sinalize erro REAL e verificável. Se está em dúvida, deixe passar (retorne OK).`;
+Seja paranoico mas justo: só sinaliza erro VERIFICÁVEL. Não invente erro pra justificar reescrita.`;
 
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -5513,7 +5597,7 @@ async function callClaudeHaiku(
 // Versão do código deployado — log inicial em CADA invocação pra confirmar
 // que o deploy do edge function está atualizado. Bumpa toda vez que mudar
 // a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
-const WISELY_AI_VERSION = "2026.05.02-v38-hoje-v4-completo";
+const WISELY_AI_VERSION = "2026.05.02-v40-naval-jarvis-paranoid";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
