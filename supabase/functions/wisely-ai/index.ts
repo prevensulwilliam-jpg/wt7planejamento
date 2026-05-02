@@ -2851,6 +2851,20 @@ async function handleGetKitnetsStatus(
       )
     : allKitnets;
 
+  // Herança de status: pega TODOS overrides ≤ month, ordena DESC, fica com o mais recente por kitnet
+  // (mesma lógica do useKitnets/Opção B). Sem isso, kitnet locada em abril aparece "vacant" em maio.
+  const { data: monthStatuses } = await sb
+    .from("kitnet_month_status")
+    .select("kitnet_id, status, reference_month")
+    .lte("reference_month", month)
+    .order("reference_month", { ascending: false });
+  const effectiveStatusMap: Record<string, string> = {};
+  for (const r of (monthStatuses ?? [])) {
+    if (!(r.kitnet_id in effectiveStatusMap)) {
+      effectiveStatusMap[r.kitnet_id] = r.status;
+    }
+  }
+
   const { data: entries } = await sb
     .from("kitnet_entries")
     .select("kitnet_id, total_liquid, rent_gross, reconciled, reconciled_at, period_end, tenant_name, broker_name")
@@ -2891,7 +2905,8 @@ async function handleGetKitnetsStatus(
     }
     const r = byResidencial.get(code)!;
     r.total_units++;
-    const status = (k.status || "").toLowerCase();
+    // Status efetivo: override do mês > último override anterior > k.status default > "vacant"
+    const status = (effectiveStatusMap[k.id] ?? k.status ?? "vacant").toLowerCase();
     if (status === "occupied") r.occupied++;
     else if (status === "vacant" || status === "available") r.vacant++;
     r.expected_total += Number(k.rent_value ?? 0);
@@ -4228,10 +4243,24 @@ async function handleAuditDataSources(
   }
 
   // 3. Kitnet entries: mês corrente sem fechamento
-  const { data: kitnets } = await sb.from("kitnets").select("id, code, status").eq("status", "occupied");
+  // Status efetivo: combina kitnets.status default + último override em kitnet_month_status ≤ monthStr
+  const { data: kitnetsAll } = await sb.from("kitnets").select("id, code, status");
+  const { data: monthStatusesAudit } = await sb
+    .from("kitnet_month_status")
+    .select("kitnet_id, status, reference_month")
+    .lte("reference_month", monthStr)
+    .order("reference_month", { ascending: false });
+  const effectiveAudit: Record<string, string> = {};
+  for (const r of (monthStatusesAudit ?? [])) {
+    if (!(r.kitnet_id in effectiveAudit)) effectiveAudit[r.kitnet_id] = r.status;
+  }
+  const kitnetsOccupied = (kitnetsAll ?? []).filter((k: any) => {
+    const eff = (effectiveAudit[k.id] ?? k.status ?? "").toLowerCase();
+    return eff === "occupied";
+  });
   const { data: kitEntries } = await sb.from("kitnet_entries").select("kitnet_id").eq("reference_month", monthStr);
   const fechouEsteMes = new Set((kitEntries ?? []).map((k: any) => k.kitnet_id));
-  const semFechamento = (kitnets ?? []).filter((k: any) => !fechouEsteMes.has(k.id));
+  const semFechamento = kitnetsOccupied.filter((k: any) => !fechouEsteMes.has(k.id));
   if (semFechamento.length > 0) {
     issues.push({
       severity: "info",
