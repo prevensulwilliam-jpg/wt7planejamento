@@ -9,6 +9,7 @@ import { PremiumCard } from "@/components/wt7/PremiumCard";
 import { KpiCard } from "@/components/wt7/KpiCard";
 import { GoldButton } from "@/components/wt7/GoldButton";
 import { SobraReinvestidaCard } from "@/components/wt7/SobraReinvestidaCard";
+import { MultiPeriodGoals } from "@/components/wt7/MultiPeriodGoals";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useGoals, useUpdateGoal, useDashboardKPIs, useNetWorth } from "@/hooks/useFinances";
 import { useCreateGoal } from "@/hooks/useConstructions";
@@ -77,6 +78,9 @@ export default function GoalsPage() {
 
       {/* Sobra Reinvestida — meta estratégica do William (≥50% da receita) */}
       <SobraReinvestidaCard month={getCurrentMonth()} />
+
+      {/* Metas Multi-Período (mensal/anual/3y/5y/10y) — calc auto via useGoalsActive */}
+      <MultiPeriodGoals />
 
       {/* Próximo marco de renda — destaque em card grande */}
       <PremiumCard glowColor="#C9A84C" className="space-y-4">

@@ -111,30 +111,103 @@ serve(async (req) => {
       );
     }
 
-    // ─── STUB: NÃO envia ainda ─────────────────────────────────────
-    // Sprint 4 (cereja) conecta Evolution API aqui:
-    //   const evoUrl = Deno.env.get("EVOLUTION_API_URL");
-    //   const evoKey = Deno.env.get("EVOLUTION_API_KEY");
-    //   const evoInstance = (await sb.from("whatsapp_config").select("evolution_instance")...).evolution_instance;
-    //   const res = await fetch(`${evoUrl}/message/sendText/${evoInstance}`, {
-    //     method: "POST",
-    //     headers: { "apikey": evoKey, "Content-Type": "application/json" },
-    //     body: JSON.stringify({ number: phone, text: message }),
-    //   });
-    //   ...atualiza status
+    // ─── ENVIO REAL via Evolution API (Sprint 4.5 — cereja) ─────────
+    // Só envia se whatsapp_config.active = true E secrets EVOLUTION_*
+    // estão configurados. Caso contrário fica como queued (fallback stub).
+    const { data: configData } = await sb
+      .from("whatsapp_config")
+      .select("evolution_instance, evolution_api_url, active")
+      .limit(1)
+      .single();
 
-    return new Response(
-      JSON.stringify({
-        ok: true,
-        version: VERSION,
-        queued_id: queueRow.id,
-        status: "queued",
-        note: "Mensagem na fila. Evolution API ainda não está ativa (cereja Sprint 4).",
-        to_phone: phone,
-        template,
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    const evoApiKey = Deno.env.get("EVOLUTION_API_KEY");
+    const isActive = configData?.active === true;
+    const evoUrl = configData?.evolution_api_url ?? Deno.env.get("EVOLUTION_API_URL");
+    const evoInstance = configData?.evolution_instance;
+
+    if (!isActive || !evoApiKey || !evoUrl || !evoInstance) {
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          version: VERSION,
+          queued_id: queueRow.id,
+          status: "queued",
+          note: "Mensagem na fila. Evolution API não ativa ainda (whatsapp_config.active=false ou secrets faltando).",
+          to_phone: phone,
+          template,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    // Tenta enviar via Evolution API
+    try {
+      const evoRes = await fetch(`${evoUrl}/message/sendText/${evoInstance}`, {
+        method: "POST",
+        headers: {
+          "apikey": evoApiKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          number: phone.replace(/\D/g, ""), // só números
+          text: message,
+        }),
+      });
+
+      if (!evoRes.ok) {
+        const errText = await evoRes.text().catch(() => "");
+        await sb.from("whatsapp_notifications_queue")
+          .update({
+            status: "failed",
+            error_message: `Evolution ${evoRes.status}: ${errText.slice(0, 300)}`,
+          })
+          .eq("id", queueRow.id);
+        return new Response(
+          JSON.stringify({
+            ok: false,
+            queued_id: queueRow.id,
+            status: "failed",
+            error: `Evolution API ${evoRes.status}`,
+            details: errText.slice(0, 300),
+          }),
+          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      const evoData = await evoRes.json().catch(() => ({}));
+      const evolutionMessageId = evoData?.key?.id ?? evoData?.id ?? null;
+
+      // Marca como enviada
+      await sb.from("whatsapp_notifications_queue")
+        .update({
+          status: "sent",
+          sent_at: new Date().toISOString(),
+          evolution_message_id: evolutionMessageId,
+        })
+        .eq("id", queueRow.id);
+
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          version: VERSION,
+          queued_id: queueRow.id,
+          status: "sent",
+          evolution_message_id: evolutionMessageId,
+          to_phone: phone,
+          template,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    } catch (sendErr) {
+      const errMsg = sendErr instanceof Error ? sendErr.message : "send failed";
+      await sb.from("whatsapp_notifications_queue")
+        .update({ status: "failed", error_message: errMsg })
+        .eq("id", queueRow.id);
+      return new Response(
+        JSON.stringify({ ok: false, queued_id: queueRow.id, status: "failed", error: errMsg }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
   } catch (err) {
     const msg = err instanceof Error ? err.message : "erro desconhecido";
     console.error("[send-whatsapp] error:", msg);
