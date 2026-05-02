@@ -7,6 +7,9 @@ import { useSobraReinvestida, SOBRA_META_PCT } from "./useSobraReinvestida";
 import { getCurrentMonth, formatMonth } from "@/lib/formatters";
 import { callNaval } from "@/lib/naval";
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
+
+const log = logger.scope("useNaval");
 
 /**
  * Memória permanente do Naval — mesmos arquivos .md que o Claude Code carrega
@@ -163,7 +166,7 @@ export function useNavalAnalysis(autoGenerate: boolean = false) {
           generated.current = true;
         }
       } catch (error) {
-        console.error("Naval error:", error);
+        log.error("Naval call error", error);
         if (mounted.current) setAnalysis(getErrorMessage(error));
       } finally {
         if (mounted.current) setLoading(false);
@@ -224,7 +227,7 @@ export function useNavalChat() {
         // edge function salvou em naval_chats → invalida histórico pra refletir
         qc.invalidateQueries({ queryKey: ["naval_chats"] });
       } catch (error) {
-        console.error("Naval chat error:", error);
+        log.error("Naval chat error", error);
         setMessages((prev) => [
           ...prev,
           {

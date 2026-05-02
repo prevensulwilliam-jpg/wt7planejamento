@@ -1,4 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
+
+const log = logger.scope("autoPromoteRecurring");
 
 /**
  * Auto-promoção de despesas variáveis → recorrentes.
@@ -118,7 +121,7 @@ export async function checkRecurrencePromotion(
       } as any);
 
     if (error) {
-      console.error("Erro ao auto-promover recorrente:", error);
+      log.error("Erro ao auto-promover recorrente", error);
       return null;
     }
 
@@ -129,7 +132,7 @@ export async function checkRecurrencePromotion(
       avgAmount: Math.round(avgAmount * 100) / 100,
     };
   } catch (err) {
-    console.error("Erro em checkRecurrencePromotion:", err);
+    log.error("Erro em checkRecurrencePromotion", err);
     return null;
   }
 }

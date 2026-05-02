@@ -2,6 +2,9 @@
 // Cada source = livro/artigo/nota destilado em princípios operativos.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
+
+const log = logger.scope("useNavalSources");
 
 export type NavalLens = "naval" | "aaron_ross" | "housel" | "tevah" | "operador" | "outros";
 export type NavalSourceType = "book" | "article" | "podcast" | "note" | "course";
@@ -120,7 +123,7 @@ export function useCreateNavalSource() {
       // Dispara embedding em background — não bloqueia a UX
       supabase.functions
         .invoke("naval-embed", { body: { source_id: data.id } })
-        .catch((e) => console.error("naval-embed falhou:", e));
+        .catch((e) => log.error("naval-embed falhou", e));
       return data as NavalSource;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["naval_sources"] }),
@@ -148,7 +151,7 @@ export function useUpdateNavalSource() {
       if (patch.principles || patch.lens) {
         supabase.functions
           .invoke("naval-embed", { body: { source_id: id } })
-          .catch((e) => console.error("naval-embed falhou:", e));
+          .catch((e) => log.error("naval-embed falhou", e));
       }
       return data as NavalSource;
     },

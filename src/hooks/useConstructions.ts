@@ -1,6 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
+import { logger } from "@/lib/logger";
+
+const log = logger.scope("useConstructions");
 
 // ─── CONSTRUCTIONS (nova tabela, vinculada a assets) ─────────────────────────
 
@@ -139,7 +142,7 @@ export function useCreateConstructionExpense() {
   return useMutation({
     mutationFn: async (entry: TablesInsert<"construction_expenses">) => {
       const { error } = await (supabase as any).from("construction_expenses").insert(entry);
-      if (error) { console.error("construction_expenses insert error:", error); throw error; }
+      if (error) { log.error("construction_expenses insert error", error); throw error; }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["construction_expenses"] }),
   });

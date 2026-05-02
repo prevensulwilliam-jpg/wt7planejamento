@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAutonomyIndex, useAutonomyHistory } from "@/hooks/useAutonomyIndex";
 import { useKitnetOrphans } from "@/hooks/useReconcileMonth";
 import { useMonthRevenueReconciliation, useBusinesses, useBusinessRealized } from "@/hooks/useBusinesses";
+import { useNavalAlerts } from "@/hooks/useNavalAlerts";
 import { SobraReinvestidaCard } from "@/components/wt7/SobraReinvestidaCard";
 import { ThreeRingsCockpit } from "@/components/wt7/ThreeRingsCockpit";
 import { useSobraReinvestida } from "@/hooks/useSobraReinvestida";
@@ -25,6 +26,9 @@ export default function HojePage() {
   const { data: businesses = [] } = useBusinesses();
   const { data: realizedMap } = useBusinessRealized(month);
   const { data: sobra } = useSobraReinvestida(month);
+  const { data: alerts = [] } = useNavalAlerts();
+  const criticalAlerts = alerts.filter(a => a.severity === "critical");
+  const warningAlerts = alerts.filter(a => a.severity === "warning");
 
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
@@ -149,6 +153,48 @@ export default function HojePage() {
           </div>
           <MonthPicker value={month} onChange={setMonth} className="w-44" />
         </div>
+
+        {/* ═══ ALERTAS NAVAL (críticos sempre visíveis no topo) ═══ */}
+        {(criticalAlerts.length > 0 || warningAlerts.length > 0) && (
+          <PremiumCard className="p-4" glowColor={criticalAlerts.length > 0 ? "#F43F5E" : "#F59E0B"}>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 mb-2">
+                <AlertTriangle className="w-4 h-4" style={{ color: criticalAlerts.length > 0 ? "#F43F5E" : "#F59E0B" }} />
+                <span className="text-sm font-semibold" style={{ color: "#F0F4F8" }}>
+                  Naval detectou {alerts.length} alerta{alerts.length !== 1 ? "s" : ""}
+                  {criticalAlerts.length > 0 && (
+                    <span className="ml-1.5 px-2 py-0.5 rounded text-[10px]" style={{ background: "rgba(244,63,94,0.15)", color: "#F87171" }}>
+                      {criticalAlerts.length} crítico{criticalAlerts.length !== 1 ? "s" : ""}
+                    </span>
+                  )}
+                </span>
+                <button
+                  onClick={() => navigate("/naval")}
+                  className="ml-auto text-xs px-2 py-1 rounded hover:bg-white/5 flex items-center gap-1"
+                  style={{ color: "#94A3B8" }}
+                >
+                  Ver todos no Naval <ChevronRight className="w-3 h-3" />
+                </button>
+              </div>
+              {[...criticalAlerts, ...warningAlerts].slice(0, 3).map(a => (
+                <div key={a.id} className="flex items-start gap-2 text-xs" style={{ color: "#CBD5E1" }}>
+                  <span style={{ color: a.severity === "critical" ? "#F87171" : "#FCD34D" }}>
+                    {a.severity === "critical" ? "🚨" : "⚠"}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium truncate" style={{ color: "#F0F4F8" }}>{a.title}</p>
+                    <p className="truncate text-[11px]" style={{ color: "#94A3B8" }}>{a.message}</p>
+                  </div>
+                </div>
+              ))}
+              {alerts.length > 3 && (
+                <p className="text-[10px] pl-6" style={{ color: "#64748B" }}>
+                  +{alerts.length - 3} alerta(s). Veja todos em /naval
+                </p>
+              )}
+            </div>
+          </PremiumCard>
+        )}
 
         {isLoading || !snap ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
