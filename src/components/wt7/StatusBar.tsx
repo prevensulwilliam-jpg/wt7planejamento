@@ -9,13 +9,21 @@ import { useNavigate } from "react-router-dom";
 
 type Props = { month: string };
 
-// Semântica WT7: green=investimento, blue=positivo, red=negativo, gold=warning (amarelo)
-// Status 'gold' historicamente era o key — mantém o nome mas hex agora é amarelo (não dourado)
-const STATUS_COLORS: Record<KpiData["status"], { left: string; value: string; spark: string }> = {
-  green: { left: "#10B981", value: "#34D399", spark: "#10B981" }, // investimento/meta OK
-  blue:  { left: "#3B82F6", value: "#60A5FA", spark: "#3B82F6" }, // receita/positivo
-  red:   { left: "#F43F5E", value: "#F43F5E", spark: "#F43F5E" }, // negativo/crítico
-  gold:  { left: "#FBBF24", value: "#FCD34D", spark: "#FBBF24" }, // warning (amarelo, não dourado)
+// Cor BASE vem do TIPO da métrica (kind), não da saúde:
+//   revenue (faturamento, comissões, renda passiva) → azul
+//   cash (caixa) → azul (vermelho só se ficar negativo)
+//   investment (sobra reinvestida) → verde
+const KIND_COLORS: Record<KpiData["kind"], { left: string; value: string; spark: string }> = {
+  revenue:    { left: "#3B82F6", value: "#60A5FA", spark: "#3B82F6" }, // azul = positivo
+  cash:       { left: "#3B82F6", value: "#60A5FA", spark: "#3B82F6" }, // azul = positivo
+  investment: { left: "#10B981", value: "#34D399", spark: "#10B981" }, // verde = investimento
+};
+
+// Saúde NÃO troca a cor base — só decora o delta_label e adiciona indicador discreto
+const HEALTH_DOT: Record<KpiData["health"], string | null> = {
+  ok: null,
+  warn: "#FBBF24",     // amarelo
+  critical: "#F43F5E", // vermelho
 };
 
 function Sparkline({ data, color }: { data: number[]; color: string }) {
@@ -46,7 +54,22 @@ function KPICell({
   formatAs?: "currency" | "percent";
   onClick?: () => void;
 }) {
-  const colors = STATUS_COLORS[kpi.status];
+  // Caixa fica vermelho só se ficar negativo (caso extremo)
+  const isNegativeCash = kpi.kind === "cash" && kpi.value < 0;
+  const colors = isNegativeCash
+    ? { left: "#F43F5E", value: "#F43F5E", spark: "#F43F5E" }
+    : KIND_COLORS[kpi.kind];
+
+  const healthDot = HEALTH_DOT[kpi.health];
+
+  // Delta colorido: ↑ verde-claro, ↓ vermelho — só se houver delta_pct
+  const deltaColor =
+    kpi.delta_pct == null
+      ? "#64748B"
+      : kpi.delta_pct > 0
+        ? "#34D399"
+        : "#F43F5E";
+
   const displayValue =
     formatAs === "percent"
       ? `${Math.round(kpi.value)}%`
@@ -62,6 +85,14 @@ function KPICell({
         className="absolute left-0 top-0 bottom-0 w-[3px]"
         style={{ background: colors.left }}
       />
+      {/* Health dot — discreto no canto superior direito */}
+      {healthDot && (
+        <span
+          className="absolute top-2.5 right-2.5 w-1.5 h-1.5 rounded-full"
+          style={{ background: healthDot, boxShadow: `0 0 4px ${healthDot}` }}
+          title={kpi.health === "warn" ? "Atenção" : "Crítico"}
+        />
+      )}
       <div className="text-[9px] tracking-[1.5px] uppercase font-mono" style={{ color: "#4A5568" }}>
         {kpi.label}
       </div>
@@ -69,7 +100,7 @@ function KPICell({
         {displayValue}
       </div>
       {kpi.delta_label && (
-        <div className="text-[10px] font-mono mt-1" style={{ color: "#64748B" }}>
+        <div className="text-[10px] font-mono mt-1" style={{ color: deltaColor }}>
           {kpi.delta_label}
         </div>
       )}

@@ -18,9 +18,12 @@ export interface KpiData {
   value: number;
   delta_pct: number | null;        // % vs mês anterior
   delta_label: string | null;      // "+8% vs mar" ou "−12% vs mar"
-  status: "green" | "gold" | "red" | "blue";
-  spark: number[];                 // últimos 6 valores pra sparkline
-  meta_label: string;              // descrição secundária
+  /** Tipo semântico da métrica — define cor BASE (azul/verde/etc). */
+  kind: "revenue" | "cash" | "investment";
+  /** Saúde — controla cor do delta e modificadores visuais discretos (não a cor base). */
+  health: "ok" | "warn" | "critical";
+  spark: number[];
+  meta_label: string;
 }
 
 function pct(curr: number, prev: number): number | null {
@@ -161,7 +164,8 @@ export function useStatusBarKPIs(currentMonth: string) {
           value: faturamentoCurr,
           delta_pct: faturamentoDelta,
           delta_label: faturamentoDelta != null ? `${faturamentoDelta > 0 ? "↑" : "↓"} ${Math.abs(faturamentoDelta).toFixed(0)}% vs mês anterior` : null,
-          status: faturamentoDelta != null && faturamentoDelta > 5 ? "green" : faturamentoDelta != null && faturamentoDelta < -10 ? "red" : "gold",
+          kind: "revenue",
+          health: faturamentoDelta != null && faturamentoDelta > 5 ? "ok" : faturamentoDelta != null && faturamentoDelta < -10 ? "critical" : "warn",
           spark: faturamentoSpark,
           meta_label: "Receita real (avulsa + kitnets)",
         },
@@ -170,7 +174,8 @@ export function useStatusBarKPIs(currentMonth: string) {
           value: caixaCurr,
           delta_pct: null,
           delta_label: `+ R$ ${Math.round(totalRescue / 1000)}k resgatável`,
-          status: caixaCurr >= 100000 ? "green" : caixaCurr >= 30000 ? "gold" : "red",
+          kind: "cash",
+          health: caixaCurr >= 100000 ? "ok" : caixaCurr >= 30000 ? "warn" : "critical",
           spark: caixaSpark,
           meta_label: "Bancos · piso R$ 100k",
         },
@@ -179,7 +184,8 @@ export function useStatusBarKPIs(currentMonth: string) {
           value: comissoesReceberCurr,
           delta_pct: null,
           delta_label: `${pipeLatest.length} contratos · ref ${latestRefMonth}`,
-          status: "gold",
+          kind: "revenue",
+          health: "ok",
           spark: comissoesSpark,
           meta_label: "Pipeline Prevensul (3% de balance_remaining)",
         },
@@ -188,7 +194,8 @@ export function useStatusBarKPIs(currentMonth: string) {
           value: rendaPassivaCurr,
           delta_pct: rendaPassivaDelta,
           delta_label: rendaPassivaDelta != null ? `${rendaPassivaDelta > 0 ? "↑" : "↓"} ${Math.abs(rendaPassivaDelta).toFixed(0)}% vs ${prevMonth}` : null,
-          status: "green",
+          kind: "revenue",
+          health: rendaPassivaDelta != null && rendaPassivaDelta < -10 ? "warn" : "ok",
           spark: rendaPassivaSpark,
           meta_label: "Kitnets reconciled (Modelo A)",
         },
@@ -197,7 +204,8 @@ export function useStatusBarKPIs(currentMonth: string) {
           value: sobraPctCurr,
           delta_pct: null,
           delta_label: `R$ ${Math.round(investCurr / 1000)}k · meta ≥50%`,
-          status: sobraPctCurr >= 50 ? "green" : sobraPctCurr >= 30 ? "gold" : sobraPctCurr >= 15 ? "blue" : "red",
+          kind: "investment",
+          health: sobraPctCurr >= 50 ? "ok" : sobraPctCurr >= 30 ? "warn" : "critical",
           spark: sobraSpark,
           meta_label: "% receita virando ativo",
         },
