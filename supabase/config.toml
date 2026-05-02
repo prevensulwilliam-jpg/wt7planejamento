@@ -31,3 +31,6 @@ verify_jwt = true
 
 [functions.generate-recurrence-tasks]
 verify_jwt = false
+
+[functions.generate-recurrence-tasks]
+verify_jwt = false

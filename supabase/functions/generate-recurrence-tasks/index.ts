@@ -1,32 +1,22 @@
 /**
  * generate-recurrence-tasks — Edge Function
  *
- * Roda diariamente (idealmente via pg_cron 7h Brasília / 10h UTC).
- * Pra cada task_recurrence_rule ATIVA, gera as instâncias dos próximos
- * 7 dias em daily_tasks. Idempotente (não duplica via UNIQUE check).
+ * Gera instâncias em daily_tasks a partir das regras ativas em task_recurrence_rules.
+ * Idempotente: usa last_generated_until + check (rule_id, due_date) pra não duplicar.
  *
- * Frequências suportadas:
- *  - daily: todos os dias
- *  - weekdays: seg-sex
- *  - weekly: dia da semana específico
- *  - monthly: dia específico do mês
- *  - yearly: mesma data anual
+ * POST body (opcional): { days_ahead?: number }  — default 7, max 90
  *
- * Uso:
- *   POST /functions/v1/generate-recurrence-tasks
- *   {"days_ahead": 7}  // opcional, default 7
+ * Designed pra rodar via pg_cron diariamente às 7h Brasília (10h UTC).
  *
- * pg_cron setup (rodar manualmente no Supabase 1x):
- *   SELECT cron.schedule(
- *     'generate-recurrence-tasks-daily',
- *     '0 10 * * *',  -- 7h Brasília
- *     $$ SELECT net.http_post(
- *       url := 'https://<project>.supabase.co/functions/v1/generate-recurrence-tasks',
- *       headers := jsonb_build_object('Authorization', 'Bearer <service_key>'),
- *       body := jsonb_build_object('days_ahead', 7)
- *     ) $$
- *   );
+ * Frequencies suportadas:
+ *   - daily      → todos os dias entre start e end
+ *   - weekdays   → seg-sex
+ *   - weekly     → só no weekday especificado (0=dom..6=sáb)
+ *   - monthly    → só no monthly_day do mês
+ *   - yearly     → uma vez por ano (mesmo mês/dia do start_date)
+ *   - custom_cron → ignorado nesta versão (placeholder pra futuro)
  */
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
@@ -37,29 +27,41 @@ const corsHeaders = {
 
 const VERSION = "2026.05.02-v1";
 
-function dayOfWeek(date: Date): number {
-  return date.getDay(); // 0=domingo
+type Rule = {
+  id: string;
+  title: string;
+  vector: string | null;
+  frequency: "daily" | "weekly" | "monthly" | "yearly" | "weekdays" | "custom_cron";
+  weekday: number | null;
+  monthly_day: number | null;
+  due_time: string | null;
+  active: boolean;
+  start_date: string;
+  end_date: string | null;
+  last_generated_until: string | null;
+};
+
+function fmtDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
 }
 
-function isWeekday(date: Date): boolean {
-  const d = dayOfWeek(date);
-  return d >= 1 && d <= 5;
-}
-
-function shouldGenerateInstance(rule: any, date: Date): boolean {
+function shouldGenerate(rule: Rule, date: Date): boolean {
+  const dow = date.getUTCDay(); // 0=dom..6=sáb
   switch (rule.frequency) {
     case "daily":
       return true;
     case "weekdays":
-      return isWeekday(date);
+      return dow >= 1 && dow <= 5;
     case "weekly":
-      return rule.weekday !== null && dayOfWeek(date) === rule.weekday;
+      return rule.weekday != null && dow === rule.weekday;
     case "monthly":
-      return rule.monthly_day !== null && date.getDate() === rule.monthly_day;
-    case "yearly":
-      // sem data específica de start_date dia/mês: usa start_date.day como referência
-      const start = new Date(rule.start_date);
-      return date.getDate() === start.getDate() && date.getMonth() === start.getMonth();
+      return rule.monthly_day != null && date.getUTCDate() === rule.monthly_day;
+    case "yearly": {
+      const start = new Date(rule.start_date + "T00:00:00Z");
+      return date.getUTCMonth() === start.getUTCMonth() && date.getUTCDate() === start.getUTCDate();
+    }
+    case "custom_cron":
+      return false; // não implementado nesta versão
     default:
       return false;
   }
@@ -71,97 +73,113 @@ serve(async (req) => {
   console.log(`[generate-recurrence-tasks] ▶ versão ${VERSION}`);
 
   try {
-    const body = await req.json().catch(() => ({}));
-    const daysAhead = Math.max(1, Math.min(30, Number(body.days_ahead) || 7));
+    let daysAhead = 7;
+    try {
+      const body = await req.json();
+      if (typeof body?.days_ahead === "number" && body.days_ahead > 0 && body.days_ahead <= 90) {
+        daysAhead = Math.floor(body.days_ahead);
+      }
+    } catch {
+      // sem body — usa default
+    }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const sb = createClient(supabaseUrl, serviceKey);
+    const sb = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
 
-    // Pega regras ativas
-    const { data: rules } = await sb
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    const horizonDate = new Date(today);
+    horizonDate.setUTCDate(horizonDate.getUTCDate() + daysAhead);
+
+    const { data: rules, error: rulesErr } = await sb
       .from("task_recurrence_rules")
       .select("*")
       .eq("active", true);
 
-    if (!rules || rules.length === 0) {
-      return new Response(JSON.stringify({ ok: true, message: "Nenhuma regra ativa", generated: 0 }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (rulesErr) {
+      return new Response(
+        JSON.stringify({ ok: false, error: `fetch rules: ${rulesErr.message}` }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    let totalGenerated = 0;
-    let totalSkipped = 0;
+    let totalInserted = 0;
+    const ruleResults: Array<{ rule_id: string; title: string; inserted: number }> = [];
 
-    for (const rule of rules) {
-      const ruleStart = new Date(rule.start_date);
-      const ruleEnd = rule.end_date ? new Date(rule.end_date) : null;
-      const lastGeneratedUntil = rule.last_generated_until ? new Date(rule.last_generated_until) : null;
-
-      for (let i = 0; i < daysAhead; i++) {
-        const date = new Date(today);
-        date.setDate(date.getDate() + i);
-
-        // Skip se fora do range da regra
-        if (date < ruleStart) continue;
-        if (ruleEnd && date > ruleEnd) continue;
-
-        // Skip se já gerou
-        if (lastGeneratedUntil && date <= lastGeneratedUntil) continue;
-
-        if (!shouldGenerateInstance(rule, date)) continue;
-
-        const dueDateStr = date.toISOString().slice(0, 10);
-
-        // Idempotência: confere se já existe task pra essa rule+data
-        const { data: existing } = await sb
-          .from("daily_tasks")
-          .select("id")
-          .eq("recurrence_rule_id", rule.id)
-          .eq("due_date", dueDateStr)
-          .maybeSingle();
-
-        if (existing) {
-          totalSkipped++;
-          continue;
-        }
-
-        // Cria instância
-        await sb.from("daily_tasks").insert({
-          title: rule.title,
-          due_date: dueDateStr,
-          due_time: rule.due_time,
-          status: "pending",
-          vector: rule.vector,
-          source: "recurrence",
-          recurrence_rule_id: rule.id,
-          notes: rule.notes,
-        });
-        totalGenerated++;
+    for (const rule of (rules ?? []) as Rule[]) {
+      // Início = max(today, start_date, last_generated_until + 1)
+      let cursor = new Date(today);
+      const start = new Date(rule.start_date + "T00:00:00Z");
+      if (start > cursor) cursor = new Date(start);
+      if (rule.last_generated_until) {
+        const next = new Date(rule.last_generated_until + "T00:00:00Z");
+        next.setUTCDate(next.getUTCDate() + 1);
+        if (next > cursor) cursor = next;
       }
 
-      // Atualiza last_generated_until da rule
-      const newLastGenerated = new Date(today);
-      newLastGenerated.setDate(newLastGenerated.getDate() + daysAhead - 1);
+      const end = rule.end_date ? new Date(rule.end_date + "T00:00:00Z") : horizonDate;
+      const stop = end < horizonDate ? end : horizonDate;
+
+      const tasksToInsert: Array<Record<string, unknown>> = [];
+      const iter = new Date(cursor);
+      while (iter <= stop) {
+        if (shouldGenerate(rule, iter)) {
+          tasksToInsert.push({
+            title: rule.title,
+            due_date: fmtDate(iter),
+            due_time: rule.due_time,
+            status: "pending",
+            vector: rule.vector,
+            source: "recurrence",
+            recurrence_rule_id: rule.id,
+          });
+        }
+        iter.setUTCDate(iter.getUTCDate() + 1);
+      }
+
+      let inserted = 0;
+      if (tasksToInsert.length > 0) {
+        // Anti-duplicação: não inserir se já existe (rule_id + due_date)
+        const dates = tasksToInsert.map((t) => t.due_date as string);
+        const { data: existing } = await sb
+          .from("daily_tasks")
+          .select("due_date")
+          .eq("recurrence_rule_id", rule.id)
+          .in("due_date", dates);
+
+        const existingSet = new Set((existing ?? []).map((r: { due_date: string }) => r.due_date));
+        const fresh = tasksToInsert.filter((t) => !existingSet.has(t.due_date as string));
+
+        if (fresh.length > 0) {
+          const { error: insErr } = await sb.from("daily_tasks").insert(fresh);
+          if (insErr) {
+            console.error(`[rule ${rule.id}] insert error:`, insErr.message);
+          } else {
+            inserted = fresh.length;
+            totalInserted += inserted;
+          }
+        }
+      }
+
+      // Atualiza last_generated_until pro horizon final processado
       await sb
         .from("task_recurrence_rules")
-        .update({
-          last_generated_until: newLastGenerated.toISOString().slice(0, 10),
-          updated_at: new Date().toISOString(),
-        })
+        .update({ last_generated_until: fmtDate(stop), updated_at: new Date().toISOString() })
         .eq("id", rule.id);
+
+      ruleResults.push({ rule_id: rule.id, title: rule.title, inserted });
     }
 
     return new Response(
       JSON.stringify({
         ok: true,
         version: VERSION,
-        rules_processed: rules.length,
-        instances_generated: totalGenerated,
-        instances_skipped: totalSkipped,
         days_ahead: daysAhead,
+        rules_processed: ruleResults.length,
+        total_tasks_inserted: totalInserted,
+        rules: ruleResults,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
