@@ -4787,7 +4787,7 @@ async function callClaudeHaiku(
 // Versão do código deployado — log inicial em CADA invocação pra confirmar
 // que o deploy do edge function está atualizado. Bumpa toda vez que mudar
 // a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
-const WISELY_AI_VERSION = "2026.05.02-v35-cleanup-upsert-tools";
+const WISELY_AI_VERSION = "2026.05.02-v36-audit-other-commissions-clt";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
