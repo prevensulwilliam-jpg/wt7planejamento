@@ -70,21 +70,22 @@ export default function HojePage() {
         <CaminhoMeta month={month} />
 
         {/* ═══ BLOCO 6 · CASH FLOW + STREAM (split) ═════════════════ */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-          <div className="lg:col-span-3">
+        {/* Altura fixa pros 2 cards do split — Stream rola internamente se crescer */}
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 lg:items-stretch">
+          <div className="lg:col-span-3 min-h-[480px] lg:max-h-[640px] flex flex-col">
             <CashFlowChart />
           </div>
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 min-h-[480px] lg:max-h-[640px] flex flex-col overflow-hidden">
             <DailyStream />
           </div>
         </div>
 
         {/* ═══ BLOCO 7 · SPLIT (Pipeline + Autonomia) ══════════════ */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-          <div className="lg:col-span-3">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 lg:items-stretch">
+          <div className="lg:col-span-3 flex flex-col">
             <PipelineCompact />
           </div>
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 flex flex-col">
             <AutonomyCompact month={month} />
           </div>
         </div>

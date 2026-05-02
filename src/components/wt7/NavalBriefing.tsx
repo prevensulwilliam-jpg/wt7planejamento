@@ -202,10 +202,10 @@ export function NavalBriefing() {
         </div>
       </div>
 
-      {/* Expand das cascatas */}
+      {/* Expand dos alertas — altura limitada, scroll interno se passar */}
       {expanded && briefing.active_cascades.length > 0 && (
-        <div className="mt-3 pt-3 border-t space-y-2" style={{ borderColor: "#1A2535" }}>
-          <div className="text-[11px] font-mono uppercase tracking-[1.5px] mb-2" style={{ color: "#64748B" }}>
+        <div className="mt-3 pt-3 border-t space-y-2 max-h-[260px] overflow-y-auto pr-1 -mr-1" style={{ borderColor: "#1A2535" }}>
+          <div className="text-[11px] font-mono uppercase tracking-[1.5px] mb-2 sticky top-0 pb-1" style={{ color: "#64748B", background: "#0F141B" }}>
             🚨 alertas financeiros
           </div>
           {briefing.active_cascades.map(c => <CascadePill key={c.id} cascade={c} />)}

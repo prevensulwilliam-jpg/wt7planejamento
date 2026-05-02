@@ -366,7 +366,7 @@ export function DailyStream({ date }: { date?: string }) {
   const isHere = mode === "day" ? anchor === today : (today >= start && today <= end);
 
   return (
-    <div className="rounded-xl p-4 border h-full" style={{ background: "#0F141B", borderColor: "#1A2535" }}>
+    <div className="rounded-xl p-4 border flex flex-col h-full min-h-0" style={{ background: "#0F141B", borderColor: "#1A2535" }}>
       {/* Header */}
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <div className="flex items-center gap-2">
@@ -496,7 +496,8 @@ export function DailyStream({ date }: { date?: string }) {
         ))}
       </div>
 
-      {/* Lista */}
+      {/* Lista — flex-1 + overflow controla altura no card pai */}
+      <div className="flex-1 min-h-0 overflow-y-auto pr-1 -mr-1">
       {filteredItems.length === 0 ? (
         <p className="text-xs text-center py-8" style={{ color: "#64748B" }}>
           Nenhum item nesse filtro
@@ -544,7 +545,7 @@ export function DailyStream({ date }: { date?: string }) {
           })}
         </div>
       ) : (
-        <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
+        <div className="space-y-3">
           {groupedByDate.map(([day, list]) => {
             const isToday = day === today;
             return (
@@ -590,6 +591,7 @@ export function DailyStream({ date }: { date?: string }) {
           })}
         </div>
       )}
+      </div>
 
       {/* Modal de edição de task */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
