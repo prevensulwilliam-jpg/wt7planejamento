@@ -63,6 +63,7 @@ const navGroups = [
       { label: "Projeções", icon: Radio, href: "/projections" },
       { label: "Plano de Caixa", icon: Wallet, href: "/cashflow" },
       { label: "Casamento 2027", icon: Heart, href: "/wedding" },
+      { label: "Jurídico", icon: Scale, href: "/legal" },
     ],
   },
   {
