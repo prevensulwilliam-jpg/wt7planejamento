@@ -2098,6 +2098,109 @@ export type Database = {
         }
         Relationships: []
       }
+      legal_actions: {
+        Row: {
+          area: string
+          attachments: Json | null
+          briefing_md: string | null
+          checklist: Json
+          completed_at: string | null
+          cost_estimated_max: number | null
+          cost_estimated_min: number | null
+          cost_real: number | null
+          created_at: string
+          deadline: string | null
+          description: string | null
+          id: string
+          notes: string | null
+          priority: string
+          professional_contact: string | null
+          professional_name: string | null
+          professional_type: string | null
+          related_business_id: string | null
+          related_construction_id: string | null
+          related_kitnet_id: string | null
+          started_at: string | null
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          area: string
+          attachments?: Json | null
+          briefing_md?: string | null
+          checklist?: Json
+          completed_at?: string | null
+          cost_estimated_max?: number | null
+          cost_estimated_min?: number | null
+          cost_real?: number | null
+          created_at?: string
+          deadline?: string | null
+          description?: string | null
+          id?: string
+          notes?: string | null
+          priority?: string
+          professional_contact?: string | null
+          professional_name?: string | null
+          professional_type?: string | null
+          related_business_id?: string | null
+          related_construction_id?: string | null
+          related_kitnet_id?: string | null
+          started_at?: string | null
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          area?: string
+          attachments?: Json | null
+          briefing_md?: string | null
+          checklist?: Json
+          completed_at?: string | null
+          cost_estimated_max?: number | null
+          cost_estimated_min?: number | null
+          cost_real?: number | null
+          created_at?: string
+          deadline?: string | null
+          description?: string | null
+          id?: string
+          notes?: string | null
+          priority?: string
+          professional_contact?: string | null
+          professional_name?: string | null
+          professional_type?: string | null
+          related_business_id?: string | null
+          related_construction_id?: string | null
+          related_kitnet_id?: string | null
+          started_at?: string | null
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "legal_actions_related_business_id_fkey"
+            columns: ["related_business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_actions_related_construction_id_fkey"
+            columns: ["related_construction_id"]
+            isOneToOne: false
+            referencedRelation: "constructions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_actions_related_kitnet_id_fkey"
+            columns: ["related_kitnet_id"]
+            isOneToOne: false
+            referencedRelation: "kitnets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       locked_months: {
         Row: {
           id: string
