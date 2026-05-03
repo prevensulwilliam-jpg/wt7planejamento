@@ -10,7 +10,7 @@
 
 - **WT7 Holding** (em estruturação) vai ter ~R$ 5M de patrimônio inicial
 - **Meta 2041:** R$ 70M de patrimônio total
-- **Casamento:** 11/12/2027 (briefing 2 trata o pacto antenupcial separado)
+- **Casamento:** 11/12/2027 — pacto antenupcial JÁ FIRMADO em separação total de bens (não afeta planejamento sucessório aqui)
 - **Filhos:** ainda não tenho. Mas planejo com a noiva.
 - **ITCMD SC hoje:** 8% (alíquota máxima estadual atual)
 
@@ -57,7 +57,7 @@ Conforme jurisprudência consultada (Migalhas, BLB Escola, Barbieri Advogados, A
 ### Doação de cotas (timing)
 5. Faz sentido **doar cotas hoje pra mim mesmo** (com reserva de usufruto) pra travar o valor histórico antes da reforma ITCMD subir? Ou só vale quando tiver filhos?
 6. Se for doar pra "futuros filhos" via cláusula condicional — é possível juridicamente? Quais as condições?
-7. **Depois do casamento dez/2027** muda alguma coisa na lógica de doação (pacto antenupcial cruza com isso)?
+7. ✅ **Pacto antenupcial em separação total já firmado** — cônjuge não tem direito sucessório de cotas/holding em hipótese alguma. Foco do planejamento sucessório vai 100% pra futuros filhos.
 
 ### Cláusulas
 8. Quais cláusulas você recomenda obrigatoriamente: incomunicabilidade ✓, impenhorabilidade ✓, reversibilidade ✓, inalienabilidade ✓ — todas essas funcionam combinadas em SC?
@@ -77,7 +77,7 @@ Conforme jurisprudência consultada (Migalhas, BLB Escola, Barbieri Advogados, A
 - ❌ Doar cotas e perder controle operacional da holding (reservar usufruto vitalício)
 - ❌ Estrutura que dispare ITBI alto na integralização (usar valor histórico)
 - ❌ Estrutura que comprometa flexibilidade pra vender Blumenau como garantia futura
-- ❌ Decisão precipitada antes do pacto antenupcial estar definido (briefing 2)
+- ❌ Estruturar holding "antes do casamento" pra blindar partilha — desnecessário (separação total resolve)
 
 ## 6. O que quero
 
@@ -89,10 +89,10 @@ Conforme jurisprudência consultada (Migalhas, BLB Escola, Barbieri Advogados, A
 
 ## 7. Prazo da resposta
 
-- Janela ITCMD: estimativa 12-24 meses
-- Pacto antenupcial: jun/2027 (briefing 2)
-- Casamento: dez/2027
-- **Quero estruturação completa: até dez/2026** pra ter tudo rodando antes do pacto/casamento
+- Janela ITCMD: estimativa 12-24 meses (reforma federal em pauta)
+- Pacto antenupcial: ✅ JÁ FIRMADO (separação total)
+- Casamento: 11/12/2027 (não afeta estruturação aqui)
+- **Quero estruturação completa: até dez/2026** pra capturar janela ITCMD federal
 
 ## 8. Material complementar
 

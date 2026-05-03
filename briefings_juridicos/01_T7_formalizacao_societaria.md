@@ -45,8 +45,8 @@ Conforme jurisprudência consultada (Migalhas, Jusbrasil — fontes BR):
 10. **Distribuição de lucros isenta:** preciso de contabilidade completa pra distribuir além da presunção 32%?
 11. **Retenção 10% sobre dividendos > R$ 50k/mês a partir de 01/2026** (já vigente): a estrutura permite splittar lucros entre T7 e WT7 Holding pra escapar?
 
-### Casamento (info de contexto)
-12. Eu me caso em **dez/2027**. As cotas T7 que vão ser criadas AGORA (antes do casamento) — incomunicáveis em comunhão parcial? E os dividendos recebidos durante o casamento?
+### Casamento (info de contexto — RESOLVIDO)
+12. ✅ **Pacto antenupcial JÁ FIRMADO** entre mim e a noiva — regime SEPARAÇÃO TOTAL DE BENS. Cotas e dividendos da T7 não comunicam com ela em hipótese alguma. Esta seção é só pra contexto — sem ação necessária.
 
 ## 4. O que NÃO quero
 

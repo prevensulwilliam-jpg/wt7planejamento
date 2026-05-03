@@ -47,7 +47,7 @@ A partir de **01/01/2026** (já em vigor):
 
 ### Distribuição mensal vs anual
 7. **Reservar lucros e distribuir uma vez ao ano** — escapa da regra mensal de R$ 50k? Ou a regra é por EVENTO de distribuição?
-8. Se reservar lucros, **pacto antenupcial** entra: lucros retidos não viram patrimônio comum no casamento (briefing 2). Vale a pena?
+8. ✅ Pacto antenupcial em separação total já firmado — não tem mais a discussão de "reinvestir vs distribuir pra blindar partilha". Decisão é puramente tributária + fluxo de caixa pessoal.
 9. Distribuir **mensal pra manter caixa pessoal** vs **anual pra otimizar tributação** — qual sua recomendação dado meu perfil?
 
 ### Compatibilidade com outros briefings
