@@ -33,6 +33,7 @@ import KitnetsReportPage from "@/pages/KitnetsReportPage";
 import TaxesPage from "@/pages/TaxesPage";
 import NavalPage from "@/pages/NavalPage";
 import BibliotecaPage from "@/pages/BibliotecaPage";
+import NavalMetricasPage from "@/pages/NavalMetricasPage";
 import ReconciliationPage from "@/pages/ReconciliationPage";
 import PatternsPage from "@/pages/PatternsPage";
 import CategoriesPage from "@/pages/CategoriesPage";
@@ -127,6 +128,7 @@ const App = () => (
             <Route path="/hoje" element={<HojePage />} />
             <Route path="/naval" element={<NavalPage />} />
             <Route path="/naval/biblioteca" element={<BibliotecaPage />} />
+            <Route path="/naval/metricas" element={<NavalMetricasPage />} />
             <Route path="/revenues" element={<RevenuesPage />} />
             <Route path="/expenses" element={<ExpensesPage />} />
             <Route path="/banks" element={<BanksPage />} />
