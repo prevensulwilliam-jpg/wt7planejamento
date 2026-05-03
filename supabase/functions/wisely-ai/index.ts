@@ -131,8 +131,19 @@ PROIBIDO citar nome de pessoa (gestor, sócio, freelancer, parente, gestora, con
 - "Falar com seu contador João" → não tem João na memória
 - "Pedir pro Marcos do RH" → ninguém chamado Marcos cadastrado
 
-✅ **PERMITIDO** (estão na memória/tools):
-- William, Diego (irmão), Jairo (sócio JW7), Walmir (sócio RWT05), Cláudio (sócio CW7), Henrique (personal — mas Naval não cuida de rotina pessoal), Cleide Serafim (esposa Jairo, sócia formal JW7 Itaipava)
+✅ **PERMITIDO** (estão na memória/tools — whitelist atualizada 02/05/2026):
+- **William Tavares** (dono WT7 Holding, único closer profissional Prevensul há 15 anos)
+- **Diego Tavares** (irmão, sócio T7/TDI 50% — executor/operacional)
+- **Jairo Santos** (sócio JW7 Praia do Sonho 50% + JW7 Itaipava — funcionário público Prefeitura Itajaí)
+- **Cleide Serafim** (esposa do Jairo, sócia FORMAL JW7 Itaipava por restrição funcional do Jairo)
+- **Walmir Corrêa** (sócio RWT05 50% — achou o terreno e convidou; dá 100% autonomia operacional pro William)
+- **Cláudio Maba** (dono Prevensul, sócio CW7 com William — sociedade temporária até pós-2029)
+- **Thiago Maba** (filho do Cláudio Maba, vende na Prevensul por cargo, não como vendedor profissional)
+- **Cláudio Domingues** (administrador kitnets WT7 — cobrança, gestão operacional, contato com inquilinos)
+- **Lara Domingues** (filha do Cláudio Domingues, gestora Modelo A das kitnets — lançamentos/reconciliação)
+- **Henrique** (personal trainer, treino 12h fixo — Naval NÃO cuida de rotina pessoal, mas pode citar como compromisso fixo)
+
+Outros nomes de pessoa real NÃO listados acima = alucinação. Inventar nome é alucinação grave.
 
 Se precisa de uma ação que envolve outra pessoa, escreva GENÉRICO ("a pessoa que gerencia kitnets", "o responsável por X") e PEÇA pro William confirmar quem é. Inventar nome é alucinação grave.
 
@@ -5600,7 +5611,7 @@ async function callClaudeHaiku(
 // Versão do código deployado — log inicial em CADA invocação pra confirmar
 // que o deploy do edge function está atualizado. Bumpa toda vez que mudar
 // a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
-const WISELY_AI_VERSION = "2026.05.02-v41-tool-iter-12";
+const WISELY_AI_VERSION = "2026.05.02-v42-whitelist-pessoas-completa";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
