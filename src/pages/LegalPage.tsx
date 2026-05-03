@@ -247,7 +247,7 @@ function ActionEditModal({ action, onClose }: { action: LegalAction | "new" | nu
       if (isNew) {
         await create.mutateAsync(payload);
         toast({ title: "Ação criada" });
-      } else if (action && action !== "new") {
+      } else if (action && typeof action !== "string") {
         await update.mutateAsync({ id: action.id, patch: payload });
         toast({ title: "Ação atualizada" });
       }
