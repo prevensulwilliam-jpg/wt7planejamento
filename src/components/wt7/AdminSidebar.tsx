@@ -3,7 +3,7 @@ import { WT7Logo } from "@/components/wt7/WT7Logo";
 import {
   Bot, TrendingUp, TrendingDown, Landmark,
   Home, Zap, HardHat, Building2, BarChart3, RefreshCw, Heart,
-  Target, Receipt, Radio, ClipboardList, Coins, Users, ArrowLeftRight, Brain, Tag, KeyRound, Banknote, CalendarClock, Briefcase, Compass, BookOpen, CreditCard, Wallet, Calculator
+  Target, Receipt, Radio, ClipboardList, Coins, Users, ArrowLeftRight, Brain, Tag, KeyRound, Banknote, CalendarClock, Briefcase, Compass, BookOpen, CreditCard, Wallet, Calculator, Scale
 } from "lucide-react";
 
 const navGroups = [
@@ -63,6 +63,7 @@ const navGroups = [
       { label: "Projeções", icon: Radio, href: "/projections" },
       { label: "Plano de Caixa", icon: Wallet, href: "/cashflow" },
       { label: "Casamento 2027", icon: Heart, href: "/wedding" },
+      { label: "Jurídico", icon: Scale, href: "/legal" },
     ],
   },
   {
