@@ -2372,8 +2372,10 @@ export type Database = {
         Row: {
           answer: string
           asked_at: string
+          cost_usd_estimated: number | null
           feedback: string | null
           id: string
+          model_used: string | null
           question: string
           tokens_cache_read: number | null
           tokens_cache_write: number | null
@@ -2386,8 +2388,10 @@ export type Database = {
         Insert: {
           answer: string
           asked_at?: string
+          cost_usd_estimated?: number | null
           feedback?: string | null
           id?: string
+          model_used?: string | null
           question: string
           tokens_cache_read?: number | null
           tokens_cache_write?: number | null
@@ -2400,8 +2404,10 @@ export type Database = {
         Update: {
           answer?: string
           asked_at?: string
+          cost_usd_estimated?: number | null
           feedback?: string | null
           id?: string
+          model_used?: string | null
           question?: string
           tokens_cache_read?: number | null
           tokens_cache_write?: number | null
