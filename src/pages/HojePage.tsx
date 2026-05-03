@@ -26,7 +26,7 @@ import { AtalhosRapidos } from "@/components/wt7/AtalhosRapidos";
 import { NavalBriefing } from "@/components/wt7/NavalBriefing";
 import { DailyStream } from "@/components/wt7/DailyStream";
 import { AlertasPriorizados } from "@/components/wt7/AlertasPriorizados";
-import { LegalSummaryCard } from "@/components/wt7/LegalSummaryCard";
+
 import { CashFlowChart } from "@/components/wt7/CashFlowChart";
 import { WhatsAppShareButton } from "@/components/wt7/WhatsAppShareButton";
 import { getCurrentMonth, formatMonth } from "@/lib/formatters";
