@@ -2419,6 +2419,45 @@ export type Database = {
         }
         Relationships: []
       }
+      naval_cost_settings: {
+        Row: {
+          anthropic_balance_usd: number | null
+          anthropic_mtd_cost_total_usd: number | null
+          anthropic_mtd_cost_usd: number | null
+          api_key_label: string | null
+          created_at: string
+          id: number
+          last_synced_at: string | null
+          notes: string | null
+          updated_at: string
+          usd_to_brl: number
+        }
+        Insert: {
+          anthropic_balance_usd?: number | null
+          anthropic_mtd_cost_total_usd?: number | null
+          anthropic_mtd_cost_usd?: number | null
+          api_key_label?: string | null
+          created_at?: string
+          id?: number
+          last_synced_at?: string | null
+          notes?: string | null
+          updated_at?: string
+          usd_to_brl?: number
+        }
+        Update: {
+          anthropic_balance_usd?: number | null
+          anthropic_mtd_cost_total_usd?: number | null
+          anthropic_mtd_cost_usd?: number | null
+          api_key_label?: string | null
+          created_at?: string
+          id?: number
+          last_synced_at?: string | null
+          notes?: string | null
+          updated_at?: string
+          usd_to_brl?: number
+        }
+        Relationships: []
+      }
       naval_memory: {
         Row: {
           content: string
