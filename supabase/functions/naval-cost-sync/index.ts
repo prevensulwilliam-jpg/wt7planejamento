@@ -134,11 +134,11 @@ serve(async (req) => {
       throw new Error("Supabase env missing");
     }
 
-     if (!ANTHROPIC_ADMIN_KEY.startsWith("sk-ant-admin01-")) {
+     if (!ANTHROPIC_ADMIN_KEY.startsWith("sk-ant-admin")) {
       return new Response(
         JSON.stringify({
           error: "Formato de key inválido",
-           hint: "ANTHROPIC_ADMIN_KEY deve começar com 'sk-ant-admin01-' (Admin Key, não API Key normal). Se a key estiver correta, recadastre sem aspas/espaços extras. Crie em console.anthropic.com → Settings → API Keys → Create Key → marca 'Admin Key'.",
+           hint: "ANTHROPIC_ADMIN_KEY deve começar com 'sk-ant-admin' (Admin Key, não API Key normal). Se a key estiver correta, recadastre sem aspas/espaços extras e confirme que foi criada em uma Organization com permissão de admin.",
         }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
