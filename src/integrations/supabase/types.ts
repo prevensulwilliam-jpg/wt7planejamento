@@ -3470,13 +3470,21 @@ export type Database = {
           query_embedding: string
         }
         Returns: {
+          cross_references: Json
+          is_hard_constraint: boolean
+          is_operational_checklist: boolean
           lens: string
           principle_idx: number
+          principle_priority: number
+          principle_tags: Json
+          principle_type: string
+          requires_validation: boolean
           similarity: number
           source_author: string
           source_id: string
           source_summary: string
           source_title: string
+          temporal_validity_months: number
           text: string
         }[]
       }
