@@ -347,7 +347,7 @@ VALUES (
   'construcao_br_sc_referencias',
   'Construção Civil BR/SC — Referências Operacionais',
   'Fontes técnicas BR/SC (CUB SC, Sienge, CBMSC, AECweb)',
-  'reference',
+  'note',
   'operador',
   'Custos, cronograma, contingência, PPCI, hidráulica e riscos típicos de obra pequena BR/SC. Referências externas que devem ser revalidadas periodicamente, especialmente números de custo e legislação.',
   jsonb_build_array(
@@ -495,7 +495,7 @@ VALUES (
   'holding_patrimonial_alertas',
   'Holding Patrimonial / Estrutura Societária — Alertas',
   'Fontes jurídicas/tributárias BR (Migalhas, ConJur, STJ, IBDFAM)',
-  'reference',
+  'note',
   'operador',
   'Temas sensíveis sobre holding, sociedade informal, ITBI, ITCMD, casamento, dividendos e blindagem patrimonial. EXIGE validação com contador/advogado — Naval deve usar como gatilho de análise, não como recomendação definitiva.',
   jsonb_build_array(
@@ -705,7 +705,7 @@ VALUES (
   'vendas_b2b_tecnico_br',
   'Vendas B2B Técnico Longo Ciclo BR',
   'Fontes comerciais BR (DNA Vendas, Reev, Outbound Marketing, Meetime)',
-  'reference',
+  'note',
   'aaron_ross',
   'Heurísticas de vendas técnicas B2B no Brasil: ciclo, cadência, MEDDIC, decisores, SDR e concentração. Calibrado pra ticket >R$25k e ciclo 3-12 meses. Cruza com S3 (vendas Prevensul pessoal).',
   jsonb_build_array(
