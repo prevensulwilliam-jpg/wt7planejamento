@@ -66,3 +66,30 @@ export function useUpdateNavalCostSettings() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["naval_cost_settings"] }),
   });
 }
+
+export interface SyncCostResult {
+  ok: boolean;
+  synced_at: string;
+  mtd_total_usd: number;
+  days_synced: number;
+  breakdown_by_day?: Array<{ day: string; usd: number }>;
+}
+
+/**
+ * Aciona naval-cost-sync edge function que chama Anthropic Admin API
+ * e atualiza naval_cost_settings com MTD oficial.
+ *
+ * Requer secret ANTHROPIC_ADMIN_KEY configurado no Supabase.
+ */
+export function useSyncNavalCost() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (): Promise<SyncCostResult> => {
+      const { data, error } = await supabase.functions.invoke("naval-cost-sync", { body: {} });
+      if (error) throw error;
+      if (!data?.ok) throw new Error(data?.error ?? "Falha ao sincronizar");
+      return data as SyncCostResult;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["naval_cost_settings"] }),
+  });
+}

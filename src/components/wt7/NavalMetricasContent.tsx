@@ -22,7 +22,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Activity, TrendingUp, Zap, AlertTriangle, ExternalLink, RefreshCw, Save } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useNavalCostSettings, useUpdateNavalCostSettings } from "@/hooks/useNavalCostSettings";
+import { useNavalCostSettings, useUpdateNavalCostSettings, useSyncNavalCost } from "@/hooks/useNavalCostSettings";
+import { useEffect, useRef } from "react";
 
 // Tarifas Anthropic em USD/M tokens (fallback pra chats antigos sem cost_usd_estimated)
 const ANTHROPIC_PRICES_USD_PER_M = {
@@ -87,7 +88,9 @@ export function NavalMetricasContent() {
   const { toast } = useToast();
   const { data: settings } = useNavalCostSettings();
   const updateSettings = useUpdateNavalCostSettings();
+  const syncCost = useSyncNavalCost();
   const [editMode, setEditMode] = useState(false);
+  const autoSyncedRef = useRef(false);
   const [draft, setDraft] = useState({
     usd_to_brl: "",
     anthropic_balance_usd: "",
@@ -106,6 +109,39 @@ export function NavalMetricasContent() {
     });
     setEditMode(true);
   };
+
+  const handleSync = async (silent = false) => {
+    try {
+      const result = await syncCost.mutateAsync();
+      if (!silent) {
+        toast({
+          title: "Sincronizado",
+          description: `MTD oficial: US$ ${result.mtd_total_usd.toFixed(2)} (${result.days_synced} dias)`,
+        });
+      }
+    } catch (e: any) {
+      if (!silent) {
+        toast({
+          title: "Erro ao sincronizar",
+          description: e.message,
+          variant: "destructive",
+        });
+      } else {
+        console.warn("[NavalMetricas] auto-sync silencioso falhou:", e.message);
+      }
+    }
+  };
+
+  // Auto-sync se passou >4h da última sincronização
+  useEffect(() => {
+    if (!settings || autoSyncedRef.current) return;
+    const last = settings.last_synced_at ? new Date(settings.last_synced_at).getTime() : 0;
+    const ageHours = (Date.now() - last) / (1000 * 60 * 60);
+    if (ageHours > 4) {
+      autoSyncedRef.current = true;
+      handleSync(true); // silencioso (não mostra toast)
+    }
+  }, [settings]);
 
   const handleSaveSettings = async () => {
     try {
@@ -214,14 +250,18 @@ export function NavalMetricasContent() {
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <div>
             <h2 className="text-sm font-bold flex items-center gap-2" style={{ color: "#F0F4F8" }}>
-              🔄 Calibragem com painel Anthropic
+              🔄 Sincronização com Anthropic
+              <span className="text-[9px] px-1.5 py-0.5 rounded font-mono uppercase tracking-wider"
+                style={{ background: "rgba(16,185,129,.1)", color: "#34D399", border: "1px solid rgba(16,185,129,.3)" }}>
+                auto · 4h
+              </span>
             </h2>
             <p className="text-[10px] mt-0.5" style={{ color: "#94A3B8" }}>
               Última sync: {timeSince(settings?.last_synced_at ?? null)}
-              {settings?.last_synced_at && ` (${new Date(settings.last_synced_at).toLocaleString("pt-BR")})`}
+              {settings?.last_synced_at && ` · ${new Date(settings.last_synced_at).toLocaleString("pt-BR")}`}
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <a
               href="https://console.anthropic.com/settings/cost"
               target="_blank"
@@ -232,13 +272,25 @@ export function NavalMetricasContent() {
               <ExternalLink className="w-3 h-3" /> Abrir painel oficial
             </a>
             {!editMode ? (
-              <button
-                onClick={handleStartEdit}
-                className="px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5"
-                style={{ background: "rgba(232,201,122,.1)", color: "#E8C97A", border: "1px solid rgba(232,201,122,.3)" }}
-              >
-                <RefreshCw className="w-3 h-3" /> Atualizar valores
-              </button>
+              <>
+                <button
+                  onClick={() => handleSync(false)}
+                  disabled={syncCost.isPending}
+                  className="px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 disabled:opacity-50"
+                  style={{ background: "linear-gradient(135deg,#10B981,#34D399)", color: "#0B1220", fontWeight: 600 }}
+                >
+                  <RefreshCw className={`w-3 h-3 ${syncCost.isPending ? "animate-spin" : ""}`} />
+                  {syncCost.isPending ? "Sincronizando..." : "Sincronizar agora"}
+                </button>
+                <button
+                  onClick={handleStartEdit}
+                  className="px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5"
+                  style={{ background: "rgba(232,201,122,.1)", color: "#E8C97A", border: "1px solid rgba(232,201,122,.3)" }}
+                  title="Edição manual (fallback se auto-sync não funcionar)"
+                >
+                  ✏️ Editar manual
+                </button>
+              </>
             ) : (
               <>
                 <button
@@ -348,8 +400,13 @@ export function NavalMetricasContent() {
           </div>
         )}
         <p className="text-[10px] mt-3" style={{ color: "#4A5568" }}>
-          💡 Abre o painel Anthropic, copia os valores (saldo + custo MTD da chave NavaWT7), cola aqui.
-          Sistema mostra a diferença vs a estimativa interna. Faça 1× por semana ou quando quiser auditar.
+          💡 <strong style={{ color: "#34D399" }}>Auto-sync ativo:</strong> sistema busca custos oficiais da Anthropic
+          a cada 4h via Admin API. Botão "Sincronizar agora" força atualização imediata.
+          "Editar manual" só serve como fallback se Admin Key não estiver configurada.
+          <br />
+          <strong>Setup necessário (1×):</strong> adicionar secret <code className="text-[10px]">ANTHROPIC_ADMIN_KEY</code> no
+          Supabase (Lovable → Project Settings → Edge Function Secrets). Formato: <code>sk-ant-admin01-...</code>
+          (cria em <a href="https://console.anthropic.com" target="_blank" rel="noopener noreferrer" style={{ color: "#60A5FA", textDecoration: "underline" }}>console.anthropic.com</a> → Settings → API Keys → Create Key → marca "Admin Key").
         </p>
       </PremiumCard>
 
