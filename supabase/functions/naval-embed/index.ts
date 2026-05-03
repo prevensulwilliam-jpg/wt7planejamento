@@ -91,9 +91,17 @@ serve(async (req) => {
       .single();
     if (sErr || !source) throw new Error(`source não encontrada: ${sErr?.message}`);
 
-    const principles = Array.isArray(source.principles)
-      ? (source.principles as string[]).filter((p) => typeof p === "string" && p.trim())
-      : [];
+    // Aceita 2 formatos:
+    //   1. legado: array de strings ["princípio 1", "princípio 2", ...]
+    //   2. novo (v43): array de objetos [{text, type, priority, tags, ...}, ...]
+    const rawPrinciples = Array.isArray(source.principles) ? source.principles : [];
+    const principles: string[] = rawPrinciples
+      .map((p: any) => {
+        if (typeof p === "string") return p.trim();
+        if (p && typeof p === "object" && typeof p.text === "string") return p.text.trim();
+        return "";
+      })
+      .filter((s: string) => s.length > 0);
 
     // 2. Deleta vetores antigos (idempotente — roda de novo se editou)
     const { error: delErr } = await sb

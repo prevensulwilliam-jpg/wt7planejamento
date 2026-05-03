@@ -419,7 +419,18 @@ Regras-âncora pra cruzar antes de qualquer recomendação:
 - Largar comercial Prevensul antes de SDR rodar → não recomende
 - Qualquer ação que viole memoria/metas.md "Restrições defensivas" → cite a regra primeiro
 
-PT-BR, direto, executivo. **Negrito** em números. Trate William pelo nome. Máximo 4 parágrafos — a menos que ele peça profundidade.`;
+PT-BR, direto, executivo. **Negrito** em números. Trate William pelo nome. Máximo 4 parágrafos — a menos que ele peça profundidade.
+
+═══ HIERARQUIA DE APLICAÇÃO DA BIBLIOTECA (BRAIN STACK v43) ═══
+Quando a brain stack RAG retornar princípios com tags de tipo, aplique nesta ordem:
+
+1. **🎯 PRINCÍPIO PESSOAL** (peso 5) — regra validada pela vivência do William. Tem prioridade absoluta sobre referências externas.
+2. **🛑 RESTRIÇÃO DURA** (is_hard_constraint=true) — não propor ação que viole. Citar a restrição se contexto pede revisão.
+3. **📐 PREFERÊNCIA ESTRATÉGICA** (peso 4) — direção preferencial revisável. Pode ser questionada com argumento forte.
+4. **⚙️ HEURÍSTICA OPERACIONAL** (peso 3-4) — regra prática útil, especialmente checklists (is_operational_checklist=true).
+5. **⚠️ ALERTA — VALIDAÇÃO** (requires_validation=true) — tema jurídico/tributário/regulatório. **NUNCA concluir definitivamente. Use como gatilho de análise + recomendar contador/advogado.**
+
+Naval NÃO toma decisão jurídica, tributária ou regulatória definitiva com base na biblioteca. Use essas entradas pra gerar perguntas melhores, alertas melhores e análises mais alinhadas ao histórico real do William.`;
 
 const LENS_LABEL: Record<string, string> = {
   naval: "NAVAL — leverage + jogos de longo prazo",
@@ -467,7 +478,28 @@ interface MatchedPrinciple {
   principle_idx: number;
   text: string;
   similarity: number;
+  // Metadados v43+ (NULL pra princípios legados em formato string)
+  principle_type?: "principio_pessoal" | "preferencia_estrategica" | "heuristica_operacional" | "alerta_validacao" | null;
+  principle_priority?: number | null;
+  principle_tags?: string[] | null;
+  requires_validation?: boolean | null;
+  is_hard_constraint?: boolean | null;
+  is_operational_checklist?: boolean | null;
+  temporal_validity_months?: number | null;
+  cross_references?: string[] | null;
 }
+
+// Hierarquia de aplicação no system prompt (definida pelo William 02/05/2026):
+//   1. principio_pessoal (peso 5)
+//   2. preferencia_estrategica (peso 4)
+//   3. heuristica_operacional (peso 3-4)
+//   4. alerta_validacao (peso 2-3, exige validação profissional)
+const TYPE_LABEL: Record<string, string> = {
+  principio_pessoal: "🎯 PRINCÍPIO PESSOAL (peso máximo)",
+  preferencia_estrategica: "📐 PREFERÊNCIA ESTRATÉGICA (revisável)",
+  heuristica_operacional: "⚙️ HEURÍSTICA OPERACIONAL",
+  alerta_validacao: "⚠️ ALERTA — exige validação profissional",
+};
 
 /**
  * Constrói o system prompt do Naval:
@@ -523,7 +555,17 @@ async function buildSystemPrompt(opts?: { userQuery?: string; apiKey?: string; t
         });
         if (!error && Array.isArray(matched) && matched.length > 0) {
           ragMode = true;
-          // Agrupa por source pra contexto mais limpo
+          // Agrupa por source pra contexto mais limpo. Carrega metadados v43+
+          // (type/priority/requires_validation/is_hard_constraint/etc) quando existem.
+          type EnrichedPrinciple = {
+            text: string;
+            similarity: number;
+            type?: string | null;
+            priority?: number | null;
+            requires_validation?: boolean | null;
+            is_hard_constraint?: boolean | null;
+            is_operational_checklist?: boolean | null;
+          };
           const bySource = (matched as MatchedPrinciple[]).reduce((acc, m) => {
             const key = m.source_id;
             if (!acc[key]) {
@@ -532,12 +574,20 @@ async function buildSystemPrompt(opts?: { userQuery?: string; apiKey?: string; t
                 author: m.source_author,
                 summary: m.source_summary,
                 lens: m.lens,
-                principles: [] as Array<{ text: string; similarity: number }>,
+                principles: [] as EnrichedPrinciple[],
               };
             }
-            acc[key].principles.push({ text: m.text, similarity: m.similarity });
+            acc[key].principles.push({
+              text: m.text,
+              similarity: m.similarity,
+              type: m.principle_type ?? null,
+              priority: m.principle_priority ?? null,
+              requires_validation: m.requires_validation ?? null,
+              is_hard_constraint: m.is_hard_constraint ?? null,
+              is_operational_checklist: m.is_operational_checklist ?? null,
+            });
             return acc;
-          }, {} as Record<string, { title: string; author: string | null; summary: string | null; lens: string; principles: Array<{ text: string; similarity: number }> }>);
+          }, {} as Record<string, { title: string; author: string | null; summary: string | null; lens: string; principles: EnrichedPrinciple[] }>);
 
           const blocks = Object.values(bySource)
             .sort((a, b) => Math.max(...b.principles.map(p => p.similarity)) - Math.max(...a.principles.map(p => p.similarity)))
@@ -545,7 +595,14 @@ async function buildSystemPrompt(opts?: { userQuery?: string; apiKey?: string; t
               const lensTag = LENS_LABEL[s.lens] ?? s.lens.toUpperCase();
               const author = s.author ? ` — ${s.author}` : "";
               const bullets = s.principles
-                .map((p) => `  - ${p.text} [${(p.similarity * 100).toFixed(0)}%]`)
+                .map((p) => {
+                  // Renderiza marcador do TIPO antes do texto (peso visual e semântico)
+                  const typeLabel = p.type ? `${TYPE_LABEL[p.type] ?? p.type} ` : "";
+                  const constraintMark = p.is_hard_constraint ? "🛑 RESTRIÇÃO DURA · " : "";
+                  const validationMark = p.requires_validation ? " ⚠️ exige validação profissional" : "";
+                  const checklistMark = p.is_operational_checklist ? " ✅ checklist operacional" : "";
+                  return `  - ${constraintMark}${typeLabel}${p.text} [${(p.similarity * 100).toFixed(0)}%]${validationMark}${checklistMark}`;
+                })
                 .join("\n");
               return `**[${lensTag}] ${s.title}${author}**\n${bullets}`;
             })
@@ -5611,7 +5668,7 @@ async function callClaudeHaiku(
 // Versão do código deployado — log inicial em CADA invocação pra confirmar
 // que o deploy do edge function está atualizado. Bumpa toda vez que mudar
 // a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
-const WISELY_AI_VERSION = "2026.05.02-v42-whitelist-pessoas-completa";
+const WISELY_AI_VERSION = "2026.05.02-v43-biblioteca-v2-com-metadados";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
