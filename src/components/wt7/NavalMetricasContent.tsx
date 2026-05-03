@@ -390,7 +390,7 @@ export function NavalMetricasContent() {
           </div>
           <p className="text-2xl font-bold font-mono mt-2" style={{ color: "#60A5FA" }}>{formatBRL(stats.cost_total)}</p>
           <p className="text-[10px] mt-1" style={{ color: "#94A3B8" }}>
-            US$ {stats.cost_total_usd.toFixed(4)} · câmbio {USD_TO_BRL.toFixed(2)}
+            US$ {stats.cost_total_usd.toFixed(4)} · câmbio {usdToBrl.toFixed(2)}
           </p>
         </PremiumCard>
 
