@@ -55,8 +55,6 @@ export default function HojePage() {
         {/* ═══ ALERTAS PRIORIZADOS (estilo Fathom) ═══════════════════ */}
         <AlertasPriorizados />
 
-        {/* ═══ JURÍDICO (resumo + click → /legal) ═══════════════════ */}
-        <LegalSummaryCard />
 
         {/* ═══ BLOCO 1 · STATUS BAR (5 KPIs) ═══════════════════════ */}
         <StatusBar month={month} />
