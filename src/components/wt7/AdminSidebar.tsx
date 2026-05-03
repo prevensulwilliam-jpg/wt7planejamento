@@ -13,7 +13,6 @@ const navGroups = [
       { label: "Hoje", icon: Compass, href: "/hoje" },
       { label: "Naval", icon: Bot, href: "/naval" },
       { label: "Biblioteca", icon: BookOpen, href: "/naval/biblioteca" },
-      { label: "Métricas Naval", icon: Activity, href: "/naval/metricas" },
     ],
   },
   {

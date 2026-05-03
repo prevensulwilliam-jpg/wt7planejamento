@@ -5434,8 +5434,29 @@ type ClaudeUsage = {
   cache_creation_input_tokens?: number;
 };
 type ClaudeResult =
-  | { ok: true; text: string; usage?: ClaudeUsage; tools_used?: string[] }
+  | { ok: true; text: string; usage?: ClaudeUsage; tools_used?: string[]; model_used?: "haiku" | "sonnet" }
   | { ok: false; status: number; error: string };
+
+// Tarifas Anthropic em USD por MILHÃO de tokens (atualizar quando Anthropic mudar)
+// Fonte: anthropic.com/pricing — referência mai/2026
+const ANTHROPIC_PRICES_USD_PER_M = {
+  haiku: { input: 1.0, cache_read: 0.10, cache_write: 1.25, output: 5.0 },
+  sonnet: { input: 3.0, cache_read: 0.30, cache_write: 3.75, output: 15.0 },
+};
+
+/**
+ * Calcula custo em USD da chamada baseado no usage real + modelo.
+ * Determinístico — usa exatamente os tokens retornados pela API Anthropic.
+ */
+function estimateCostUSD(usage: ClaudeUsage | undefined, model: "haiku" | "sonnet"): number {
+  if (!usage) return 0;
+  const rates = ANTHROPIC_PRICES_USD_PER_M[model];
+  const input = ((usage.input_tokens ?? 0) / 1_000_000) * rates.input;
+  const cacheRead = ((usage.cache_read_input_tokens ?? 0) / 1_000_000) * rates.cache_read;
+  const cacheWrite = ((usage.cache_creation_input_tokens ?? 0) / 1_000_000) * rates.cache_write;
+  const output = ((usage.output_tokens ?? 0) / 1_000_000) * rates.output;
+  return input + cacheRead + cacheWrite + output;
+}
 
 async function callClaudeHaiku(
   systemPrompt: string | { fixed: string; variable: string },
@@ -5483,7 +5504,7 @@ async function callClaudeHaiku(
         const text = data.choices?.[0]?.message?.content ?? "";
         if (text) {
           console.log(`[wisely-ai] Naval via Lovable Gateway · ${MODEL_LABEL} (sem tools) ✓`);
-          return { ok: true, text };
+          return { ok: true, text, model_used: useSonnet ? "sonnet" : "haiku" };
         }
       } else {
         const errText = await res.text().catch(() => "");
@@ -5652,7 +5673,7 @@ async function callClaudeHaiku(
         }
       }
 
-      return { ok: true, text: finalText, usage: lastUsage, tools_used: Array.from(toolsUsedSet) };
+      return { ok: true, text: finalText, usage: lastUsage, tools_used: Array.from(toolsUsedSet), model_used: useSonnet ? "sonnet" : "haiku" };
     }
 
     return { ok: false, status: 500, error: "Loop de tool-use excedeu MAX_TOOL_ITER" };
@@ -5668,7 +5689,7 @@ async function callClaudeHaiku(
 // Versão do código deployado — log inicial em CADA invocação pra confirmar
 // que o deploy do edge function está atualizado. Bumpa toda vez que mudar
 // a função (manual). Se o log abaixo NÃO aparecer, o deploy não rolou.
-const WISELY_AI_VERSION = "2026.05.02-v43-biblioteca-v2-com-metadados";
+const WISELY_AI_VERSION = "2026.05.03-v44-cost-tracking-real";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -6176,6 +6197,8 @@ Gere a leitura estratégica seguindo o formato obrigatório.`;
           const userId = userData?.user?.id;
           if (userId) {
             const u = result.usage ?? {};
+            const modelUsed = result.model_used ?? "haiku"; // fallback se não veio
+            const costUsd = estimateCostUSD(u, modelUsed);
             // Salva sem await pra não bloquear a resposta
             sbAdmin.from("naval_chats").insert({
               user_id: userId,
@@ -6187,6 +6210,8 @@ Gere a leitura estratégica seguindo o formato obrigatório.`;
               tokens_cache_write: u.cache_creation_input_tokens ?? null,
               tokens_out: u.output_tokens ?? null,
               version: WISELY_AI_VERSION,
+              model_used: modelUsed,
+              cost_usd_estimated: Math.round(costUsd * 1_000_000) / 1_000_000, // 6 decimais (microUSD)
             }).then((r) => {
               if (r.error) console.warn("[wisely-ai] save chat error:", r.error.message);
             });

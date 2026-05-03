@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
-import { RefreshCw, Send, MessageSquare, ChevronDown, ChevronUp, Play, History, Search, Trash2, Reply, X, BookmarkPlus, Save, Bell, AlertTriangle, AlertCircle, Info, Check } from "lucide-react";
+import { RefreshCw, Send, MessageSquare, ChevronDown, ChevronUp, Play, History, Search, Trash2, Reply, X, BookmarkPlus, Save, Bell, AlertTriangle, AlertCircle, Info, Check, BarChart3 } from "lucide-react";
+import { NavalMetricasContent } from "@/components/wt7/NavalMetricasContent";
 import { PremiumCard } from "@/components/wt7/PremiumCard";
 import { GoldButton } from "@/components/wt7/GoldButton";
 import { WtBadge } from "@/components/wt7/WtBadge";
@@ -721,7 +722,7 @@ function AlertsSection() {
 //  PÁGINA PRINCIPAL — Chat | Histórico
 // ═══════════════════════════════════════════════════════════════════
 export default function NavalPage() {
-  const [tab, setTab] = useState<"chat" | "historico" | "alertas">("chat");
+  const [tab, setTab] = useState<"chat" | "historico" | "alertas" | "metricas">("chat");
   // useNavalChat aqui no topo pra compartilhar entre ChatSection e HistorySection
   const chat = useNavalChat();
   const { data: alerts = [] } = useNavalAlerts();
@@ -745,8 +746,8 @@ export default function NavalPage() {
         </div>
       </div>
 
-      <Tabs value={tab} onValueChange={(v) => setTab(v as "chat" | "historico" | "alertas")}>
-        <TabsList className="grid w-full grid-cols-3 max-w-xl">
+      <Tabs value={tab} onValueChange={(v) => setTab(v as "chat" | "historico" | "alertas" | "metricas")}>
+        <TabsList className="grid w-full grid-cols-4 max-w-2xl">
           <TabsTrigger value="chat">
             <MessageSquare className="w-3.5 h-3.5 mr-2" />
             Conversar
@@ -769,6 +770,10 @@ export default function NavalPage() {
                 {criticalCount + warningCount}
               </span>
             )}
+          </TabsTrigger>
+          <TabsTrigger value="metricas">
+            <BarChart3 className="w-3.5 h-3.5 mr-2" />
+            Métricas
           </TabsTrigger>
         </TabsList>
 
@@ -809,6 +814,10 @@ export default function NavalPage() {
 
         <TabsContent value="alertas" className="mt-6">
           <AlertsSection />
+        </TabsContent>
+
+        <TabsContent value="metricas" className="mt-6">
+          <NavalMetricasContent />
         </TabsContent>
       </Tabs>
     </div>
