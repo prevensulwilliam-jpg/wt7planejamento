@@ -34,6 +34,7 @@ import TaxesPage from "@/pages/TaxesPage";
 import NavalPage from "@/pages/NavalPage";
 import BibliotecaPage from "@/pages/BibliotecaPage";
 import NavalMetricasPage from "@/pages/NavalMetricasPage";
+import LegalPage from "@/pages/LegalPage";
 import ReconciliationPage from "@/pages/ReconciliationPage";
 import PatternsPage from "@/pages/PatternsPage";
 import CategoriesPage from "@/pages/CategoriesPage";
@@ -129,6 +130,7 @@ const App = () => (
             <Route path="/naval" element={<NavalPage />} />
             <Route path="/naval/biblioteca" element={<BibliotecaPage />} />
             <Route path="/naval/metricas" element={<NavalMetricasPage />} />
+            <Route path="/legal" element={<LegalPage />} />
             <Route path="/revenues" element={<RevenuesPage />} />
             <Route path="/expenses" element={<ExpensesPage />} />
             <Route path="/banks" element={<BanksPage />} />
