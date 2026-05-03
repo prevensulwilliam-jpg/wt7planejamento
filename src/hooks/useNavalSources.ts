@@ -9,6 +9,27 @@ const log = logger.scope("useNavalSources");
 export type NavalLens = "naval" | "aaron_ross" | "housel" | "tevah" | "operador" | "outros";
 export type NavalSourceType = "book" | "article" | "podcast" | "note" | "course";
 
+// Tipos de princípio (biblioteca v2 — definido William 02/05/2026)
+export type PrincipleType =
+  | "principio_pessoal"        // peso 5 — regra validada pela vivência
+  | "preferencia_estrategica"  // peso 4 — direção preferencial revisável
+  | "heuristica_operacional"   // peso 3-4 — regra prática útil
+  | "alerta_validacao";        // peso 2-3 — exige validação profissional
+
+// Princípio pode ser STRING (legado) OU OBJETO com metadados v2
+export type PrincipleEntry = string | {
+  text: string;
+  tag?: string;
+  type?: PrincipleType;
+  priority?: number;
+  tags?: string[];
+  requires_validation?: boolean;
+  is_hard_constraint?: boolean;
+  is_operational_checklist?: boolean;
+  temporal_validity_months?: number | null;
+  cross_references?: string[];
+};
+
 export interface NavalSource {
   id: string;
   slug: string;
@@ -18,13 +39,29 @@ export interface NavalSource {
   source_url: string | null;
   lens: NavalLens;
   summary: string | null;
-  principles: string[];
+  principles: PrincipleEntry[];
   active: boolean;
   priority: number;
   raw_content: string | null;
   ingested_at: string;
   updated_at: string;
 }
+
+// Helpers pra trabalhar com union string | object (compat legado + v2)
+export function getPrincipleText(p: PrincipleEntry): string {
+  return typeof p === "string" ? p : p.text;
+}
+
+export function getPrincipleMetadata(p: PrincipleEntry) {
+  return typeof p === "string" ? null : p;
+}
+
+export const PRINCIPLE_TYPE_LABEL: Record<PrincipleType, { label: string; emoji: string; color: string }> = {
+  principio_pessoal:        { label: "Princípio pessoal",      emoji: "🎯", color: "text-yellow-300 border-yellow-300/40 bg-yellow-300/5" },
+  preferencia_estrategica:  { label: "Preferência estratégica", emoji: "📐", color: "text-blue-300 border-blue-300/40 bg-blue-300/5" },
+  heuristica_operacional:   { label: "Heurística operacional",  emoji: "⚙️", color: "text-zinc-300 border-zinc-300/40 bg-zinc-300/5" },
+  alerta_validacao:         { label: "Alerta — validar",        emoji: "⚠️", color: "text-orange-300 border-orange-300/40 bg-orange-300/5" },
+};
 
 export const LENS_LABEL: Record<NavalLens, string> = {
   naval: "Naval — Leverage & Longo Prazo",
@@ -78,7 +115,7 @@ export interface IngestDraft {
   source_type: NavalSourceType;
   lens: NavalLens;
   summary: string;
-  principles: string[];
+  principles: string[]; // ingest sempre destila como string (formato legado, simples)
 }
 
 export function useIngestNavalSource() {
@@ -101,7 +138,7 @@ export interface CreateInput {
   source_url?: string | null;
   lens: NavalLens;
   summary?: string | null;
-  principles: string[];
+  principles: PrincipleEntry[]; // aceita string OU objeto v2
   priority?: number;
   active?: boolean;
 }

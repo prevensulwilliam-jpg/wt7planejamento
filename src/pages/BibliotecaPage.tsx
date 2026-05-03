@@ -19,6 +19,9 @@ import {
   slugify,
   LENS_LABEL,
   LENS_COLOR,
+  getPrincipleText,
+  getPrincipleMetadata,
+  PRINCIPLE_TYPE_LABEL,
   type NavalLens,
   type NavalSource,
   type NavalSourceType,
@@ -179,10 +182,44 @@ function SourceCard({ source, onEdit }: { source: NavalSource; onEdit: () => voi
         </p>
       )}
 
-      <div className="mt-3 text-xs flex items-center gap-3" style={{ color: "#64748B" }}>
+      <div className="mt-3 text-xs flex items-center gap-3 flex-wrap" style={{ color: "#64748B" }}>
         <span>📚 {source.principles.length} princípios</span>
         <span>· prioridade {source.priority}</span>
+        {/* Indicador v2 — quando algum princípio tem metadata estruturado */}
+        {source.principles.some((p) => getPrincipleMetadata(p) !== null) && (
+          <span className="px-1.5 py-0.5 rounded bg-blue-300/10 text-blue-300 border border-blue-300/30 text-[10px] font-mono uppercase tracking-wider">
+            v2 · estruturado
+          </span>
+        )}
       </div>
+
+      {/* Distribuição de tipos (só pra sources v2) */}
+      {(() => {
+        const typeCounts = source.principles.reduce((acc, p) => {
+          const meta = getPrincipleMetadata(p);
+          if (meta?.type) acc[meta.type] = (acc[meta.type] ?? 0) + 1;
+          return acc;
+        }, {} as Record<string, number>);
+        const entries = Object.entries(typeCounts);
+        if (entries.length === 0) return null;
+        return (
+          <div className="mt-2 flex flex-wrap gap-1">
+            {entries.map(([type, count]) => {
+              const meta = PRINCIPLE_TYPE_LABEL[type as keyof typeof PRINCIPLE_TYPE_LABEL];
+              if (!meta) return null;
+              return (
+                <span
+                  key={type}
+                  title={meta.label}
+                  className={`px-1.5 py-0.5 rounded border text-[10px] font-mono ${meta.color}`}
+                >
+                  {meta.emoji} {count}
+                </span>
+              );
+            })}
+          </div>
+        );
+      })()}
     </PremiumCard>
   );
 }
@@ -207,7 +244,10 @@ function SourceModal({ source, open, onClose }: {
     author: source?.author ?? "",
     lens: (source?.lens ?? "outros") as NavalLens,
     summary: source?.summary ?? "",
-    principles: source?.principles ?? [],
+    // Converte princípios v2 (objetos) pra string ao editar — UI atual edita só texto.
+    // Metadados v2 são preservados no banco enquanto não houver edição; se editar via
+    // UI, princípios são salvos como string (perde-se metadata). Deliberado por enquanto.
+    principles: (source?.principles ?? []).map(getPrincipleText),
     source_type: source?.source_type ?? "book",
     source_url: source?.source_url ?? "",
     priority: source?.priority ?? 100,
